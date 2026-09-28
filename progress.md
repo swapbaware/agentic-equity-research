@@ -1,207 +1,147 @@
 # Progress Tracker
 
-## Current Status
-
-**Active Phase:** 1 — Architecture & Planning (Review Complete)
 **Last Updated:** 2026-09-28
 
-## Phase 0: Repository Setup — COMPLETE
+---
+
+## Completed Phases
+
+### Phase 0: Repository Setup — COMPLETE
 
 - [x] Initialize git repository
-- [x] Create project documentation (README, CLAUDE.md)
-- [x] Create architecture directory structure
+- [x] Create project documentation (README, CLAUDE.md, progress.md, implementation-plan.md)
+- [x] Create architecture directory structure (7 directories with .gitkeep)
 - [x] Create .gitignore and .env.example
-- [x] Initial commit
+- [x] Create .gitattributes (line ending normalization)
+- [x] Initial commit (`d5a975e`)
+- [x] Push to GitHub origin (`origin/main`)
 
-## Phase 1: Architecture & Planning — COMPLETE
+### Phase 1: Architecture & Planning — COMPLETE
 
 - [x] Solution architecture document
-- [x] Domain model (all entities, relationships, invariants)
-- [x] Agent architecture (17 agents, orchestration graph, memory layers)
-- [x] Data architecture (PostgreSQL, pgvector, Redis, S3, ingestion pipeline)
-- [x] Security architecture (auth, agent sandboxing, prompt injection, audit)
-- [x] Deployment architecture (Docker, CI/CD, observability, scaling)
-- [x] Architecture Decision Records (6 ADRs)
-- [x] API & provider strategy
-- [x] Research methodology documentation
-- [x] Testing strategy
-- [x] Updated implementation plan
-- [x] Architecture commit
-- [x] Architecture review (20-point review)
+- [x] Domain model (30+ entities, relationships, 7 invariants)
+- [x] Agent architecture (17 agents, LangGraph orchestration, memory layers)
+- [x] Data architecture (PostgreSQL/pgvector/Redis/S3, ingestion pipeline)
+- [x] Security architecture (auth, agent sandboxing, prompt injection, DPDP Act)
+- [x] Deployment architecture (Docker, CI/CD, observability, alerting)
+- [x] Architecture Decision Records (ADR-001 through ADR-006)
+- [x] API & provider strategy (12 provider interfaces)
+- [x] Research methodology (15 dimensions, 12 quality gates, scoring)
+- [x] Testing strategy (8 test categories, pyramid, coverage targets)
+- [x] Architecture commit (`387d53a`)
+- [x] 20-point architecture review
 - [x] ADR-007: Failure modes and resilience
 - [x] ADR-008: LLM cost controls
-- [x] ADR-009: NSE/BSE data access strategy (open — requires research)
-- [x] Domain model clarifications (junction tables, snapshot fields, QuarterlyResult relationship)
-- [x] Agent architecture updates (hallucination mitigations, timeout/cost budgets, error handling)
-- [x] Security updates (prompt injection delimiters, document sanitization, DPDP Act)
-- [x] Deployment updates (migration strategy, rollback, alerting, LLM observability)
-- [x] Solution architecture updates (API conventions, SEC EDGAR removal)
-- [x] Provider strategy updates (PriceHistoryProvider, NSE/BSE data access risk)
+- [x] ADR-009: NSE/BSE data access strategy
+- [x] Architecture review commit (`41f3c77`)
 
-## Architecture Review Summary
+---
 
-### Decisions Made
-1. Maximum 2 quality gate loop iterations to prevent infinite agent loops (ADR-007)
+## Current Phase
+
+### Phase 1.5: Development Control Plane — IN PROGRESS
+
+- [x] CLAUDE.md expanded to 13-section engineering constitution
+- [x] progress.md restructured with 9 tracking categories
+- [x] implementation-plan.md updated with acceptance criteria per phase
+- [x] tests/acceptance-criteria.md created
+- [x] docs/development-workflow.md created
+- [ ] Commit and verify
+
+**Next Phase:** Phase 2 — Core Backend Foundation
+
+---
+
+## Completed Features
+
+No application features implemented yet. Phases 0-1 are documentation and architecture only.
+
+---
+
+## Failing Tests
+
+No tests exist yet. Test framework setup is Phase 2 scope.
+
+---
+
+## Known Issues
+
+| ID | Issue | Severity | Phase to Address |
+|----|-------|----------|-----------------|
+| K-1 | NSE does not offer a free, open API — primary data source at risk | Critical | Phase 4 |
+| K-2 | Background task processor not decided (Celery vs Temporal) | Medium | Phase 2 |
+| K-3 | Embedding dimension hardcoded to 1536 — should be configurable | Low | Phase 5 |
+| K-4 | LLMProvider interface may not align with LangGraph native invocation | Medium | Phase 7 |
+| K-5 | DPDP Act 2023 compliance requires legal review before commercialization | Medium | Pre-launch |
+| K-6 | Evidence Verification Agent has circular LLM dependency — mitigated by partial deterministic checks | Low | Phase 7 |
+
+---
+
+## Architectural Decisions
+
+| ADR | Title | Status | Summary |
+|-----|-------|--------|---------|
+| 001 | LangGraph for agent orchestration | Accepted | Chosen over custom/Temporal/CrewAI |
+| 002 | Background task processor | Pending | Celery vs Temporal — evaluate in Phase 2 |
+| 003 | Decimal for financial calculations | Accepted | `decimal.Decimal` mandate, never float |
+| 004 | Evidence citation system | Accepted | Mandatory citation with 7-type classification |
+| 005 | Provider abstraction pattern | Accepted | Protocol-based interfaces, factory injection |
+| 006 | India market focus | Accepted | NSE/BSE, INR, Ind AS, April-March FY |
+| 007 | Failure modes and resilience | Accepted | Max 2 loop iterations, 15-min timeout, Redis lock |
+| 008 | LLM cost controls | Accepted | Per-agent budgets, per-run tracking, model tiers |
+| 009 | NSE/BSE data access strategy | Open | SEBI XBRL recommended; commercial vendor as upgrade |
+
+### Review Decisions (from 20-point architecture review)
+
+1. Maximum 2 quality gate loop iterations (ADR-007)
 2. 15-minute total research run timeout with per-agent timeouts (ADR-007)
 3. Redis advisory lock for concurrent research run prevention (ADR-007)
 4. Per-agent token budgets and per-run cost tracking (ADR-008)
-5. Model tier selection: cheap models for extraction, capable models for analysis (ADR-008)
-6. SEC EDGAR removed from scope (Indian market focus — ADR-006)
+5. Model tier selection: cheap for extraction, capable for analysis (ADR-008)
+6. SEC EDGAR removed from scope (ADR-006)
 7. SEBI XBRL as primary free financial data source (ADR-009)
 8. Partitioning deferred until data volume warrants it
 9. Cursor-based pagination for API endpoints
 10. URL-prefix API versioning (/api/v1/)
 
-### Unresolved Decisions (require research in implementation phases)
-1. **NSE data access** (ADR-009 — Open): NSE doesn't have a free API. Must evaluate BSE API, SEBI XBRL, Yahoo Finance India, and commercial vendors before Phase 4.
-2. **Background task processor** (ADR-002 — Pending): Celery vs Temporal. Evaluate in Phase 2.
-3. **Embedding dimension**: Hardcoded to 1536 (OpenAI ada-002). Should be configurable per embedding provider. Resolve in Phase 5.
-4. **LLM provider interface alignment**: Current `generate()` / `chat()` interface may not align with LangGraph's native model invocation pattern. Resolve in Phase 7.
-5. **Commercial data vendor selection**: If free sources prove insufficient, evaluate Capital Market, Ace Equity, or similar. Budget impact unknown.
-6. **DPDP Act compliance**: Requires legal review before any commercial deployment.
+---
 
-### Identified Risks
-1. **NSE/BSE data access is the #1 technical risk** — the platform cannot function without reliable Indian financial data, and free access is limited
-2. **LLM costs at scale** — 17 agents × 5000+ companies = significant token consumption; cost controls are designed but untested
-3. **Evidence Verification circular dependency** — LLM verifying LLM output has limited value; mitigated by making verification partially deterministic (structural checks in code)
+## Pending Integrations
 
-### Next Recommended Phase
-**Phase 2: Core Backend Foundation** — Python project setup, FastAPI skeleton, pydantic-settings, structured logging, Alembic, pytest, CI pipeline.
+| Integration | Provider Interface | Status | Blocker |
+|------------|-------------------|--------|---------|
+| BSE API | MarketDataProvider, CorporateFilingsProvider | Not started | Phase 4 |
+| SEBI XBRL | CorporateFilingsProvider, FinancialDataProvider | Not started | Phase 4 |
+| Yahoo Finance India | MarketDataProvider (supplementary) | Not started | Phase 4 |
+| Alpha Vantage | MarketDataProvider | Not started | Phase 4 |
+| Anthropic Claude | LLMProvider | Not started | Phase 7 |
+| OpenAI | LLMProvider, EmbeddingProvider | Not started | Phase 5/7 |
+| MinIO / S3 | Object Storage | Not started | Phase 5 |
+| PostgreSQL + pgvector | Data layer | Not started | Phase 2 |
+| Redis | Cache, rate limiting, locks | Not started | Phase 2 |
 
-## Phase 2: Core Backend Foundation — NOT STARTED
+---
 
-- [ ] Python project setup (pyproject.toml, virtual environment)
-- [ ] FastAPI application skeleton
-- [ ] Configuration management (pydantic-settings)
-- [ ] Structured logging (OpenTelemetry)
-- [ ] Base domain models (Pydantic, all entities from domain model)
-- [ ] Database schema and Alembic migrations
-- [ ] Provider interface definitions
-- [ ] Health check endpoint
-- [ ] Unit test framework setup (pytest, fixtures, factories)
-- [ ] CI pipeline (ruff, mypy, pytest, coverage)
+## Technical Debt
 
-## Phase 3: Domain & Data Model — NOT STARTED
+No technical debt yet — no implementation exists. Tracking anticipated debt:
 
-- [ ] Company, Security, Exchange, Sector, Industry models
-- [ ] Financial statement and metric models
-- [ ] Quarterly result and annual report models
-- [ ] Corporate governance models (shareholding, pledge, actions)
-- [ ] Research and evidence models
-- [ ] Analysis models (moat, growth, competitor, industry, macro)
-- [ ] Valuation and scenario models
-- [ ] Thesis, risk, catalyst, scoring models
-- [ ] Database migrations for all models
-- [ ] Repository layer (CRUD operations)
-- [ ] Model validation tests
+| ID | Description | Incurred | Plan to Address |
+|----|-------------|----------|-----------------|
+| (none) | — | — | — |
 
-## Phase 4: Provider Framework — NOT STARTED
+---
 
-- [ ] MarketDataProvider interface and base implementation
-- [ ] FinancialDataProvider interface
-- [ ] CorporateFilingsProvider interface
-- [ ] ShareholdingProvider interface
-- [ ] CorporateActionsProvider interface
-- [ ] NewsProvider interface
-- [ ] SearchProvider interface
-- [ ] MacroDataProvider interface
-- [ ] TranscriptProvider interface
-- [ ] LLMProvider interface
-- [ ] EmbeddingProvider interface
-- [ ] Rate limiter (Redis-backed)
-- [ ] Retry and error handling framework
-- [ ] Provider factory and configuration
-- [ ] Provider conformance test suite
+## Next Actions
 
-## Phase 5: Evidence & Citation System — NOT STARTED
-
-- [ ] Evidence model and storage
-- [ ] Source document ingestion pipeline
-- [ ] Document text extraction
-- [ ] Embedding generation and pgvector storage
-- [ ] Citation tracking (finding → evidence → document)
-- [ ] Source tier classification
-- [ ] Evidence retrieval tools
-- [ ] Citation completeness validation
-
-## Phase 6: Financial Calculation Engine — NOT STARTED
-
-- [ ] CAGR calculation (decimal.Decimal)
-- [ ] Ratio calculations (ROE, ROCE, ROIC, margins, etc.)
-- [ ] DCF model (configurable assumptions)
-- [ ] Reverse DCF model
-- [ ] Multiple-based valuation (P/E, EV/EBITDA, etc.)
-- [ ] Historical valuation bands
-- [ ] Peer comparison engine
-- [ ] Scenario engine (Bear/Base/Bull)
-- [ ] Financial forensics engine (red flag scoring)
-- [ ] Screening engine (multi-criteria filtering)
-- [ ] Calculation validation tests (golden datasets)
-
-## Phase 7: Agent Implementation — NOT STARTED
-
-- [ ] LangGraph workflow graph definition
-- [ ] Agent base class and tool framework
-- [ ] Universe Discovery Agent
-- [ ] Financial Analysis Agent
-- [ ] Business Model Agent
-- [ ] Industry Analysis Agent
-- [ ] Competitive Moat Agent
-- [ ] Management & Governance Agent
-- [ ] Future Growth & Optionality Agent
-- [ ] Macro Economics Agent
-- [ ] Competitor Analysis Agent
-- [ ] Valuation Agent
-- [ ] Risk Agent
-- [ ] Bull Case Agent
-- [ ] Bear Case Agent
-- [ ] Thesis Challenger Agent
-- [ ] Evidence Verification Agent
-- [ ] Research Synthesis Agent
-- [ ] Portfolio/Watchlist Monitoring Agent
-- [ ] Quality gate engine (12 gates)
-- [ ] Agent workflow tests (mock LLM)
-
-## Phase 8: API Layer — NOT STARTED
-
-- [ ] Company CRUD endpoints
-- [ ] Financial data endpoints
-- [ ] Screening endpoints
-- [ ] Research run endpoints
-- [ ] Thesis and report endpoints
-- [ ] Watchlist/portfolio endpoints
-- [ ] Research chat endpoint (WebSocket)
-- [ ] Authentication (OAuth/JWT)
-- [ ] Authorization (RBAC)
-- [ ] API documentation (OpenAPI)
-- [ ] API tests
-
-## Phase 9: Frontend Dashboard — NOT STARTED
-
-- [ ] Next.js project setup (TypeScript strict, Tailwind)
-- [ ] Authentication UI
-- [ ] Main dashboard (market overview, sector heatmap, research candidates)
-- [ ] Stock screener (interactive filters, saved screens)
-- [ ] Company detail page (financials, moat, valuation, thesis)
-- [ ] Company scorecard (10-dimension, evidence drill-down)
-- [ ] Research report viewer
-- [ ] AI research chat
-- [ ] Watchlist/portfolio management
-- [ ] Interactive financial charts
-- [ ] Alert management
-- [ ] Responsive design (mobile + desktop)
-- [ ] Frontend tests (Vitest + Playwright)
-
-## Phase 10: Integration & Deployment — NOT STARTED
-
-- [ ] Docker Compose (all services)
-- [ ] Backend Dockerfile (multi-stage)
-- [ ] Frontend Dockerfile (multi-stage)
-- [ ] Database seed data (10-20 representative companies)
-- [ ] OpenTelemetry integration
-- [ ] Prometheus/Grafana dashboards
-- [ ] Production deployment configuration
-- [ ] End-to-end tests
-- [ ] Security review
-- [ ] Documentation finalization
-- [ ] Performance testing
+1. **Commit development control plane** — CLAUDE.md, progress.md, implementation-plan.md, tests/acceptance-criteria.md, docs/development-workflow.md
+2. **Push to origin** — 3 unpushed commits (architecture docs, review, control plane)
+3. **Begin Phase 2: Core Backend Foundation**
+   - Python project setup (pyproject.toml, uv or Poetry)
+   - FastAPI application skeleton with health check
+   - pydantic-settings configuration
+   - Structured logging with OpenTelemetry correlation IDs
+   - Alembic migration framework
+   - pytest setup with fixtures and coverage
+   - CI pipeline (ruff + mypy + pytest)
+4. **Evaluate Celery vs Temporal** (ADR-002) during Phase 2
