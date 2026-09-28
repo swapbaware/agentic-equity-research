@@ -235,3 +235,89 @@ tests/            — Integration/E2E tests and acceptance criteria (unit tests 
 ## Development Commands
 
 (To be populated as tooling is added in Phase 2)
+
+## Project Progress Tracking
+
+The project uses progress.md as the persistent development state.
+
+After every implementation phase or significant task:
+
+1. Read progress.md before starting work.
+2. Update progress.md when work begins.
+3. Mark completed tasks only after implementation and testing.
+4. Record failed tests and unresolved issues.
+5. Record important architectural decisions.
+6. Record known limitations.
+7. Record the current phase.
+8. Record the next phase.
+9. Record the latest Git commit hash when a phase is committed.
+
+Never claim a feature is complete unless:
+- implementation exists
+- relevant tests pass
+- acceptance criteria are satisfied
+
+When starting a new Claude Code session:
+1. Read CLAUDE.md
+2. Read progress.md
+3. Read implementation-plan.md
+4. Inspect recent Git history
+5. Inspect current git status
+6. Review relevant architecture documentation
+7. Then continue from the current phase
+
+Do not restart completed work unless explicitly instructed.
+
+## Phase Execution Workflow
+
+### Before Starting Any Phase
+
+1. Read CLAUDE.md.
+2. Read progress.md.
+3. Read implementation-plan.md.
+4. Inspect git status.
+5. Inspect recent git history.
+6. Inspect relevant architecture and ADR documents.
+7. Identify the current phase and its acceptance criteria.
+8. Do not restart or reimplement completed phases unless explicitly instructed.
+
+### After Completing Any Phase
+
+1. Run the relevant automated tests.
+2. Run linting.
+3. Run type checks.
+4. Verify all phase acceptance criteria.
+5. Check for regressions in previously completed functionality.
+6. Update progress.md.
+7. Update implementation-plan.md.
+8. Record new technical debt or known limitations.
+9. Review git diff.
+10. Verify that no secrets or API keys were added.
+11. Create a Git commit for the completed phase.
+12. Do not push to GitHub unless explicitly instructed.
+
+### Phase Completion Rule
+
+A phase is complete only when:
+
+- implementation is complete
+- acceptance criteria are satisfied
+- relevant tests pass
+- lint passes
+- type checks pass
+- documentation is updated
+- progress.md is updated
+- implementation-plan.md is updated
+- Git commit is created
+
+Do not automatically start the next phase after completing a phase.
+
+Stop and report:
+
+- implementation completed
+- tests and results
+- acceptance criteria status
+- files changed
+- technical debt
+- Git commit hash
+- recommended next phase
