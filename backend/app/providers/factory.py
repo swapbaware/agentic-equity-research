@@ -3,15 +3,17 @@
 The factory maps provider names (from ProviderSettings) to concrete classes.
 Adding a new provider means registering it here and implementing the interface.
 Business logic never touches this module; it receives providers via DI.
+
+Concrete providers are imported lazily inside factory closures so that
+importing the factory does NOT pull in vendor SDKs (yfinance, httpx, etc.).
+A provider's dependencies are only needed when that provider is selected.
 """
 from __future__ import annotations
 
 from collections.abc import Callable
 from typing import TypeVar
 
-from app.providers.alpha_vantage import AlphaVantageProvider
 from app.providers.base import ProviderConfig
-from app.providers.bse import BSEProvider
 from app.providers.config import ProviderSettings
 from app.providers.interfaces import (
     CorporateActionsProvider,
@@ -39,9 +41,7 @@ from app.providers.mock import (
     MockShareholdingProvider,
     MockTranscriptProvider,
 )
-from app.providers.nse import NSEProvider
 from app.providers.rate_limiter import InMemoryRateLimiter, RateLimiter
-from app.providers.yahoo_finance import YahooFinanceProvider
 
 _P = TypeVar("_P")
 
@@ -95,28 +95,40 @@ class ProviderFactory:
         )
 
     def _build_custom_factories(self) -> dict[str, dict[str, Callable[[], object]]]:
-        """Register providers that need constructor arguments."""
+        """Register providers that need constructor arguments.
+
+        Concrete providers are imported lazily inside each closure so vendor
+        SDKs (yfinance, httpx) are only loaded when that provider is selected.
+        """
         s = self._settings
         rl = self._rate_limiter
 
-        def _yahoo() -> YahooFinanceProvider:
+        def _yahoo() -> object:
+            from app.providers.yahoo_finance import YahooFinanceProvider
+
             return YahooFinanceProvider(
                 config=_make_config("yahoo_finance", s), rate_limiter=rl,
             )
 
-        def _alpha_vantage() -> AlphaVantageProvider:
+        def _alpha_vantage() -> object:
+            from app.providers.alpha_vantage import AlphaVantageProvider
+
             return AlphaVantageProvider(
                 api_key=s.alpha_vantage_api_key,
                 config=_make_config("alpha_vantage", s),
                 rate_limiter=rl,
             )
 
-        def _bse() -> BSEProvider:
+        def _bse() -> object:
+            from app.providers.bse import BSEProvider
+
             return BSEProvider(
                 config=_make_config("bse", s), rate_limiter=rl,
             )
 
-        def _nse() -> NSEProvider:
+        def _nse() -> object:
+            from app.providers.nse import NSEProvider
+
             return NSEProvider(
                 config=_make_config("nse", s), rate_limiter=rl,
             )
@@ -127,6 +139,21 @@ class ProviderFactory:
             "corporate_filings": {"bse": _bse, "nse": _nse},
             "corporate_actions": {"yahoo": _yahoo},
         }
+
+    def register(
+        self,
+        interface_name: str,
+        provider_key: str,
+        factory_fn: Callable[[], object],
+    ) -> None:
+        """Register a provider factory at runtime.
+
+        This allows new provider adapters to be added without modifying this
+        module — the only requirement is implementing the Protocol interface.
+        """
+        if interface_name not in self._custom_factories:
+            self._custom_factories[interface_name] = {}
+        self._custom_factories[interface_name][provider_key] = factory_fn
 
     def _resolve(self, interface_name: str, provider_key: str) -> object:
         custom = self._custom_factories.get(interface_name, {})

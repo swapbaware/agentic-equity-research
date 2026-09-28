@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
@@ -80,7 +79,6 @@ from app.models.enums import (
     StatementType,
     ValuationModelType,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -161,7 +159,10 @@ SCHEMA_MAPPING: dict[str, list[type]] = {
     "company": [Exchange, Classification, Company, Security],
     "financial": [FinancialStatement, FinancialMetric, QuarterlyResult],
     "governance": [Shareholding, PromoterPledge, CorporateAction, CorporateAnnouncement],
-    "research": [ResearchDocument, Evidence, ManagementStatement, ResearchRun, ResearchFinding, Source, DocumentVersion, Claim, ClaimEvidence, SourceReliability],
+    "research": [
+        ResearchDocument, Evidence, ManagementStatement, ResearchRun, ResearchFinding,
+        Source, DocumentVersion, Claim, ClaimEvidence, SourceReliability,
+    ],
     "analysis": [MoatAssessment, GrowthOpportunity, Competitor, IndustryData, MacroIndicator],
     "valuation": [ValuationModel, Scenario],
     "thesis": [InvestmentThesis, ThesisVersion, Risk, Catalyst, CompanyScore],
@@ -265,9 +266,8 @@ class TestUniqueConstraints:
     @staticmethod
     def _has_unique(table: sa.Table, col_names: set[str]) -> bool:
         for constraint in table.constraints:
-            if isinstance(constraint, sa.UniqueConstraint):
-                if {c.name for c in constraint.columns} == col_names:
-                    return True
+            if isinstance(constraint, sa.UniqueConstraint) and {c.name for c in constraint.columns} == col_names:
+                return True
         return False
 
     def test_company_isin_unique(self) -> None:
@@ -381,7 +381,10 @@ class TestJunctionTables:
 
 class TestEnumValues:
     def test_finding_type_matches_spec(self) -> None:
-        expected = {"FACT", "CALCULATION", "MANAGEMENT_CLAIM", "ANALYST_OPINION", "AI_INFERENCE", "ASSUMPTION", "UNCERTAINTY"}
+        expected = {
+            "FACT", "CALCULATION", "MANAGEMENT_CLAIM", "ANALYST_OPINION",
+            "AI_INFERENCE", "ASSUMPTION", "UNCERTAINTY",
+        }
         assert {e.value for e in FindingType} == expected
 
     def test_moat_type_count(self) -> None:

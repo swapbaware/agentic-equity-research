@@ -151,7 +151,8 @@ class ProviderBase:
 
     def _backoff_delay(self, attempt: int) -> float:
         delay = self._config.base_retry_delay * (2 ** (attempt - 1))
-        return min(delay, self._config.max_retry_delay)
+        result: float = min(delay, self._config.max_retry_delay)
+        return result
 
     async def check_health(self) -> ProviderHealth:
         """Default health check — subclasses should override with a real probe."""

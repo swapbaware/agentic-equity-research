@@ -98,7 +98,7 @@ class YahooFinanceProvider(ProviderBase):
         )
         super().__init__(effective_config, rate_limiter)
 
-    def _get_ticker(self, symbol: str, exchange: str) -> yf.Ticker:  # type: ignore[no-any-unimported]
+    def _get_ticker(self, symbol: str, exchange: str) -> yf.Ticker:
         yahoo_sym = _yahoo_symbol(symbol, exchange)
         return yf.Ticker(yahoo_sym)
 

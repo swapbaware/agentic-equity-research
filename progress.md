@@ -138,10 +138,14 @@
 - [x] DataReconciler (cross-source conflict detection with configurable threshold)
 - [x] Optional provenance field added to Quote, PriceBar, FinancialStatement, Filing, CorporateActionRecord
 - [x] Factory updated: yahoo, alpha_vantage, bse, nse registered across interfaces
-- [x] 70 new tests (19 Yahoo Finance, 13 Alpha Vantage, 13 BSE/NSE, 15 symbol map, 10 reconciliation)
+- [x] Factory lazy imports (vendor SDKs loaded only when provider selected)
+- [x] `ProviderFactory.register()` for runtime provider registration without modifying factory
+- [x] 70 provider tests (19 Yahoo Finance, 13 Alpha Vantage, 13 BSE/NSE, 15 symbol map, 10 reconciliation)
+- [x] 19 provider substitution tests (MockProductionProvider, config-only swap, lazy import regression)
 - [x] Development dataset: RELIANCE, TCS, INFY, HDFCBANK, ICICIBANK, BHARTIARTL
 - [x] No API keys in source code, no live API calls in tests
-- [x] Total: 369 tests passing, ruff clean
+- [x] Provider architecture review: 13/13 requirements verified
+- [x] Total: 394 tests passing, ruff clean, mypy strict clean on providers
 
 ---
 
@@ -169,7 +173,7 @@
 
 ## Failing Tests
 
-- `test_health.py::TestReadinessEndpoint::test_ready_returns_200` — pre-existing, requires running PostgreSQL with migrations applied. 369 other backend tests pass. 5 frontend tests pass.
+- `test_health.py::TestReadinessEndpoint::test_ready_returns_200` — pre-existing, requires running PostgreSQL with migrations applied. 394 other backend tests pass. 5 frontend tests pass.
 
 ---
 

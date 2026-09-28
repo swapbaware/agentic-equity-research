@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -20,7 +20,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.models import (
     Base,
-    Classification,
     Company,
     Evidence,
     Exchange,
@@ -32,7 +31,6 @@ from app.models import (
     Security,
 )
 from app.models.enums import (
-    ClassificationLevel,
     ConfidenceLevel,
     DocumentType,
     EvidenceType,
@@ -104,7 +102,8 @@ class TestSchemaCreation:
             result = await conn.execute(
                 text(
                     "SELECT schemaname, tablename FROM pg_tables "
-                    "WHERE schemaname IN ('company','financial','governance','research','analysis','valuation','thesis') "
+                    "WHERE schemaname IN "
+                    "('company','financial','governance','research','analysis','valuation','thesis') "
                     "ORDER BY schemaname, tablename"
                 )
             )
@@ -118,7 +117,8 @@ class TestSchemaCreation:
 
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.drop_all)
-            for schema in reversed(["company", "financial", "governance", "research", "analysis", "valuation", "thesis"]):
+            schemas = ["company", "financial", "governance", "research", "analysis", "valuation", "thesis"]
+            for schema in reversed(schemas):
                 await conn.execute(text(f"DROP SCHEMA IF EXISTS {schema} CASCADE"))
 
 
@@ -138,7 +138,9 @@ class TestCRUD:
         yield
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.drop_all)
-            for schema in reversed(["company", "financial", "governance", "research", "analysis", "valuation", "thesis"]):
+            schemas = ["company", "financial", "governance",
+                       "research", "analysis", "valuation", "thesis"]
+            for schema in reversed(schemas):
                 await conn.execute(text(f"DROP SCHEMA IF EXISTS {schema} CASCADE"))
 
     async def test_insert_exchange(self, session: AsyncSession) -> None:
