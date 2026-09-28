@@ -37,30 +37,62 @@
 
 ---
 
-## Current Phase
-
-### Phase 1.5: Development Control Plane — IN PROGRESS
+### Phase 1.5: Development Control Plane — COMPLETE
 
 - [x] CLAUDE.md expanded to 13-section engineering constitution
 - [x] progress.md restructured with 9 tracking categories
 - [x] implementation-plan.md updated with acceptance criteria per phase
 - [x] tests/acceptance-criteria.md created
 - [x] docs/development-workflow.md created
-- [ ] Commit and verify
+- [x] Commit (`dcd1f33`)
 
-**Next Phase:** Phase 2 — Core Backend Foundation
+### Phase 2: Core Backend Foundation — COMPLETE
+
+- [x] Python project setup (pyproject.toml, pip/venv)
+- [x] FastAPI application factory with lifespan management
+- [x] pydantic-settings configuration (auto async driver conversion)
+- [x] Structured JSON logging with request ID propagation (contextvars)
+- [x] SQLAlchemy 2.0 async engine with connection pooling
+- [x] Redis async client
+- [x] Alembic async migrations (initial: pgvector + 10 schemas)
+- [x] Health endpoint (database + Redis checks)
+- [x] Readiness endpoint (migration version check)
+- [x] RequestIdMiddleware with exception handling
+- [x] Consistent error response format and exception hierarchy
+- [x] pytest setup — 19 tests, all passing
+- [x] Next.js 14 frontend with TypeScript strict, Tailwind CSS
+- [x] Frontend health page
+- [x] Vitest setup — 5 tests, all passing
+- [x] ESLint with @typescript-eslint plugin
+- [x] ruff linting (check + format) — passing
+- [x] mypy strict type checking — passing (mypy 1.13.0 on Windows)
+- [x] TypeScript strict type checking (tsc --noEmit) — passing
+- [x] Docker Compose (PostgreSQL 16/pgvector, Redis 7, backend, frontend)
+- [x] Multi-stage Dockerfiles (backend + frontend)
+- [x] GitHub Actions CI (7 jobs: backend-lint, backend-typecheck, backend-test, frontend-lint, frontend-typecheck, frontend-test, docker-build)
+- [x] .env.example updated
+
+---
+
+## Current Phase
+
+**Next Phase:** Phase 3 — Domain Models & Database Schema
 
 ---
 
 ## Completed Features
 
-No application features implemented yet. Phases 0-1 are documentation and architecture only.
+- Health check endpoint (`GET /health`) — database and Redis connectivity
+- Readiness endpoint (`GET /health/ready`) — migration version validation
+- Frontend health page (`/health`) — static system status display
+- Structured JSON logging with request ID correlation
+- Request ID middleware with unhandled exception safety net
 
 ---
 
 ## Failing Tests
 
-No tests exist yet. Test framework setup is Phase 2 scope.
+None. All 24 tests pass (19 backend, 5 frontend).
 
 ---
 
@@ -117,31 +149,26 @@ No tests exist yet. Test framework setup is Phase 2 scope.
 | Anthropic Claude | LLMProvider | Not started | Phase 7 |
 | OpenAI | LLMProvider, EmbeddingProvider | Not started | Phase 5/7 |
 | MinIO / S3 | Object Storage | Not started | Phase 5 |
-| PostgreSQL + pgvector | Data layer | Not started | Phase 2 |
-| Redis | Cache, rate limiting, locks | Not started | Phase 2 |
+| PostgreSQL + pgvector | Data layer | Configured | Connection pooling, async engine, Alembic migrations |
+| Redis | Cache, rate limiting, locks | Configured | Async client, health check wired |
 
 ---
 
 ## Technical Debt
 
-No technical debt yet — no implementation exists. Tracking anticipated debt:
-
 | ID | Description | Incurred | Plan to Address |
 |----|-------------|----------|-----------------|
-| (none) | — | — | — |
+| TD-1 | mypy pinned to 1.13.0 — mypy 2.x blocked by Windows Application Control (librt DLL) | Phase 2 | CI uses Linux so 2.x works there; revisit when Windows policy changes |
+| TD-2 | npm audit shows 10 vulnerabilities (Next.js 14 / ESLint 8 transitive deps) | Phase 2 | Address during Next.js 15 upgrade |
 
 ---
 
 ## Next Actions
 
-1. **Commit development control plane** — CLAUDE.md, progress.md, implementation-plan.md, tests/acceptance-criteria.md, docs/development-workflow.md
-2. **Push to origin** — 3 unpushed commits (architecture docs, review, control plane)
-3. **Begin Phase 2: Core Backend Foundation**
-   - Python project setup (pyproject.toml, uv or Poetry)
-   - FastAPI application skeleton with health check
-   - pydantic-settings configuration
-   - Structured logging with OpenTelemetry correlation IDs
-   - Alembic migration framework
-   - pytest setup with fixtures and coverage
-   - CI pipeline (ruff + mypy + pytest)
-4. **Evaluate Celery vs Temporal** (ADR-002) during Phase 2
+1. **Begin Phase 3: Domain Models & Database Schema**
+   - Pydantic domain models (Company, Financial, Research, Evidence)
+   - SQLAlchemy ORM models with NUMERIC for financials
+   - Alembic migration for core tables
+   - Provider Protocol interfaces
+   - Repository pattern for data access
+2. **Evaluate Celery vs Temporal** (ADR-002) during Phase 3
