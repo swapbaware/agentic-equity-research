@@ -147,6 +147,24 @@
 - [x] Provider architecture review: 13/13 requirements verified
 - [x] Total: 394 tests passing, ruff clean, mypy strict clean on providers
 
+### Phase 6b: Financial Analytics Engine — COMPLETE
+
+- [x] Deterministic Financial Analytics Engine (`app/analytics/`)
+- [x] CAGR calculations: Revenue, EBITDA, EBIT, PAT, EPS (via Decimal ln/exp)
+- [x] Profitability margins: Gross, EBITDA, EBIT, Net
+- [x] Return ratios: ROE, ROCE, ROIC (with average balance sheet values)
+- [x] Leverage ratios: Debt/Equity, Net Debt/EBITDA, Interest Coverage, Current Ratio
+- [x] Cash flow metrics: CFO, FCF, CFO/PAT, FCF/PAT, Capex/Revenue
+- [x] Efficiency metrics: Working Capital, Receivable Days, Inventory Days, Payable Days, Cash Conversion Cycle
+- [x] Quality metrics: Return on Incremental Capital, Earnings Consistency (composite score)
+- [x] All calculations use `decimal.Decimal` — never float
+- [x] Every result retains: input values, period, formula, calculation version, output
+- [x] Engine orchestrator (`compute_all`) produces 28 metrics from multi-period data
+- [x] 129 unit tests with hand-verified expected values
+- [x] Golden dataset: 3-year synthetic company with exact Decimal assertions
+- [x] ruff clean, mypy strict clean
+- [x] Total: 523 tests passing
+
 ---
 
 ## Current Phase
@@ -168,12 +186,13 @@
 - Indian data providers: Yahoo Finance, Alpha Vantage, BSE, NSE (metadata)
 - Data provenance tracking on all provider-sourced records
 - Cross-source data reconciliation with conflict detection
+- Deterministic Financial Analytics Engine: 28 metrics (CAGR, margins, returns, leverage, cash flow, efficiency, quality)
 
 ---
 
 ## Failing Tests
 
-- `test_health.py::TestReadinessEndpoint::test_ready_returns_200` — pre-existing, requires running PostgreSQL with migrations applied. 394 other backend tests pass. 5 frontend tests pass.
+- `test_health.py::TestReadinessEndpoint::test_ready_returns_200` — pre-existing, requires running PostgreSQL with migrations applied. 523 other backend tests pass. 5 frontend tests pass.
 
 ---
 
