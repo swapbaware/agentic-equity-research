@@ -81,7 +81,7 @@ class ResearchDocument(Base, TimestampMixin):
     storage_path: Mapped[str | None] = mapped_column(sa.String(1000), nullable=True)
     content_hash: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
     embedding_id: Mapped[str | None] = mapped_column(sa.String(200), nullable=True)
-    metadata_: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
+    metadata_: Mapped[dict[str, object] | None] = mapped_column("metadata", JSONB, nullable=True)
     ingested_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True),
         server_default=sa.func.now(),
@@ -202,9 +202,9 @@ class ResearchRun(Base):
         nullable=False,
         server_default="RUNNING",
     )
-    quality_gate_results: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    agent_execution_log: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    data_sources_used: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    quality_gate_results: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    agent_execution_log: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    data_sources_used: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     research_completeness: Mapped[Decimal | None] = mapped_column(
         sa.Numeric(5, 2),
         nullable=True,
@@ -212,7 +212,7 @@ class ResearchRun(Base):
     total_input_tokens: Mapped[int | None] = mapped_column(sa.BigInteger, nullable=True)
     total_output_tokens: Mapped[int | None] = mapped_column(sa.BigInteger, nullable=True)
     total_cost_usd: Mapped[Decimal | None] = mapped_column(sa.Numeric(10, 4), nullable=True)
-    cost_by_agent: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    cost_by_agent: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
 
     findings: Mapped[list[ResearchFinding]] = relationship(
         back_populates="research_run",

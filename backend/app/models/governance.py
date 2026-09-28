@@ -72,7 +72,7 @@ class CorporateAction(Base, TimestampMixin):
     )
     ex_date: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
     record_date: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
-    details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    details: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     source: Mapped[str | None] = mapped_column(sa.String(200), nullable=True)
 
 

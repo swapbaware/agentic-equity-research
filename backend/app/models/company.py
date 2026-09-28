@@ -94,9 +94,9 @@ class Company(Base, TimestampMixin):
     registered_address: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     website: Mapped[str | None] = mapped_column(sa.String(500), nullable=True)
     description: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    business_segments: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    major_products: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    geographies: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    business_segments: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    major_products: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    geographies: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     is_active: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, server_default=sa.true())
 
     sector: Mapped[Classification | None] = relationship(

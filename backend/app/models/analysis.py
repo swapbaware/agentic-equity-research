@@ -86,8 +86,8 @@ class MoatAssessment(Base, TimestampMixin):
         server_default="NONE",
     )
     durability_years: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
-    threats: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    competitor_comparison: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    threats: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    competitor_comparison: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     confidence: Mapped[ConfidenceLevel] = mapped_column(
         sa.Enum(ConfidenceLevel, name="confidence_level", create_type=False),
         nullable=False,
@@ -130,7 +130,7 @@ class GrowthOpportunity(Base, TimestampMixin):
         nullable=True,
     )
     timeline_years: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
-    risks: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    risks: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     confidence: Mapped[ConfidenceLevel] = mapped_column(
         sa.Enum(ConfidenceLevel, name="confidence_level", create_type=False),
         nullable=False,
@@ -164,7 +164,7 @@ class Competitor(Base, TimestampMixin):
         sa.Enum(CompetitorRelevance, name="competitor_relevance"),
         nullable=False,
     )
-    comparison_metrics: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    comparison_metrics: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
 
 
 class IndustryData(Base, TimestampMixin):
@@ -202,4 +202,4 @@ class MacroIndicator(Base, TimestampMixin):
     as_of_date: Mapped[date] = mapped_column(sa.Date, nullable=False)
     source: Mapped[str] = mapped_column(sa.String(200), nullable=False)
     country: Mapped[str] = mapped_column(sa.String(10), nullable=False, server_default="IN")
-    company_impact_mapping: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    company_impact_mapping: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)

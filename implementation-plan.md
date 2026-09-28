@@ -109,11 +109,11 @@ This document describes the implementation roadmap for the Agentic Equity Resear
 - Alembic upgrade/downgrade cycle completes without error
 - Structured log output is valid JSON with trace_id
 
-**Status:** NOT STARTED
+**Status:** COMPLETE — Commit `7bc1c18`
 
 **Key Decisions:**
-- Evaluate uv vs Poetry for dependency management
-- Evaluate Celery vs Temporal for background tasks (ADR-002)
+- pip/venv selected over uv/Poetry for dependency management (simplicity)
+- Celery vs Temporal still pending (ADR-002)
 
 ---
 
@@ -152,11 +152,15 @@ This document describes the implementation roadmap for the Agentic Equity Resear
 - Balance sheet equation invariant enforcement
 - Enum value completeness (all values from domain model present)
 
-**Status:** NOT STARTED
+**Status:** PARTIALLY COMPLETE — Commit `307ee32`
+
+28 SQLAlchemy ORM models, 27 enums, 6 junction tables, 34 tables across 7 schemas, Alembic migrations, 156 unit tests + 6 integration tests.
+
+**Deferred:** Value objects (Money, Percentage, FinancialRatio, DateRange, SourceCitation, CAGRResult). Full Pydantic validation layer. Repository layer for all entities (only evidence and screener repositories built).
 
 **Key Decisions:**
-- UUID v7 vs v4 for primary keys (v7 for time-ordering if available)
-- JSONB field structure for flexible nested data
+- UUID v4 selected (v7 not available in stdlib until Python 3.12+)
+- JSONB for flexible nested data (business segments, assumptions, agent logs)
 
 ---
 
@@ -197,10 +201,12 @@ This document describes the implementation roadmap for the Agentic Equity Resear
 - Factory: correct implementation returned per configuration
 - BSE API integration test (CI-skippable): fetches real company data
 
-**Status:** NOT STARTED
+**Status:** COMPLETE — Commits `307ee32`, `b1debdd`
+
+11 Protocol interfaces (PriceHistory deferred — see TD-5), ProviderBase with retry/timeout/rate limiting, ProviderError hierarchy, token bucket rate limiter, ProviderFactory with registry, 11 mock providers. Concrete providers: YahooFinanceProvider, AlphaVantageProvider, BSEProvider, NSEProvider (metadata-only). 89 provider tests + 19 substitution tests + 70 data provider tests.
 
 **Key Decisions:**
-- NSE data access strategy (ADR-009 — open)
+- NSE data access strategy (ADR-009 — open; NSE restricts automated access)
 - Commercial vendor evaluation if free sources are insufficient
 
 ---
@@ -242,7 +248,11 @@ This document describes the implementation roadmap for the Agentic Equity Resear
 - Source tier assignment: Tier 1 for BSE data, Tier 3 for news
 - Completeness validation: FACT without citation → flagged, FACT with citation → passes
 
-**Status:** NOT STARTED
+**Status:** PARTIALLY COMPLETE — Commit `307ee32`
+
+Evidence repository (async CRUD), evidence service layer, evidence API endpoints (`/api/v1/evidence/`), FastAPI dependency injection. 24 service tests + 11 API tests.
+
+**Deferred:** Document ingestion pipeline (PDF/HTML → text), S3/MinIO storage, SHA-256 deduplication, embedding generation, pgvector semantic search, citation completeness validator. These require infrastructure (S3, pgvector with embeddings) and will be built before or during agent orchestration.
 
 ---
 
@@ -288,7 +298,15 @@ This document describes the implementation roadmap for the Agentic Equity Resear
 - Screening: compound filter (ROCE>15 AND Debt/Equity<0.5 AND MarketCap>1000Cr) returns correct companies
 - Edge cases: division by zero, negative equity, zero revenue
 
-**Status:** NOT STARTED
+**Status:** PARTIALLY COMPLETE — Commits `a90acaa` (Phase 6b: Analytics Engine), `c6d90b8` (Phase 6c: Screener)
+
+**Phase 6b (COMPLETE):** Deterministic Financial Analytics Engine — CAGR (Revenue, EBITDA, EBIT, PAT, EPS), profitability margins (Gross, EBITDA, EBIT, Net), return ratios (ROE, ROCE, ROIC), leverage ratios (D/E, Net Debt/EBITDA, Interest Coverage, Current Ratio), cash flow metrics (CFO, FCF, CFO/PAT, FCF/PAT, Capex/Revenue), efficiency metrics (Working Capital, Receivable/Inventory/Payable Days, Cash Conversion Cycle), quality metrics (Return on Incremental Capital, Earnings Consistency). All Decimal. 129 unit tests with golden dataset.
+
+**Phase 6c (COMPLETE):** Stock Screener — 20 screening fields, 8 operators, AND/OR/NOT filter groups, SQLAlchemy executor, saved screens, 7 API endpoints, interactive frontend. 88 screener tests.
+
+**Phase 6d (COMPLETE):** Foundation Hardening — mypy strict zero errors, ruff zero errors, documentation synchronized, technical debt register updated.
+
+**Deferred to Phase 6e:** DCF model, Reverse DCF, multiple-based valuation models (P/E, EV/EBITDA, P/S, P/B, PEG, FCF Yield, EV/FCF), historical valuation band analysis, peer comparison engine, scenario engine (Bear/Base/Bull), financial forensics / red flag scoring.
 
 ---
 

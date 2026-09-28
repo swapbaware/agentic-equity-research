@@ -185,9 +185,24 @@
 
 ---
 
+### Phase 6d: Foundation Hardening — COMPLETE
+
+- [x] Fix 21 mypy `type-arg` errors: bare `Mapped[dict]` → `Mapped[dict[str, object]]` across 6 model files
+- [x] Fix 1 mypy `import-untyped` error: yfinance import annotation
+- [x] Fix 14 ruff errors in Alembic files (import sorting, Union→`|`, Sequence import, line length)
+- [x] Verify test baseline: 617 backend tests passing, 5 frontend tests passing, 1 pre-existing failure documented
+- [x] Synchronize progress.md and implementation-plan.md with actual repository state
+- [x] Update technical debt register (TD-1 through TD-11)
+- [x] Commit CLAUDE.md Project Progress Tracking section
+- [x] mypy strict: zero errors (65 source files)
+- [x] ruff: zero errors
+- [x] tsc strict: zero errors
+
+---
+
 ## Current Phase
 
-**Next Phase:** Phase 7 — Agent Orchestration
+**Next Phase:** Phase 6e — Valuation Engine & Financial Forensics
 
 ---
 
@@ -211,7 +226,7 @@
 
 ## Failing Tests
 
-- `test_health.py::TestReadinessEndpoint::test_ready_returns_200` — pre-existing, requires running PostgreSQL with migrations applied. 617 other backend tests pass. 5 frontend tests pass.
+- `test_health.py::TestReadinessEndpoint::test_ready_returns_200` — pre-existing, requires running PostgreSQL with migrations applied. This is an integration test that validates the readiness endpoint checks Alembic migration state against a live database. Cannot pass without PostgreSQL. 617 other backend tests pass. 5 frontend tests pass. 7 tests skipped (6 integration tests requiring PostgreSQL, 1 provider test requiring API key).
 
 ---
 
@@ -279,17 +294,34 @@
 | ID | Description | Incurred | Plan to Address |
 |----|-------------|----------|-----------------|
 | TD-1 | mypy pinned to 1.13.0 — mypy 2.x blocked by Windows Application Control (librt DLL) | Phase 2 | CI uses Linux so 2.x works there; revisit when Windows policy changes |
-| TD-2 | npm audit shows 10 vulnerabilities (Next.js 14 / ESLint 8 transitive deps) | Phase 2 | Address during Next.js 15 upgrade |
+| TD-2 | npm audit shows 10 vulnerabilities (3 moderate, 5 high, 2 critical) — Next.js 14 / ESLint 8 transitive deps | Phase 2 | Address during Next.js 15 upgrade |
 | TD-3 | ruff TCH003 suppressed for `app/models/*.py` — SQLAlchemy needs `datetime`/`Decimal` at runtime for `Mapped[]` resolution | Phase 3 | Inherent SQLAlchemy constraint; not fixable without removing `from __future__ import annotations` |
+| TD-4 | Domain value objects not implemented: Money, Percentage, FinancialRatio, DateRange, SourceCitation, CAGRResult | Phase 3 | Implement when agent layer needs typed value passing; raw Decimal works for current analytics engine |
+| TD-5 | PriceHistory provider interface not implemented — impl plan specified 12 interfaces but only 11 built | Phase 5 | Evaluate whether PriceHistory should be a separate interface or folded into MarketDataProvider when historical analysis features are built |
+| TD-6 | Readiness test (`test_ready_returns_200`) requires running PostgreSQL — cannot pass in unit test mode | Phase 2 | Requires PostgreSQL with migrations applied; document as integration test and verify with infrastructure |
+| TD-7 | Valuation engine gap — DCF, Reverse DCF, multiple-based valuation, historical valuation bands, peer comparison, scenario engine not yet implemented | Phase 6 | Phase 6e — required before agent orchestration |
+| TD-8 | Financial forensics / red flag scoring not implemented | Phase 6 | Phase 6e — part of original Phase 6 scope |
+| TD-9 | Document ingestion pipeline, S3 storage, embedding/pgvector semantic search not implemented (partial evidence subsystem) | Phase 4 | Required for full citation chain; implement before or during agent layer |
+| TD-10 | Repository layer exists only for evidence and screener — not all 28 domain entities | Phase 3 | Build repositories as needed when agents/API endpoints require them |
+| TD-11 | `pytest.mark.integration` not registered — produces PytestUnknownMarkWarning | Phase 3 | Register mark in `pyproject.toml` `[tool.pytest.ini_options]` markers list |
 
 ---
 
 ## Next Actions
 
-1. **Begin Phase 7: Agent Orchestration (LangGraph)**
+1. **Phase 6e: Valuation Engine & Financial Forensics**
+   - DCF model with configurable assumptions (Decimal, range output)
+   - Reverse DCF (implied growth from market price)
+   - Multiple-based valuation models (P/E, EV/EBITDA, P/S, P/B, PEG, FCF Yield, EV/FCF)
+   - Historical valuation band analysis
+   - Peer comparison engine
+   - Scenario engine (Bear/Base/Bull with explicit assumptions)
+   - Financial forensics / red flag scoring
+   - Golden dataset tests with hand-verified calculations
+2. **Phase 7: Agent Orchestration (LangGraph)**
    - LangGraph state machine with typed ResearchState
    - First 3 agents: DataCollector, FinancialAnalyst, ThesisChallenger
    - Agent tool wiring (providers → agent tools)
    - Quality gate framework (12 gates)
-2. **SEBI XBRL integration** for authoritative financial data
-3. **Evaluate Celery vs Temporal** (ADR-002) for background tasks
+3. **SEBI XBRL integration** for authoritative financial data
+4. **Evaluate Celery vs Temporal** (ADR-002) for background tasks

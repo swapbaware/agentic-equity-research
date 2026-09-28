@@ -15,7 +15,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-import yfinance as yf
+import yfinance as yf  # type: ignore[import-untyped]  # no py.typed marker or stubs
 
 from app.providers.base import ProviderBase, ProviderConfig
 from app.providers.errors import ProviderDataError, ProviderNotFoundError

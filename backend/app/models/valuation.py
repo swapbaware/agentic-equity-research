@@ -37,9 +37,9 @@ class ValuationModel(Base, TimestampMixin):
         sa.Enum(ScenarioType, name="scenario_type"),
         nullable=False,
     )
-    assumptions: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    inputs: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    outputs: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    assumptions: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    inputs: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    outputs: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     implied_value_per_share: Mapped[Decimal] = mapped_column(
         sa.Numeric(20, 4),
         nullable=False,
@@ -91,7 +91,7 @@ class Scenario(Base, TimestampMixin):
         sa.Numeric(20, 4),
         nullable=True,
     )
-    key_assumptions: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    key_assumptions: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     what_must_go_right: Mapped[list[str] | None] = mapped_column(
         ARRAY(sa.Text),
         nullable=True,

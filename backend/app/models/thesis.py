@@ -111,7 +111,7 @@ class InvestmentThesis(Base):
     valuation_summary: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     bear_case: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     bull_case: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    key_monitoring_metrics: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    key_monitoring_metrics: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     thesis_invalidation_conditions: Mapped[list[str] | None] = mapped_column(
         ARRAY(sa.Text),
         nullable=True,
@@ -120,7 +120,7 @@ class InvestmentThesis(Base):
         sa.Enum(ConfidenceLevel, name="confidence_level", create_type=False),
         nullable=False,
     )
-    fact_vs_inference_labels: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    fact_vs_inference_labels: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True),
         server_default=sa.func.now(),
@@ -262,7 +262,7 @@ class CompanyScore(Base, TimestampMixin):
         nullable=False,
     )
     score: Mapped[int] = mapped_column(sa.Integer, nullable=False)
-    sub_scores: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    sub_scores: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     explanation: Mapped[str] = mapped_column(sa.Text, nullable=False)
 
     evidences: Mapped[list[Evidence]] = relationship(
