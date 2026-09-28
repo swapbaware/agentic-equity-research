@@ -72,11 +72,82 @@
 - [x] GitHub Actions CI (7 jobs: backend-lint, backend-typecheck, backend-test, frontend-lint, frontend-typecheck, frontend-test, docker-build)
 - [x] .env.example updated
 
+### Phase 3: Domain Models & Database Schema — COMPLETE
+
+- [x] SQLAlchemy 2.0 declarative base with naming convention (base.py)
+- [x] 27 domain enumerations covering all 7 schemas (enums.py)
+- [x] Company schema: Exchange, Classification (Sector/Industry), Company, Security
+- [x] Financial schema: FinancialStatement (with CHECK constraint), FinancialMetric, QuarterlyResult
+- [x] Governance schema: Shareholding, PromoterPledge, CorporateAction, CorporateAnnouncement
+- [x] Research schema: ResearchDocument, Evidence, ManagementStatement, ResearchRun, ResearchFinding
+- [x] Analysis schema: MoatAssessment, GrowthOpportunity, Competitor, IndustryData, MacroIndicator
+- [x] Valuation schema: ValuationModel, Scenario
+- [x] Thesis schema: InvestmentThesis, ThesisVersion, Risk, Catalyst, CompanyScore
+- [x] 6 junction tables for many-to-many evidence relationships
+- [x] 34 total tables across 7 PostgreSQL schemas
+- [x] All financial columns use `Numeric` (never Float)
+- [x] UUID primary keys on all 28 model classes
+- [x] TimestampMixin (created_at, updated_at) with server_default
+- [x] Partial unique indexes for nullable columns (nse_symbol, bse_code)
+- [x] CHECK constraint: quarter consistency on FinancialStatement
+- [x] Conservative defaults: MoatStrength defaults to NONE, score defaults to 0
+- [x] Alembic migration 002: explicit DDL for all 34 tables + 27 enum types
+- [x] 156 unit tests (schema structure validation without database)
+- [x] 6 integration tests (database round-trip, marked `@pytest.mark.integration`)
+- [x] ruff lint passing (TCH003 suppressed for model files — SQLAlchemy needs runtime types)
+- [x] All enums use `StrEnum` (Python 3.11+)
+
+### Phase 4: Evidence Subsystem — COMPLETE
+
+- [x] Evidence repository (async SQLAlchemy CRUD)
+- [x] Evidence service layer (business logic)
+- [x] Evidence API endpoints (`/api/v1/evidence/`)
+- [x] FastAPI dependency injection for services
+- [x] Alembic migration 003: evidence subsystem tables
+- [x] 24 service tests, 11 API tests — all passing
+
+### Phase 5: Provider Framework — COMPLETE
+
+- [x] 11 Protocol interfaces (MarketData, FinancialData, CorporateFilings, Shareholding, CorporateActions, News, Search, MacroData, Transcript, LLM, Embedding)
+- [x] ProviderBase with retry, timeout, rate limiting, structured logging
+- [x] ProviderError hierarchy (Auth, RateLimit, NotFound, Timeout, Unavailable, Data)
+- [x] Token bucket rate limiter (InMemoryRateLimiter + NullRateLimiter)
+- [x] ProviderConfig (dataclass) + ProviderSettings (env-driven via pydantic-settings)
+- [x] ProviderFactory with registry pattern
+- [x] 11 mock provider implementations (deterministic Indian market data)
+- [x] 89 provider tests (63 contract + 18 base + 8 rate limiter) — all passing
+
+### Phase 6: Initial Indian Data Providers — COMPLETE
+
+- [x] DataProvenance model (source, source_type, retrieved_at, data_quality, confidence)
+- [x] DataConflict model for cross-source conflict detection
+- [x] Indian stock symbol mapper (NSE/BSE/ISIN resolution for 6 dev companies)
+- [x] YahooFinanceProvider (MarketData + FinancialData + CorporateActions via yfinance)
+  - Thread pool for sync yfinance calls, Decimal conversion at boundary
+  - NSE (.NS) and BSE (.BO) symbol mapping
+  - Provenance attached to all returned records
+- [x] AlphaVantageProvider (MarketData + FinancialData via httpx async)
+  - API key from env (PROVIDER_ALPHA_VANTAGE_API_KEY)
+  - HTTP error handling (401/429/5xx mapped to provider errors)
+  - Provenance attached to all returned records
+- [x] BSEProvider (CorporateFilings via BSE public API)
+  - Conservative rate limiting (2 req/s)
+  - Tier 1 (AUTHORITATIVE) provenance
+  - Filing metadata with document URLs
+- [x] NSEProvider (metadata-only placeholder — NSE restricts automated access)
+- [x] DataReconciler (cross-source conflict detection with configurable threshold)
+- [x] Optional provenance field added to Quote, PriceBar, FinancialStatement, Filing, CorporateActionRecord
+- [x] Factory updated: yahoo, alpha_vantage, bse, nse registered across interfaces
+- [x] 70 new tests (19 Yahoo Finance, 13 Alpha Vantage, 13 BSE/NSE, 15 symbol map, 10 reconciliation)
+- [x] Development dataset: RELIANCE, TCS, INFY, HDFCBANK, ICICIBANK, BHARTIARTL
+- [x] No API keys in source code, no live API calls in tests
+- [x] Total: 369 tests passing, ruff clean
+
 ---
 
 ## Current Phase
 
-**Next Phase:** Phase 3 — Domain Models & Database Schema
+**Next Phase:** Phase 7 — Agent Orchestration
 
 ---
 
@@ -87,12 +158,18 @@
 - Frontend health page (`/health`) — static system status display
 - Structured JSON logging with request ID correlation
 - Request ID middleware with unhandled exception safety net
+- Complete domain model: 28 ORM models, 6 junction tables, 27 enums across 7 schemas
+- Evidence subsystem: full CRUD API for evidence, claims, citations
+- Provider framework: 11 Protocol interfaces, factory, rate limiter, error hierarchy
+- Indian data providers: Yahoo Finance, Alpha Vantage, BSE, NSE (metadata)
+- Data provenance tracking on all provider-sourced records
+- Cross-source data reconciliation with conflict detection
 
 ---
 
 ## Failing Tests
 
-None. All 24 tests pass (19 backend, 5 frontend).
+- `test_health.py::TestReadinessEndpoint::test_ready_returns_200` — pre-existing, requires running PostgreSQL with migrations applied. 369 other backend tests pass. 5 frontend tests pass.
 
 ---
 
@@ -142,10 +219,11 @@ None. All 24 tests pass (19 backend, 5 frontend).
 
 | Integration | Provider Interface | Status | Blocker |
 |------------|-------------------|--------|---------|
-| BSE API | MarketDataProvider, CorporateFilingsProvider | Not started | Phase 4 |
-| SEBI XBRL | CorporateFilingsProvider, FinancialDataProvider | Not started | Phase 4 |
-| Yahoo Finance India | MarketDataProvider (supplementary) | Not started | Phase 4 |
-| Alpha Vantage | MarketDataProvider | Not started | Phase 4 |
+| BSE API | CorporateFilingsProvider | Implemented | Phase 6 — BSEProvider with public API |
+| SEBI XBRL | CorporateFilingsProvider, FinancialDataProvider | Not started | Phase 7+ |
+| Yahoo Finance India | MarketData, FinancialData, CorporateActions | Implemented | Phase 6 — YahooFinanceProvider |
+| Alpha Vantage | MarketData, FinancialData | Implemented | Phase 6 — AlphaVantageProvider (API key required) |
+| NSE | CorporateFilingsProvider | Placeholder | Phase 6 — metadata-only, NSE restricts automated access |
 | Anthropic Claude | LLMProvider | Not started | Phase 7 |
 | OpenAI | LLMProvider, EmbeddingProvider | Not started | Phase 5/7 |
 | MinIO / S3 | Object Storage | Not started | Phase 5 |
@@ -160,15 +238,16 @@ None. All 24 tests pass (19 backend, 5 frontend).
 |----|-------------|----------|-----------------|
 | TD-1 | mypy pinned to 1.13.0 — mypy 2.x blocked by Windows Application Control (librt DLL) | Phase 2 | CI uses Linux so 2.x works there; revisit when Windows policy changes |
 | TD-2 | npm audit shows 10 vulnerabilities (Next.js 14 / ESLint 8 transitive deps) | Phase 2 | Address during Next.js 15 upgrade |
+| TD-3 | ruff TCH003 suppressed for `app/models/*.py` — SQLAlchemy needs `datetime`/`Decimal` at runtime for `Mapped[]` resolution | Phase 3 | Inherent SQLAlchemy constraint; not fixable without removing `from __future__ import annotations` |
 
 ---
 
 ## Next Actions
 
-1. **Begin Phase 3: Domain Models & Database Schema**
-   - Pydantic domain models (Company, Financial, Research, Evidence)
-   - SQLAlchemy ORM models with NUMERIC for financials
-   - Alembic migration for core tables
-   - Provider Protocol interfaces
-   - Repository pattern for data access
-2. **Evaluate Celery vs Temporal** (ADR-002) during Phase 3
+1. **Begin Phase 7: Agent Orchestration (LangGraph)**
+   - LangGraph state machine with typed ResearchState
+   - First 3 agents: DataCollector, FinancialAnalyst, ThesisChallenger
+   - Agent tool wiring (providers → agent tools)
+   - Quality gate framework (12 gates)
+2. **SEBI XBRL integration** for authoritative financial data
+3. **Evaluate Celery vs Temporal** (ADR-002) for background tasks

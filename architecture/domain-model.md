@@ -526,3 +526,23 @@ risk_evidence (risk_id, evidence_id)
 5. `ManagementStatement.status` can only transition to `MET`/`MISSED` when `outcome_evidence_id` is provided.
 6. `CompanyScore.score` is always accompanied by `explanation` and `evidence_ids`.
 7. No two `ResearchRun` records for the same `company_id` can have `status = RUNNING` simultaneously (enforced by Redis advisory lock — see ADR-007).
+
+## Implementation Status
+
+**Implemented in Phase 3** — SQLAlchemy 2.0 ORM models in `backend/app/models/`.
+
+| Aspect | Detail |
+|--------|--------|
+| Models | 28 ORM classes across 8 files |
+| Junction tables | 6 (evidence relationships for findings, moats, growth, risks, catalysts, scores) |
+| Total tables | 34 across 7 PostgreSQL schemas |
+| Enumerations | 27 `StrEnum` types |
+| Migration | `backend/alembic/versions/002_domain_model.py` (explicit DDL) |
+| Tests | 156 unit tests (schema introspection) + 6 integration tests (database round-trip) |
+
+**Design decisions made during implementation:**
+- `Sector`/`Industry` unified into `Classification` table with `level` discriminator and self-referential `parent_id`
+- `AnnualReport`, `InvestorPresentation`, `NewsArticle` mapped to `ResearchDocument` via `document_type` enum (no separate tables)
+- `InvestmentThesis` → `Risk`/`Catalyst` relationship is implicit via shared `research_run_id` (no junction table)
+- All `evidence_ids` fields from the conceptual model are implemented as junction tables with CASCADE delete
+- `MoatStrength` defaults to `NONE` (conservative default per CLAUDE.md rules)

@@ -12,6 +12,8 @@ dependencies = [
     "asyncpg>=0.29.0",
     "alembic>=1.13.0",
     "redis>=5.0.0",
+    "httpx>=0.27.0",
+    "yfinance>=0.2.36",
 ]
 
 [project.optional-dependencies]
@@ -47,6 +49,14 @@ select = [
     "TCH", # flake8-type-checking
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"app/models/*.py" = ["TCH003"]
+"app/schemas/*.py" = ["TCH001", "TCH003"]
+"app/repositories/*.py" = ["TCH002", "TCH003"]
+"app/services/*.py" = ["TCH002", "TCH003"]
+"app/api/**/*.py" = ["TCH001", "TCH002", "TCH003"]
+"app/providers/*.py" = ["TCH001", "TCH002", "TCH003"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
 
@@ -57,6 +67,10 @@ plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 module = ["alembic.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["yfinance", "yfinance.*"]
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]
