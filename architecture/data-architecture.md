@@ -67,9 +67,21 @@ equity_research (database)
 
 ### Partitioning
 
-- `financial_metric`: Partition by fiscal year range for large-scale historical queries
-- `research_finding`: Partition by `created_at` month for growing research data
-- `corporate_announcement`: Partition by year
+Partitioning is deferred until data volume warrants it. Estimated initial scale (~5000 companies × 10 years × 3 statements × ~50 metrics = ~7.5M rows) is well within PostgreSQL's single-table performance. Partition candidates for later:
+
+- `financial_metric`: By fiscal year range (when > 50M rows)
+- `research_finding`: By `created_at` month (when > 10M rows)
+- `corporate_announcement`: By year (when > 5M rows)
+
+### Connection Pooling
+
+SQLAlchemy async engine with configurable pool:
+- `pool_size`: 10 (per backend instance)
+- `max_overflow`: 20
+- `pool_timeout`: 30s
+- `pool_recycle`: 1800s (30 minutes)
+
+Total connection budget across all backend + worker instances must not exceed PostgreSQL `max_connections`.
 
 ## pgvector — Semantic Search
 
@@ -81,7 +93,7 @@ CREATE TABLE document_embedding (
     document_id UUID REFERENCES research_document(id),
     chunk_index INT,
     chunk_text TEXT,
-    embedding vector(1536),  -- Dimension matches embedding model
+    embedding vector(1536),  -- Dimension matches embedding model; configurable per provider
     metadata JSONB
 );
 

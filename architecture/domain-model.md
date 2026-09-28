@@ -450,6 +450,10 @@ A single execution of the research workflow for a company.
 | agent_execution_log | JSON | Which agents ran, duration, status |
 | data_sources_used | JSON | List of sources consulted |
 | research_completeness | Decimal | % of required analysis completed |
+| total_input_tokens | int | LLM input tokens consumed |
+| total_output_tokens | int | LLM output tokens consumed |
+| total_cost_usd | Decimal | Estimated LLM cost |
+| cost_by_agent | JSON | Per-agent token/cost breakdown |
 
 ### ResearchFinding
 
@@ -495,6 +499,24 @@ These are not persisted as separate entities but are embedded types:
 - **SourceCitation**: `{document_id: UUID, page_or_section: str, quote: str}`
 - **CAGRResult**: `{value: Decimal, start_value: Decimal, end_value: Decimal, years: int}`
 
+## Relationship Implementation Notes
+
+**Many-to-many relationships** (`evidence_ids` fields on MoatAssessment, GrowthOpportunity, Risk, Catalyst, CompanyScore, ResearchFinding): These are implemented as junction tables in PostgreSQL, not array columns. For example:
+
+```
+moat_assessment_evidence (moat_assessment_id, evidence_id)
+research_finding_evidence (research_finding_id, evidence_id)
+risk_evidence (risk_id, evidence_id)
+```
+
+**InvestmentThesis → Risks/Catalysts**: The relationship is through `research_run_id` — the thesis, its risks, and its catalysts all share the same `research_run_id`. No direct FK array from thesis to risk/catalyst.
+
+**Company.market_cap / enterprise_value**: These are "latest snapshot" fields updated by the data ingestion pipeline. They include an implicit `as_of_date` (the `updated_at` timestamp). For historical market cap, query the price history and shares outstanding. These fields exist for fast screening queries — not as the authoritative time-series source.
+
+**QuarterlyResult vs FinancialStatement**: `QuarterlyResult` is a denormalized convenience view for the most commonly queried quarterly metrics. The authoritative source is `FinancialStatement` + `FinancialMetric` (with `period_type = QUARTERLY`). `QuarterlyResult` is populated from `FinancialMetric` during ingestion. If there is a conflict, `FinancialStatement` + `FinancialMetric` is the source of truth.
+
+**Sector / Industry**: Implemented as a single `classification` table with `level` field (`SECTOR` or `INDUSTRY`) and `parent_id` (Industry → Sector). This allows for future sub-industry levels without schema changes.
+
 ## Key Invariants
 
 1. Every `ResearchFinding` with `finding_type = FACT` must have at least one `evidence_id`.
@@ -503,3 +525,4 @@ These are not persisted as separate entities but are embedded types:
 4. Every `InvestmentThesis` must have a corresponding `Scenario` for BEAR, BASE, and BULL.
 5. `ManagementStatement.status` can only transition to `MET`/`MISSED` when `outcome_evidence_id` is provided.
 6. `CompanyScore.score` is always accompanied by `explanation` and `evidence_ids`.
+7. No two `ResearchRun` records for the same `company_id` can have `status = RUNNING` simultaneously (enforced by Redis advisory lock — see ADR-007).

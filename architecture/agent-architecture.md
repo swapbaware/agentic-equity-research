@@ -479,7 +479,11 @@ Example:
 
 **Parallel Execution**: Where agents have no data dependencies (e.g., Business Model / Industry / Competitor, or Moat / Management / Growth), they run in parallel.
 
-**Conditional Routing**: If a quality gate fails, the workflow can loop back to specific agents for additional evidence gathering before proceeding.
+**Conditional Routing**: If a quality gate fails, the workflow loops back to specific agents for additional evidence gathering. **Maximum 2 iterations** (1 initial + 1 retry) to prevent infinite loops and unbounded LLM cost. After the retry pass, remaining failures result in RESEARCH INCOMPLETE status. See ADR-007.
+
+**Thesis Challenger Sequencing Note**: The Thesis Challenger runs in parallel with Bull/Bear Case agents, before the formal thesis is synthesized. At this point it challenges the accumulated analysis findings (moat assessments, financial quality, growth projections, valuation) rather than a finished thesis document. This is intentional — the challenger's objections feed into the Research Synthesis agent, which must address or acknowledge them in the final thesis.
+
+**Error Handling**: If an agent fails (LLM timeout, tool error), the workflow marks it as FAILED in `ResearchRun.agent_execution_log`, saves partial state via LangGraph checkpointing, and continues with agents that don't depend on the failed agent's output. See ADR-007.
 
 ## Agent Memory Architecture
 
@@ -492,6 +496,38 @@ Example:
 | Evidence Memory | Global | PostgreSQL + S3 | Source-backed facts, documents |
 
 **Critical Rule**: Only verified, source-backed facts enter Evidence Memory. LLM-generated inferences are stored as `finding_type = AI_INFERENCE` and never promoted to factual memory without evidence.
+
+## LLM Hallucination Mitigations
+
+1. **Evidence Verification is partially deterministic**: The Evidence Verification Agent does NOT rely solely on LLM judgment. It performs deterministic checks: (a) does the cited `document_id` exist? (b) does the cited page/section contain text semantically similar to the claim? (c) are financial figures in findings cross-checked against stored `FinancialMetric` values? Only the semantic similarity check uses an LLM; the structural checks are code.
+2. **Financial data is never LLM-generated**: All financial figures (revenue, margins, ratios) come from deterministic calculation tools or provider data. Agents reason about the figures but do not produce them.
+3. **Moat/score defaults are conservative**: The default moat assessment is NONE. The default score component is 0. The LLM must provide evidence to upgrade, not to downgrade.
+4. **Cross-run consistency monitoring**: If the same company is researched with unchanged data and the thesis materially differs, the system flags it for review (see testing strategy: reproducibility tests).
+
+## Agent Timeout and Cost Budgets
+
+| Agent | Timeout | Max Tokens (input+output) |
+|-------|---------|--------------------------|
+| Universe Discovery | 60s | 15,000 |
+| Financial Analysis | 180s | 30,000 |
+| Business Model | 120s | 20,000 |
+| Industry Analysis | 120s | 20,000 |
+| Competitive Moat | 120s | 25,000 |
+| Management & Governance | 120s | 20,000 |
+| Future Growth | 120s | 20,000 |
+| Macro Economics | 90s | 15,000 |
+| Competitor Analysis | 120s | 20,000 |
+| Valuation | 120s | 20,000 |
+| Risk | 90s | 15,000 |
+| Bull Case | 90s | 15,000 |
+| Bear Case | 90s | 15,000 |
+| Thesis Challenger | 120s | 20,000 |
+| Evidence Verification | 90s | 15,000 |
+| Research Synthesis | 180s | 25,000 |
+| Portfolio Monitoring | 60s | 15,000 |
+| **Total Run Timeout** | **15 min** | **~325,000** |
+
+See ADR-008 for cost control details.
 
 ## Agent Tool Schema
 

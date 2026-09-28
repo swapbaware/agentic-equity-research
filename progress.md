@@ -2,7 +2,7 @@
 
 ## Current Status
 
-**Active Phase:** 1 — Architecture & Planning
+**Active Phase:** 1 — Architecture & Planning (Review Complete)
 **Last Updated:** 2026-09-28
 
 ## Phase 0: Repository Setup — COMPLETE
@@ -27,6 +27,46 @@
 - [x] Testing strategy
 - [x] Updated implementation plan
 - [x] Architecture commit
+- [x] Architecture review (20-point review)
+- [x] ADR-007: Failure modes and resilience
+- [x] ADR-008: LLM cost controls
+- [x] ADR-009: NSE/BSE data access strategy (open — requires research)
+- [x] Domain model clarifications (junction tables, snapshot fields, QuarterlyResult relationship)
+- [x] Agent architecture updates (hallucination mitigations, timeout/cost budgets, error handling)
+- [x] Security updates (prompt injection delimiters, document sanitization, DPDP Act)
+- [x] Deployment updates (migration strategy, rollback, alerting, LLM observability)
+- [x] Solution architecture updates (API conventions, SEC EDGAR removal)
+- [x] Provider strategy updates (PriceHistoryProvider, NSE/BSE data access risk)
+
+## Architecture Review Summary
+
+### Decisions Made
+1. Maximum 2 quality gate loop iterations to prevent infinite agent loops (ADR-007)
+2. 15-minute total research run timeout with per-agent timeouts (ADR-007)
+3. Redis advisory lock for concurrent research run prevention (ADR-007)
+4. Per-agent token budgets and per-run cost tracking (ADR-008)
+5. Model tier selection: cheap models for extraction, capable models for analysis (ADR-008)
+6. SEC EDGAR removed from scope (Indian market focus — ADR-006)
+7. SEBI XBRL as primary free financial data source (ADR-009)
+8. Partitioning deferred until data volume warrants it
+9. Cursor-based pagination for API endpoints
+10. URL-prefix API versioning (/api/v1/)
+
+### Unresolved Decisions (require research in implementation phases)
+1. **NSE data access** (ADR-009 — Open): NSE doesn't have a free API. Must evaluate BSE API, SEBI XBRL, Yahoo Finance India, and commercial vendors before Phase 4.
+2. **Background task processor** (ADR-002 — Pending): Celery vs Temporal. Evaluate in Phase 2.
+3. **Embedding dimension**: Hardcoded to 1536 (OpenAI ada-002). Should be configurable per embedding provider. Resolve in Phase 5.
+4. **LLM provider interface alignment**: Current `generate()` / `chat()` interface may not align with LangGraph's native model invocation pattern. Resolve in Phase 7.
+5. **Commercial data vendor selection**: If free sources prove insufficient, evaluate Capital Market, Ace Equity, or similar. Budget impact unknown.
+6. **DPDP Act compliance**: Requires legal review before any commercial deployment.
+
+### Identified Risks
+1. **NSE/BSE data access is the #1 technical risk** — the platform cannot function without reliable Indian financial data, and free access is limited
+2. **LLM costs at scale** — 17 agents × 5000+ companies = significant token consumption; cost controls are designed but untested
+3. **Evidence Verification circular dependency** — LLM verifying LLM output has limited value; mitigated by making verification partially deterministic (structural checks in code)
+
+### Next Recommended Phase
+**Phase 2: Core Backend Foundation** — Python project setup, FastAPI skeleton, pydantic-settings, structured logging, Alembic, pytest, CI pipeline.
 
 ## Phase 2: Core Backend Foundation — NOT STARTED
 

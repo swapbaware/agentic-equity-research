@@ -293,3 +293,38 @@ docker-compose exec backend alembic upgrade head
 - Managed Kubernetes (EKS/GKE) as alternative
 
 The initial deployment targets Option A, with the architecture designed to migrate to B or C without application changes.
+
+## Database Migration Strategy
+
+- **Tool**: Alembic (SQLAlchemy's migration tool)
+- **Zero-downtime migrations**: Schema changes must be backwards-compatible. Column additions use `nullable=True` or `server_default`. Column removals are two-phase: (1) stop writing to the column, deploy; (2) drop the column in a later migration.
+- **Rollback**: Every migration has a `downgrade()` method. Tested in CI before merge.
+- **Data migrations**: Separated from schema migrations. Run as distinct Alembic revisions.
+
+## Rollback Strategy
+
+- **Application rollback**: Deploy the previous Docker image tag. Stateless services (backend, frontend) roll back instantly.
+- **Database rollback**: Run `alembic downgrade -1` to reverse the latest migration. Only safe if the migration's `downgrade()` was tested.
+- **Feature flags**: For high-risk features, use configuration-based feature flags (not a feature flag service) to enable/disable without deployment.
+
+## LLM Observability
+
+In addition to OpenTelemetry traces and Prometheus metrics, LLM-specific observability includes:
+
+- **Per-agent traces**: Each agent invocation is a span within the research run trace. Includes model used, input/output token counts, tool calls made, and duration.
+- **Prompt logging**: Agent prompts and completions logged to a separate structured log stream (not the main application log) for debugging and evaluation. PII and secrets are never included.
+- **LangSmith integration** (optional): For detailed agent conversation tracing during development. Disabled in production by default to avoid sending data to external services.
+- **Cost dashboard**: Real-time LLM cost tracking per research run, per agent, and per user. See ADR-008.
+
+## Alerting Strategy
+
+| Alert | Condition | Severity |
+|-------|-----------|----------|
+| Service down | Health check fails for > 2 minutes | Critical |
+| High error rate | API 5xx rate > 5% over 5 minutes | High |
+| Research run failures | > 3 consecutive FAILED runs | High |
+| LLM provider error | Provider unavailable for > 5 minutes | High |
+| LLM cost spike | Daily cost exceeds 2x 7-day average | Medium |
+| Data staleness | Financial data older than configured threshold | Medium |
+| Disk usage | PostgreSQL/S3 storage > 80% capacity | Medium |
+| Quality gate degradation | Quality gate pass rate < 70% over 24h | Medium |

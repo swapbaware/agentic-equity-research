@@ -164,15 +164,17 @@ External Provider APIs
 
 | External System | Integration Method | Provider Interface |
 |----------------|-------------------|-------------------|
-| NSE | API / Web scraping | MarketDataProvider, CorporateFilingsProvider |
-| BSE | API / Web scraping | MarketDataProvider, CorporateFilingsProvider |
-| SEBI | API / Web scraping | CorporateFilingsProvider |
-| SEC EDGAR | API | CorporateFilingsProvider |
+| NSE | HTTP feeds (terms TBD) | MarketDataProvider, CorporateFilingsProvider |
+| BSE | API | MarketDataProvider, CorporateFilingsProvider |
+| SEBI | XBRL filings | CorporateFilingsProvider, FinancialDataProvider |
 | Alpha Vantage | REST API | MarketDataProvider |
 | Polygon.io | REST API | MarketDataProvider |
+| Yahoo Finance (India) | REST API | MarketDataProvider (supplementary) |
 | Anthropic Claude | REST API | LLMProvider |
 | OpenAI | REST API | LLMProvider |
 | S3-compatible | SDK | Object Storage |
+
+**Note**: NSE/BSE data access is a critical path dependency. NSE does not offer a free, open API — access strategy is documented in ADR-009. SEC EDGAR is out of scope (US filings, not Indian); removed from integration points.
 
 ## Non-Functional Requirements
 
@@ -204,3 +206,12 @@ External Provider APIs
 | Deployment | Docker, Docker Compose |
 | CI/CD | GitHub Actions |
 | Testing | pytest, Vitest, Playwright |
+
+## API Design Conventions
+
+- **Versioning**: URL prefix versioning (`/api/v1/...`). Breaking changes require a new version. Non-breaking additions (new optional fields, new endpoints) do not.
+- **Pagination**: Cursor-based pagination for list endpoints. Response includes `next_cursor` and `has_more`. Default page size 25, max 100.
+- **Error format**: Consistent JSON error responses: `{"error": {"code": "...", "message": "...", "details": {...}}}`.
+- **WebSocket protocol**: Research chat and real-time updates use WebSocket at `/ws/research/{company_id}` and `/ws/alerts`. Messages are JSON with `type` field for routing.
+- **CSRF**: Double-submit cookie pattern for state-changing requests from the frontend.
+

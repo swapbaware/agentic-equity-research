@@ -22,9 +22,10 @@ The platform accesses external services through abstract provider interfaces. Th
 
 | Interface | Purpose | Initial Sources |
 |-----------|---------|-----------------|
-| `MarketDataProvider` | Price, volume, market cap, trading data | NSE, BSE, Alpha Vantage, Polygon.io |
-| `FinancialDataProvider` | Financial statements (IS, BS, CF) | NSE filings, BSE filings |
-| `CorporateFilingsProvider` | Annual reports, quarterly results, filings | NSE, BSE, SEBI |
+| `MarketDataProvider` | Price, volume, market cap, trading data | BSE, Alpha Vantage, Yahoo Finance India |
+| `FinancialDataProvider` | Financial statements (IS, BS, CF) | SEBI XBRL, BSE filings |
+| `CorporateFilingsProvider` | Annual reports, quarterly results, filings | BSE, SEBI |
+| `PriceHistoryProvider` | Historical OHLCV data for valuation bands and charts | BSE, Alpha Vantage, Yahoo Finance India |
 | `ShareholdingProvider` | Promoter, FII, DII, public ownership | NSE, BSE |
 | `CorporateActionsProvider` | Dividends, splits, bonuses, buybacks | NSE, BSE |
 | `NewsProvider` | Company and sector news | Web search, news APIs |
