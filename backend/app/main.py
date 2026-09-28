@@ -13,6 +13,7 @@ from app.exceptions import AppError, app_error_handler, unhandled_error_handler
 from app.logging_config import setup_logging
 from app.middleware import RequestIdMiddleware
 from app.redis_client import create_redis
+from app.screener.router import router as screener_router
 
 logger = logging.getLogger(__name__)
 
@@ -53,5 +54,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(evidence_router, prefix=settings.api_v1_prefix)
+    app.include_router(screener_router, prefix=settings.api_v1_prefix)
 
     return app

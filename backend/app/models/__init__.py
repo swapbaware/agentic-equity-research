@@ -62,6 +62,7 @@ from app.models.research import (
     ResearchRun,
     research_finding_evidence,
 )
+from app.models.screening import CompanyScreeningData, SavedScreen
 from app.models.thesis import (
     Catalyst,
     CompanyScore,
@@ -153,4 +154,7 @@ __all__ = [
     "catalyst_evidence",
     "CompanyScore",
     "company_score_evidence",
+    # Screening
+    "SavedScreen",
+    "CompanyScreeningData",
 ]

@@ -165,6 +165,24 @@
 - [x] ruff clean, mypy strict clean
 - [x] Total: 523 tests passing
 
+### Phase 6c: Stock Screener — COMPLETE
+
+- [x] Screener schemas: 20 screening fields, 8 operators, field/operator validation (`app/screener/schemas.py`)
+- [x] Screening criteria: Sector, Industry, Market Cap, Revenue Growth, EPS Growth, ROE, ROCE, ROIC, D/E, Net Debt/EBITDA, FCF Yield, P/E, EV/EBITDA, PEG, Dividend Yield, Promoter Holding, Promoter Pledge, Institutional Ownership, EBITDA Margin, FCF Conversion
+- [x] Logical operators: AND, OR, NOT, >, >=, <, <=, =, BETWEEN, IN, NOT IN
+- [x] Filter groups: multiple criteria per group, multiple groups per screen (ANDed)
+- [x] SQLAlchemy executor: criteria → deterministic SQL WHERE conditions (`app/screener/executor.py`)
+- [x] Screen repository: CRUD for saved screens, screening query execution (`app/screener/repository.py`)
+- [x] Screen service: orchestration layer with ad-hoc and saved screen execution (`app/screener/service.py`)
+- [x] API endpoints: GET /companies, POST /screens, GET /screens, GET /screens/{id}, POST /screens/{id}/execute, POST /screens/execute, DELETE /screens/{id} (`app/screener/router.py`)
+- [x] Database models: SavedScreen (JSONB criteria), CompanyScreeningData (denormalized 20-column screening table) (`app/models/screening.py`)
+- [x] All financial columns use NUMERIC — never FLOAT
+- [x] Frontend screener page: interactive filter builder with field/operator/value dropdowns, save/load screens, results table (`frontend/src/app/screener/page.tsx`)
+- [x] TypeScript types mirroring backend schemas (`frontend/src/types/screener.ts`)
+- [x] 88 screener tests (40 schema validation, 35 executor SQL generation, 13 service logic)
+- [x] ruff clean, mypy strict clean on screener module, tsc strict clean, eslint clean
+- [x] Total: 617 tests passing
+
 ---
 
 ## Current Phase
@@ -187,12 +205,13 @@
 - Data provenance tracking on all provider-sourced records
 - Cross-source data reconciliation with conflict detection
 - Deterministic Financial Analytics Engine: 28 metrics (CAGR, margins, returns, leverage, cash flow, efficiency, quality)
+- Stock Screener: 20 criteria, 8 operators, AND/OR/NOT groups, saved screens, 7 API endpoints, interactive frontend
 
 ---
 
 ## Failing Tests
 
-- `test_health.py::TestReadinessEndpoint::test_ready_returns_200` — pre-existing, requires running PostgreSQL with migrations applied. 523 other backend tests pass. 5 frontend tests pass.
+- `test_health.py::TestReadinessEndpoint::test_ready_returns_200` — pre-existing, requires running PostgreSQL with migrations applied. 617 other backend tests pass. 5 frontend tests pass.
 
 ---
 

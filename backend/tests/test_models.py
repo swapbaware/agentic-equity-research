@@ -15,6 +15,7 @@ from app.models import (
     Classification,
     Company,
     CompanyScore,
+    CompanyScreeningData,
     Competitor,
     CorporateAction,
     CorporateAnnouncement,
@@ -34,6 +35,7 @@ from app.models import (
     ResearchFinding,
     ResearchRun,
     Risk,
+    SavedScreen,
     Scenario,
     Security,
     Shareholding,
@@ -118,6 +120,8 @@ ALL_MODELS: list[type] = [
     Risk,
     Catalyst,
     CompanyScore,
+    SavedScreen,
+    CompanyScreeningData,
 ]
 
 JUNCTION_TABLES: list[sa.Table] = [
