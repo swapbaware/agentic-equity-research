@@ -2,7 +2,7 @@
 
 ## Current Status
 
-**Active Phase:** 0 — Repository Setup
+**Active Phase:** 1 — Architecture & Planning
 **Last Updated:** 2026-09-28
 
 ## Phase 0: Repository Setup — COMPLETE
@@ -12,53 +12,156 @@
 - [x] Create architecture directory structure
 - [x] Create .gitignore and .env.example
 - [x] Initial commit
-- [x] Mark Phase 0 complete
 
-## Phase 1: Core Backend Foundation — NOT STARTED
+## Phase 1: Architecture & Planning — COMPLETE
+
+- [x] Solution architecture document
+- [x] Domain model (all entities, relationships, invariants)
+- [x] Agent architecture (17 agents, orchestration graph, memory layers)
+- [x] Data architecture (PostgreSQL, pgvector, Redis, S3, ingestion pipeline)
+- [x] Security architecture (auth, agent sandboxing, prompt injection, audit)
+- [x] Deployment architecture (Docker, CI/CD, observability, scaling)
+- [x] Architecture Decision Records (6 ADRs)
+- [x] API & provider strategy
+- [x] Research methodology documentation
+- [x] Testing strategy
+- [x] Updated implementation plan
+- [x] Architecture commit
+
+## Phase 2: Core Backend Foundation — NOT STARTED
 
 - [ ] Python project setup (pyproject.toml, virtual environment)
 - [ ] FastAPI application skeleton
 - [ ] Configuration management (pydantic-settings)
-- [ ] Logging framework
-- [ ] Base domain models
-- [ ] Database schema and migrations
-- [ ] Unit test framework setup
-- [ ] CI pipeline (lint, type-check, test)
+- [ ] Structured logging (OpenTelemetry)
+- [ ] Base domain models (Pydantic, all entities from domain model)
+- [ ] Database schema and Alembic migrations
+- [ ] Provider interface definitions
+- [ ] Health check endpoint
+- [ ] Unit test framework setup (pytest, fixtures, factories)
+- [ ] CI pipeline (ruff, mypy, pytest, coverage)
 
-## Phase 2: Financial Data Pipeline — NOT STARTED
+## Phase 3: Domain & Data Model — NOT STARTED
 
-- [ ] Financial data provider abstraction layer
-- [ ] SEC EDGAR integration
-- [ ] Market data integration
-- [ ] Data validation and normalization
-- [ ] Data storage layer
-- [ ] Pipeline orchestration
-- [ ] Data quality tests
+- [ ] Company, Security, Exchange, Sector, Industry models
+- [ ] Financial statement and metric models
+- [ ] Quarterly result and annual report models
+- [ ] Corporate governance models (shareholding, pledge, actions)
+- [ ] Research and evidence models
+- [ ] Analysis models (moat, growth, competitor, industry, macro)
+- [ ] Valuation and scenario models
+- [ ] Thesis, risk, catalyst, scoring models
+- [ ] Database migrations for all models
+- [ ] Repository layer (CRUD operations)
+- [ ] Model validation tests
 
-## Phase 3: AI Agent Framework — NOT STARTED
+## Phase 4: Provider Framework — NOT STARTED
 
-- [ ] LLM provider abstraction layer
-- [ ] Base agent architecture
-- [ ] Research agent implementation
-- [ ] Analysis agent implementation
-- [ ] Agent orchestration and workflow engine
-- [ ] Output validation and citation tracking
-- [ ] Agent evaluation framework
+- [ ] MarketDataProvider interface and base implementation
+- [ ] FinancialDataProvider interface
+- [ ] CorporateFilingsProvider interface
+- [ ] ShareholdingProvider interface
+- [ ] CorporateActionsProvider interface
+- [ ] NewsProvider interface
+- [ ] SearchProvider interface
+- [ ] MacroDataProvider interface
+- [ ] TranscriptProvider interface
+- [ ] LLMProvider interface
+- [ ] EmbeddingProvider interface
+- [ ] Rate limiter (Redis-backed)
+- [ ] Retry and error handling framework
+- [ ] Provider factory and configuration
+- [ ] Provider conformance test suite
 
-## Phase 4: Frontend Dashboard — NOT STARTED
+## Phase 5: Evidence & Citation System — NOT STARTED
 
-- [ ] Next.js project setup
-- [ ] Authentication and authorization
+- [ ] Evidence model and storage
+- [ ] Source document ingestion pipeline
+- [ ] Document text extraction
+- [ ] Embedding generation and pgvector storage
+- [ ] Citation tracking (finding → evidence → document)
+- [ ] Source tier classification
+- [ ] Evidence retrieval tools
+- [ ] Citation completeness validation
+
+## Phase 6: Financial Calculation Engine — NOT STARTED
+
+- [ ] CAGR calculation (decimal.Decimal)
+- [ ] Ratio calculations (ROE, ROCE, ROIC, margins, etc.)
+- [ ] DCF model (configurable assumptions)
+- [ ] Reverse DCF model
+- [ ] Multiple-based valuation (P/E, EV/EBITDA, etc.)
+- [ ] Historical valuation bands
+- [ ] Peer comparison engine
+- [ ] Scenario engine (Bear/Base/Bull)
+- [ ] Financial forensics engine (red flag scoring)
+- [ ] Screening engine (multi-criteria filtering)
+- [ ] Calculation validation tests (golden datasets)
+
+## Phase 7: Agent Implementation — NOT STARTED
+
+- [ ] LangGraph workflow graph definition
+- [ ] Agent base class and tool framework
+- [ ] Universe Discovery Agent
+- [ ] Financial Analysis Agent
+- [ ] Business Model Agent
+- [ ] Industry Analysis Agent
+- [ ] Competitive Moat Agent
+- [ ] Management & Governance Agent
+- [ ] Future Growth & Optionality Agent
+- [ ] Macro Economics Agent
+- [ ] Competitor Analysis Agent
+- [ ] Valuation Agent
+- [ ] Risk Agent
+- [ ] Bull Case Agent
+- [ ] Bear Case Agent
+- [ ] Thesis Challenger Agent
+- [ ] Evidence Verification Agent
+- [ ] Research Synthesis Agent
+- [ ] Portfolio/Watchlist Monitoring Agent
+- [ ] Quality gate engine (12 gates)
+- [ ] Agent workflow tests (mock LLM)
+
+## Phase 8: API Layer — NOT STARTED
+
+- [ ] Company CRUD endpoints
+- [ ] Financial data endpoints
+- [ ] Screening endpoints
+- [ ] Research run endpoints
+- [ ] Thesis and report endpoints
+- [ ] Watchlist/portfolio endpoints
+- [ ] Research chat endpoint (WebSocket)
+- [ ] Authentication (OAuth/JWT)
+- [ ] Authorization (RBAC)
+- [ ] API documentation (OpenAPI)
+- [ ] API tests
+
+## Phase 9: Frontend Dashboard — NOT STARTED
+
+- [ ] Next.js project setup (TypeScript strict, Tailwind)
+- [ ] Authentication UI
+- [ ] Main dashboard (market overview, sector heatmap, research candidates)
+- [ ] Stock screener (interactive filters, saved screens)
+- [ ] Company detail page (financials, moat, valuation, thesis)
+- [ ] Company scorecard (10-dimension, evidence drill-down)
 - [ ] Research report viewer
-- [ ] Company analysis dashboard
-- [ ] Agent workflow monitoring
-- [ ] Real-time updates (WebSocket)
+- [ ] AI research chat
+- [ ] Watchlist/portfolio management
+- [ ] Interactive financial charts
+- [ ] Alert management
+- [ ] Responsive design (mobile + desktop)
+- [ ] Frontend tests (Vitest + Playwright)
 
-## Phase 5: Integration & Deployment — NOT STARTED
+## Phase 10: Integration & Deployment — NOT STARTED
 
-- [ ] Docker containerization
-- [ ] Docker Compose for local development
+- [ ] Docker Compose (all services)
+- [ ] Backend Dockerfile (multi-stage)
+- [ ] Frontend Dockerfile (multi-stage)
+- [ ] Database seed data (10-20 representative companies)
+- [ ] OpenTelemetry integration
+- [ ] Prometheus/Grafana dashboards
 - [ ] Production deployment configuration
-- [ ] Monitoring and alerting
 - [ ] End-to-end tests
+- [ ] Security review
 - [ ] Documentation finalization
+- [ ] Performance testing
