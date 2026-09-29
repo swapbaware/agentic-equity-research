@@ -13,16 +13,18 @@ from decimal import Decimal
 
 import pytest
 
+from app.valuation._valuation_calc import (
+    median_value,
+    nearest_rank_index,
+    percentile_rank,
+    std_dev,
+    sufficiency,
+    timing_status,
+)
 from app.valuation.historical_bands import (
     ENGINE_VERSION,
     HistoricalBandError,
     _detect_duplicates,
-    _median,
-    _nearest_rank_index,
-    _percentile_rank,
-    _std_dev,
-    _sufficiency,
-    _timing_status,
     historical_valuation_bands,
 )
 from app.valuation.models import (
@@ -345,19 +347,19 @@ class TestEVFCFMethod:
 class TestPointInTimeValidation:
     def test_valid_timing(self) -> None:
         obs = _obs(date(2024, 6, 1), avail_date=date(2024, 5, 1), eps=D("10"))
-        assert _timing_status(obs) == ObservationStatus.VALID
+        assert timing_status(obs) == ObservationStatus.VALID
 
     def test_same_day_is_valid(self) -> None:
         obs = _obs(date(2024, 6, 1), avail_date=date(2024, 6, 1), eps=D("10"))
-        assert _timing_status(obs) == ObservationStatus.VALID
+        assert timing_status(obs) == ObservationStatus.VALID
 
     def test_look_ahead_risk(self) -> None:
         obs = _obs(date(2024, 6, 1), avail_date=date(2024, 7, 1), eps=D("10"))
-        assert _timing_status(obs) == ObservationStatus.LOOK_AHEAD_RISK
+        assert timing_status(obs) == ObservationStatus.LOOK_AHEAD_RISK
 
     def test_unverified_timing(self) -> None:
         obs = _obs(date(2024, 6, 1), eps=D("10"))
-        assert _timing_status(obs) == ObservationStatus.UNVERIFIED_TIMING
+        assert timing_status(obs) == ObservationStatus.UNVERIFIED_TIMING
 
     def test_look_ahead_excluded_from_statistics(self) -> None:
         obs = [
@@ -525,29 +527,29 @@ class TestStatistics:
 
 class TestNearestRankPercentile:
     def test_p0_returns_first(self) -> None:
-        assert _nearest_rank_index(D("0"), 5) == 0
+        assert nearest_rank_index(D("0"), 5) == 0
 
     def test_p100_returns_last(self) -> None:
-        assert _nearest_rank_index(D("100"), 5) == 4
+        assert nearest_rank_index(D("100"), 5) == 4
 
     def test_p50_of_5(self) -> None:
-        idx = _nearest_rank_index(D("50"), 5)
+        idx = nearest_rank_index(D("50"), 5)
         assert idx == 2
 
     def test_p25_of_4(self) -> None:
-        idx = _nearest_rank_index(D("25"), 4)
+        idx = nearest_rank_index(D("25"), 4)
         assert idx == 0
 
     def test_p75_of_4(self) -> None:
-        idx = _nearest_rank_index(D("75"), 4)
+        idx = nearest_rank_index(D("75"), 4)
         assert idx == 2
 
     def test_p10_of_10(self) -> None:
-        idx = _nearest_rank_index(D("10"), 10)
+        idx = nearest_rank_index(D("10"), 10)
         assert idx == 0
 
     def test_p90_of_10(self) -> None:
-        idx = _nearest_rank_index(D("90"), 10)
+        idx = nearest_rank_index(D("90"), 10)
         assert idx == 8
 
     def test_bands_in_result(self) -> None:
@@ -601,26 +603,26 @@ class TestNearestRankPercentile:
 
 class TestPercentileRank:
     def test_below_all(self) -> None:
-        rank = _percentile_rank(D("1"), [D("10"), D("20"), D("30")])
+        rank = percentile_rank(D("1"), [D("10"), D("20"), D("30")])
         assert rank is not None
         assert rank == D("0")
 
     def test_above_all(self) -> None:
-        rank = _percentile_rank(D("100"), [D("10"), D("20"), D("30")])
+        rank = percentile_rank(D("100"), [D("10"), D("20"), D("30")])
         assert rank is not None
         assert rank == D("100")
 
-    def test_at_median(self) -> None:
-        rank = _percentile_rank(D("20"), [D("10"), D("20"), D("30")])
+    def test_atmedian_value(self) -> None:
+        rank = percentile_rank(D("20"), [D("10"), D("20"), D("30")])
         assert rank is not None
         expected = (D("1") + D("0.5") * D("1")) / D("3") * D("100")
         assert rank == expected.quantize(D("0.000001"))
 
     def test_empty_returns_none(self) -> None:
-        assert _percentile_rank(D("10"), []) is None
+        assert percentile_rank(D("10"), []) is None
 
     def test_all_equal(self) -> None:
-        rank = _percentile_rank(D("10"), [D("10"), D("10"), D("10")])
+        rank = percentile_rank(D("10"), [D("10"), D("10"), D("10")])
         assert rank is not None
         expected = (D("0") + D("0.5") * D("3")) / D("3") * D("100")
         assert rank == expected.quantize(D("0.000001"))
@@ -633,30 +635,30 @@ class TestPercentileRank:
 
 class TestDataSufficiency:
     def test_insufficient(self) -> None:
-        assert _sufficiency(0, _DEFAULT_THRESHOLDS) == DataSufficiency.INSUFFICIENT
+        assert sufficiency(0, _DEFAULT_THRESHOLDS) == DataSufficiency.INSUFFICIENT
 
     def test_minimal(self) -> None:
-        assert _sufficiency(1, _DEFAULT_THRESHOLDS) == DataSufficiency.MINIMAL
-        assert _sufficiency(3, _DEFAULT_THRESHOLDS) == DataSufficiency.MINIMAL
+        assert sufficiency(1, _DEFAULT_THRESHOLDS) == DataSufficiency.MINIMAL
+        assert sufficiency(3, _DEFAULT_THRESHOLDS) == DataSufficiency.MINIMAL
 
     def test_low(self) -> None:
-        assert _sufficiency(4, _DEFAULT_THRESHOLDS) == DataSufficiency.LOW
-        assert _sufficiency(11, _DEFAULT_THRESHOLDS) == DataSufficiency.LOW
+        assert sufficiency(4, _DEFAULT_THRESHOLDS) == DataSufficiency.LOW
+        assert sufficiency(11, _DEFAULT_THRESHOLDS) == DataSufficiency.LOW
 
     def test_moderate(self) -> None:
-        assert _sufficiency(12, _DEFAULT_THRESHOLDS) == DataSufficiency.MODERATE
-        assert _sufficiency(51, _DEFAULT_THRESHOLDS) == DataSufficiency.MODERATE
+        assert sufficiency(12, _DEFAULT_THRESHOLDS) == DataSufficiency.MODERATE
+        assert sufficiency(51, _DEFAULT_THRESHOLDS) == DataSufficiency.MODERATE
 
     def test_adequate(self) -> None:
-        assert _sufficiency(52, _DEFAULT_THRESHOLDS) == DataSufficiency.ADEQUATE
-        assert _sufficiency(200, _DEFAULT_THRESHOLDS) == DataSufficiency.ADEQUATE
+        assert sufficiency(52, _DEFAULT_THRESHOLDS) == DataSufficiency.ADEQUATE
+        assert sufficiency(200, _DEFAULT_THRESHOLDS) == DataSufficiency.ADEQUATE
 
     def test_custom_thresholds(self) -> None:
         custom = DataSufficiencyThresholds(min_minimal=2, min_low=5, min_moderate=20)
-        assert _sufficiency(1, custom) == DataSufficiency.MINIMAL
-        assert _sufficiency(2, custom) == DataSufficiency.LOW
-        assert _sufficiency(5, custom) == DataSufficiency.MODERATE
-        assert _sufficiency(20, custom) == DataSufficiency.ADEQUATE
+        assert sufficiency(1, custom) == DataSufficiency.MINIMAL
+        assert sufficiency(2, custom) == DataSufficiency.LOW
+        assert sufficiency(5, custom) == DataSufficiency.MODERATE
+        assert sufficiency(20, custom) == DataSufficiency.ADEQUATE
 
     def test_sufficiency_in_result(self) -> None:
         obs = [_pe_obs(date(2024, m, 1), D(str(100 + m * 10)), D("10")) for m in range(1, 6)]
@@ -700,7 +702,7 @@ class TestCurrentPosition:
         assert result.current_position.current_value == D("16")
         assert result.current_position.percentile_rank is not None
 
-    def test_current_position_vs_median(
+    def test_current_position_vsmedian_value(
         self,
         obs_with_current: tuple[list[HistoricalObservationInput], HistoricalObservationInput],
     ) -> None:
@@ -895,16 +897,16 @@ class TestDeterminism:
 
 class TestMedianHelper:
     def test_odd(self) -> None:
-        assert _median([D("1"), D("2"), D("3")]) == D("2")
+        assert median_value([D("1"), D("2"), D("3")]) == D("2")
 
     def test_even(self) -> None:
-        assert _median([D("1"), D("2"), D("3"), D("4")]) == D("2.500000")
+        assert median_value([D("1"), D("2"), D("3"), D("4")]) == D("2.500000")
 
     def test_single(self) -> None:
-        assert _median([D("42")]) == D("42")
+        assert median_value([D("42")]) == D("42")
 
     def test_two(self) -> None:
-        assert _median([D("10"), D("20")]) == D("15.000000")
+        assert median_value([D("10"), D("20")]) == D("15.000000")
 
 
 # ---------------------------------------------------------------------------
@@ -914,15 +916,15 @@ class TestMedianHelper:
 
 class TestStdDevHelper:
     def test_single_returns_none(self) -> None:
-        assert _std_dev([D("10")], D("10")) is None
+        assert std_dev([D("10")], D("10")) is None
 
     def test_two_values(self) -> None:
-        result = _std_dev([D("10"), D("20")], D("15"))
+        result = std_dev([D("10"), D("20")], D("15"))
         assert result is not None
         assert result > D("0")
 
     def test_all_same_returns_zero(self) -> None:
-        result = _std_dev([D("5"), D("5"), D("5")], D("5"))
+        result = std_dev([D("5"), D("5"), D("5")], D("5"))
         assert result is not None
         assert result == D("0")
 
@@ -982,7 +984,7 @@ class TestGoldenDataset:
         assert result.statistics is not None
         assert result.statistics.mean == D("15")
 
-    def test_golden_median(self, golden_obs: list[HistoricalObservationInput]) -> None:
+    def test_goldenmedian_value(self, golden_obs: list[HistoricalObservationInput]) -> None:
         result = historical_valuation_bands(golden_obs, ValuationMethodType.PE, calculated_at=CALC_AT)
         assert result.statistics is not None
         assert result.statistics.median == D("15")

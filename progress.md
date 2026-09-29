@@ -272,11 +272,27 @@
 - [x] tsc strict: zero errors
 - [x] Frontend: 5 tests passing
 
+### Phase 6e.5: Peer Comparison Engine — COMPLETE
+
+- [x] `app/valuation/_valuation_calc.py` — Shared pure-function helpers extracted from historical_bands.py (TD-12 resolved): constants, validation, financial helpers, per-method compute functions, statistical helpers. `compute_observation()` parameterized with `engine_version` and `metric_prefix` keyword arguments.
+- [x] `app/valuation/historical_bands.py` — Refactored to import shared helpers from `_valuation_calc.py`. All local function definitions moved to shared module. `validate_percentiles` ValueError wrapped in HistoricalBandError.
+- [x] `app/valuation/models.py` — Added 7 peer comparison models: PeerSelectionMethod (6 values), PeerSetMetadata, PeerObservationInput (composition: HAS-A HistoricalObservationInput), PeerValuationObservation, PeerStatistics, TargetVsPeerPosition (with rank_if_inserted), PeerComparisonResult. All frozen Pydantic v2.
+- [x] `app/valuation/peer_comparison.py` — Deterministic cross-sectional peer comparison engine. One method per invocation. Accepts explicit peer set (never discovers peers). Peer-specific data sufficiency thresholds (0→INSUFFICIENT, 1-2→MINIMAL, 3-4→LOW, 5-9→MODERATE, 10+→ADEQUATE). Target-as-peer exclusion by company_id. Duplicate detection by company_id (identical→dedup, contradictory→PeerComparisonError). rank_if_inserted = count(peer_value ≤ target_value) + 1. Target positioning only when target is VALID. PEG explicitly rejected. Mixed currencies allowed (ratios are dimensionless). No DB/network/LLM/system clock.
+- [x] `app/valuation/__init__.py` — Updated exports for all peer comparison types, compare_peers, PeerComparisonError
+- [x] `tests/test_valuation_calc.py` — 51 tests for shared helper functions (constants, validation, timing, denom, EV components, compute_observation 6 methods + PEG rejection, statistical helpers)
+- [x] `tests/test_peer_comparison.py` — 89 tests across 19 test classes: all 6 methods (P/E, EV/EBITDA, P/S, P/B, FCF Yield, EV/FCF), PEG rejection, target timing (VALID→position, LOOK_AHEAD_RISK→None, UNVERIFIED_TIMING→None), rank_if_inserted semantics (7 positions), percentile rank, mixed currencies (INR+USD+EUR), duplicate peers (identical→dedup, contradictory→error), target-as-peer exclusion, input ordering independence, data sufficiency (8 threshold levels + custom), invalid data (8 scenarios), net cash, statistics (single peer, std_dev, custom percentiles, median odd/even), determinism, provenance (engine_version, calculated_at, metadata, company identity), target positioning (difference_from_median, pct, vs_p25/p75), edge cases (empty, all invalid, single), golden datasets (5-peer P/E, 3-peer EV/EBITDA, EV/FCF FCFF chain), cross-engine consistency (3 methods: P/E, EV/FCF, FCF Yield), immutability
+- [x] `tests/test_valuation_bands.py` — Import paths updated for shared helpers; zero assertion changes; all 108 tests pass
+- [x] All 1101 backend tests passing (89 peer comparison + 51 shared helper + 108 historical bands regression + 853 existing)
+- [x] mypy strict: zero errors on valuation module
+- [x] ruff: zero errors
+- [x] tsc strict: zero errors
+- [x] Frontend: 5 tests passing
+
 ---
 
 ## Current Phase
 
-**Next Phase:** Phase 6e.5 — Peer Comparison Engine
+**Next Phase:** Phase 6e.6 — Scenario Engine
 
 ---
 
@@ -299,6 +315,7 @@
 - Reverse DCF: bisection solver for implied revenue growth rate, treats forward DCF as black-box oracle, dual convergence criteria, structured no-solution handling, 37 tests with round-trip verification
 - Multiple-Based Valuation Engine: 7 methods (P/E, EV/EBITDA, P/S, P/B, PEG, FCF Yield, EV/FCF), FCFF-based EV/FCF with ΔNWC derivation, CashFlowBasis metadata, 129 tests with golden datasets
 - Historical Valuation Bands: 6 methods (P/E, EV/EBITDA, P/S, P/B, FCF Yield, EV/FCF), point-in-time correctness, look-ahead bias prevention, nearest-rank percentile bands, midpoint percentile rank, current position, frequency-agnostic, 108 tests with golden datasets
+- Peer Comparison Engine: 6 methods, explicit peer set input, rank_if_inserted positioning, cross-sectional statistics, peer-specific data sufficiency, target-as-peer exclusion, duplicate detection, mixed currencies, shared helper extraction (_valuation_calc.py), 89 tests with golden datasets and cross-engine consistency
 
 ---
 
@@ -377,7 +394,7 @@
 | TD-4 | Domain value objects not implemented: Money, Percentage, FinancialRatio, DateRange, SourceCitation, CAGRResult | Phase 3 | Implement when agent layer needs typed value passing; raw Decimal works for current analytics engine |
 | TD-5 | PriceHistory provider interface not implemented — impl plan specified 12 interfaces but only 11 built | Phase 5 | Evaluate whether PriceHistory should be a separate interface or folded into MarketDataProvider when historical analysis features are built |
 | TD-6 | Readiness test (`test_ready_returns_200`) requires running PostgreSQL — cannot pass in unit test mode | Phase 2 | Requires PostgreSQL with migrations applied; document as integration test and verify with infrastructure |
-| TD-7 | Valuation engine gap — peer comparison, scenario engine not yet implemented (DCF, Reverse DCF, multiple-based valuation, historical valuation bands complete) | Phase 6 | Phase 6e.5+ — required before agent orchestration |
+| TD-7 | Valuation engine gap — scenario engine not yet implemented (DCF, Reverse DCF, multiple-based valuation, historical valuation bands, peer comparison complete) | Phase 6 | Phase 6e.6+ — required before agent orchestration |
 | TD-8 | Financial forensics / red flag scoring not implemented | Phase 6 | Phase 6e — part of original Phase 6 scope |
 | TD-9 | Document ingestion pipeline, S3 storage, embedding/pgvector semantic search not implemented (partial evidence subsystem) | Phase 4 | Required for full citation chain; implement before or during agent layer |
 | TD-10 | Repository layer exists only for evidence and screener — not all 28 domain entities | Phase 3 | Build repositories as needed when agents/API endpoints require them |
@@ -387,9 +404,7 @@
 
 ## Next Actions
 
-1. **Phase 6e.4: Historical Valuation Bands**
-   - Historical valuation band analysis
-   - Peer comparison engine
+1. **Phase 6e.6: Scenario Engine**
    - Scenario engine (Bear/Base/Bull with explicit assumptions per scenario)
    - Financial forensics / red flag scoring
    - Golden dataset tests with hand-verified calculations

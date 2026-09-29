@@ -11,14 +11,23 @@ corporate-action adjustments.
 from __future__ import annotations
 
 from datetime import date, datetime
-from decimal import ROUND_CEILING, Decimal
+from decimal import Decimal
 
-from app.analytics._calc import safe_divide
 from app.analytics.models import RATIO_QUANTIZE, ROUNDING, CalculationResult
+from app.valuation._valuation_calc import (
+    ZERO,
+    compute_observation,
+    excluded_obs,
+    median_value,
+    nearest_rank_index,
+    percentile_rank,
+    std_dev,
+    sufficiency,
+    timing_status,
+    validate_percentiles,
+)
 from app.valuation.models import (
-    CashFlowBasis,
     CurrentValuationPosition,
-    DataSufficiency,
     DataSufficiencyThresholds,
     HistoricalObservationInput,
     HistoricalValuationObservation,
@@ -30,12 +39,6 @@ from app.valuation.models import (
 )
 
 ENGINE_VERSION = "1.0.0"
-_CURRENCY_QUANTIZE = Decimal("0.0001")
-_ZERO = Decimal("0")
-_ONE = Decimal("1")
-_TWO = Decimal("2")
-_HUNDRED = Decimal("100")
-_HALF = Decimal("0.5")
 
 _DEFAULT_PERCENTILES = [
     Decimal("10"),
@@ -56,13 +59,6 @@ class HistoricalBandError(Exception):
 # ---------------------------------------------------------------------------
 
 
-def _validate_percentiles(percentiles: list[Decimal]) -> None:
-    for p in percentiles:
-        if p < _ZERO or p > _HUNDRED:
-            msg = f"percentile must be in [0, 100], got {p}"
-            raise HistoricalBandError(msg)
-
-
 def _filter_lookback(
     observations: list[HistoricalObservationInput],
     start: date | None,
@@ -74,39 +70,6 @@ def _filter_lookback(
     if end is not None:
         result = [o for o in result if o.observation_date <= end]
     return result
-
-
-def _timing_status(obs: HistoricalObservationInput) -> ObservationStatus:
-    if obs.financials_available_date is None:
-        return ObservationStatus.UNVERIFIED_TIMING
-    if obs.financials_available_date > obs.observation_date:
-        return ObservationStatus.LOOK_AHEAD_RISK
-    return ObservationStatus.VALID
-
-
-def _excluded_obs(
-    obs: HistoricalObservationInput,
-    method: ValuationMethodType,
-    status: ObservationStatus,
-    market_cap: Decimal | None = None,
-    enterprise_value: Decimal | None = None,
-    net_debt: Decimal | None = None,
-    cash_flow_basis: CashFlowBasis | None = None,
-) -> HistoricalValuationObservation:
-    return HistoricalValuationObservation(
-        observation_date=obs.observation_date,
-        method=method,
-        status=status,
-        price=obs.price,
-        shares_outstanding=obs.shares_outstanding,
-        market_cap=market_cap,
-        enterprise_value=enterprise_value,
-        net_debt=net_debt,
-        financial_period=obs.financial_period,
-        financial_period_type=obs.financial_period_type,
-        financials_available_date=obs.financials_available_date,
-        cash_flow_basis=cash_flow_basis,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -138,438 +101,14 @@ def _detect_duplicates(
 
         non_dup.append(first)
         for _ in group[1:]:
-            dup_obs.append(_excluded_obs(first, method, ObservationStatus.DUPLICATE_OBSERVATION))
+            dup_obs.append(excluded_obs(first, method, ObservationStatus.DUPLICATE_OBSERVATION))
 
     return non_dup, dup_obs
 
 
 # ---------------------------------------------------------------------------
-# Per-method computation
+# Statistics
 # ---------------------------------------------------------------------------
-
-
-def _missing(status: ObservationStatus = ObservationStatus.EXCLUDED_MISSING_DATA) -> ObservationStatus:
-    return status
-
-
-def _denom_status(value: Decimal) -> ObservationStatus | None:
-    if value < _ZERO:
-        return ObservationStatus.EXCLUDED_NEGATIVE_DENOMINATOR
-    if value == _ZERO:
-        return ObservationStatus.EXCLUDED_ZERO_DENOMINATOR
-    return None
-
-
-def _compute_observation(
-    obs: HistoricalObservationInput,
-    method: ValuationMethodType,
-    timing: ObservationStatus,
-) -> HistoricalValuationObservation:
-    market_cap = (obs.price * obs.shares_outstanding).quantize(
-        _CURRENCY_QUANTIZE, rounding=ROUNDING,
-    )
-
-    if method == ValuationMethodType.PE:
-        return _compute_pe(obs, method, timing, market_cap)
-    if method == ValuationMethodType.EV_EBITDA:
-        return _compute_ev_ebitda(obs, method, timing, market_cap)
-    if method == ValuationMethodType.PS:
-        return _compute_ps(obs, method, timing, market_cap)
-    if method == ValuationMethodType.PB:
-        return _compute_pb(obs, method, timing, market_cap)
-    if method == ValuationMethodType.FCF_YIELD:
-        return _compute_fcf_yield(obs, method, timing, market_cap)
-    if method == ValuationMethodType.EV_FCF:
-        return _compute_ev_fcf(obs, method, timing, market_cap)
-
-    msg = f"Unsupported method: {method}"
-    raise HistoricalBandError(msg)
-
-
-def _compute_pe(
-    obs: HistoricalObservationInput,
-    method: ValuationMethodType,
-    timing: ObservationStatus,
-    market_cap: Decimal,
-) -> HistoricalValuationObservation:
-    if obs.eps is None:
-        return _excluded_obs(obs, method, ObservationStatus.EXCLUDED_MISSING_DATA, market_cap=market_cap)
-
-    bad = _denom_status(obs.eps)
-    if bad is not None:
-        return _excluded_obs(obs, method, bad, market_cap=market_cap)
-
-    value, _ = safe_divide(obs.price, obs.eps)
-    assert value is not None  # noqa: S101 — eps > 0 guaranteed above
-
-    calc = CalculationResult(
-        metric="historical_pe",
-        value=value,
-        inputs={"price": obs.price, "eps": obs.eps},
-        period=obs.financial_period,
-        formula="Price / EPS",
-        version=ENGINE_VERSION,
-        unit="multiple",
-    )
-    return HistoricalValuationObservation(
-        observation_date=obs.observation_date,
-        method=method,
-        status=timing,
-        value=value,
-        price=obs.price,
-        shares_outstanding=obs.shares_outstanding,
-        market_cap=market_cap,
-        financial_period=obs.financial_period,
-        financial_period_type=obs.financial_period_type,
-        financials_available_date=obs.financials_available_date,
-        calculation=calc,
-    )
-
-
-def _ev_components(
-    obs: HistoricalObservationInput,
-    market_cap: Decimal,
-) -> tuple[Decimal, Decimal] | None:
-    if obs.total_debt is None or obs.cash_and_equivalents is None:
-        return None
-    net_debt = (obs.total_debt - obs.cash_and_equivalents).quantize(
-        _CURRENCY_QUANTIZE, rounding=ROUNDING,
-    )
-    ev = (market_cap + net_debt).quantize(_CURRENCY_QUANTIZE, rounding=ROUNDING)
-    return net_debt, ev
-
-
-def _compute_ev_ebitda(
-    obs: HistoricalObservationInput,
-    method: ValuationMethodType,
-    timing: ObservationStatus,
-    market_cap: Decimal,
-) -> HistoricalValuationObservation:
-    ev_parts = _ev_components(obs, market_cap)
-    if ev_parts is None:
-        return _excluded_obs(obs, method, ObservationStatus.EXCLUDED_MISSING_DATA, market_cap=market_cap)
-
-    net_debt, ev = ev_parts
-
-    if obs.ebitda is None:
-        return _excluded_obs(
-            obs, method, ObservationStatus.EXCLUDED_MISSING_DATA,
-            market_cap=market_cap, enterprise_value=ev, net_debt=net_debt,
-        )
-
-    bad = _denom_status(obs.ebitda)
-    if bad is not None:
-        return _excluded_obs(
-            obs, method, bad,
-            market_cap=market_cap, enterprise_value=ev, net_debt=net_debt,
-        )
-
-    value, _ = safe_divide(ev, obs.ebitda)
-    assert value is not None  # noqa: S101
-
-    calc = CalculationResult(
-        metric="historical_ev_ebitda",
-        value=value,
-        inputs={
-            "price": obs.price,
-            "shares_outstanding": obs.shares_outstanding,
-            "market_cap": market_cap,
-            "total_debt": obs.total_debt,
-            "cash_and_equivalents": obs.cash_and_equivalents,
-            "net_debt": net_debt,
-            "enterprise_value": ev,
-            "ebitda": obs.ebitda,
-        },
-        period=obs.financial_period,
-        formula="Enterprise Value / EBITDA",
-        version=ENGINE_VERSION,
-        unit="multiple",
-    )
-    return HistoricalValuationObservation(
-        observation_date=obs.observation_date,
-        method=method,
-        status=timing,
-        value=value,
-        price=obs.price,
-        shares_outstanding=obs.shares_outstanding,
-        market_cap=market_cap,
-        enterprise_value=ev,
-        net_debt=net_debt,
-        financial_period=obs.financial_period,
-        financial_period_type=obs.financial_period_type,
-        financials_available_date=obs.financials_available_date,
-        calculation=calc,
-    )
-
-
-def _compute_ps(
-    obs: HistoricalObservationInput,
-    method: ValuationMethodType,
-    timing: ObservationStatus,
-    market_cap: Decimal,
-) -> HistoricalValuationObservation:
-    if obs.revenue is None:
-        return _excluded_obs(obs, method, ObservationStatus.EXCLUDED_MISSING_DATA, market_cap=market_cap)
-
-    bad = _denom_status(obs.revenue)
-    if bad is not None:
-        return _excluded_obs(obs, method, bad, market_cap=market_cap)
-
-    value, _ = safe_divide(market_cap, obs.revenue)
-    assert value is not None  # noqa: S101
-
-    calc = CalculationResult(
-        metric="historical_ps",
-        value=value,
-        inputs={
-            "market_cap": market_cap,
-            "revenue": obs.revenue,
-        },
-        period=obs.financial_period,
-        formula="Market Cap / Revenue",
-        version=ENGINE_VERSION,
-        unit="multiple",
-    )
-    return HistoricalValuationObservation(
-        observation_date=obs.observation_date,
-        method=method,
-        status=timing,
-        value=value,
-        price=obs.price,
-        shares_outstanding=obs.shares_outstanding,
-        market_cap=market_cap,
-        financial_period=obs.financial_period,
-        financial_period_type=obs.financial_period_type,
-        financials_available_date=obs.financials_available_date,
-        calculation=calc,
-    )
-
-
-def _compute_pb(
-    obs: HistoricalObservationInput,
-    method: ValuationMethodType,
-    timing: ObservationStatus,
-    market_cap: Decimal,
-) -> HistoricalValuationObservation:
-    if obs.total_equity is None:
-        return _excluded_obs(obs, method, ObservationStatus.EXCLUDED_MISSING_DATA, market_cap=market_cap)
-
-    bad = _denom_status(obs.total_equity)
-    if bad is not None:
-        return _excluded_obs(obs, method, bad, market_cap=market_cap)
-
-    value, _ = safe_divide(market_cap, obs.total_equity)
-    assert value is not None  # noqa: S101
-
-    calc = CalculationResult(
-        metric="historical_pb",
-        value=value,
-        inputs={
-            "market_cap": market_cap,
-            "total_equity": obs.total_equity,
-        },
-        period=obs.financial_period,
-        formula="Market Cap / Total Equity",
-        version=ENGINE_VERSION,
-        unit="multiple",
-    )
-    return HistoricalValuationObservation(
-        observation_date=obs.observation_date,
-        method=method,
-        status=timing,
-        value=value,
-        price=obs.price,
-        shares_outstanding=obs.shares_outstanding,
-        market_cap=market_cap,
-        financial_period=obs.financial_period,
-        financial_period_type=obs.financial_period_type,
-        financials_available_date=obs.financials_available_date,
-        calculation=calc,
-    )
-
-
-def _compute_fcf_yield(
-    obs: HistoricalObservationInput,
-    method: ValuationMethodType,
-    timing: ObservationStatus,
-    market_cap: Decimal,
-) -> HistoricalValuationObservation:
-    if obs.cfo is None or obs.capex is None:
-        return _excluded_obs(obs, method, ObservationStatus.EXCLUDED_MISSING_DATA, market_cap=market_cap)
-
-    equity_fcf = (obs.cfo - obs.capex).quantize(_CURRENCY_QUANTIZE, rounding=ROUNDING)
-
-    bad = _denom_status(equity_fcf)
-    if bad is not None:
-        return _excluded_obs(
-            obs, method, bad, market_cap=market_cap,
-            cash_flow_basis=CashFlowBasis.EQUITY_FCF,
-        )
-
-    value, _ = safe_divide(equity_fcf, market_cap)
-    assert value is not None  # noqa: S101
-
-    calc = CalculationResult(
-        metric="historical_fcf_yield",
-        value=value,
-        inputs={
-            "cfo": obs.cfo,
-            "capex": obs.capex,
-            "equity_fcf": equity_fcf,
-            "market_cap": market_cap,
-        },
-        period=obs.financial_period,
-        formula="(CFO − CapEx) / Market Cap",
-        version=ENGINE_VERSION,
-        unit="ratio",
-    )
-    return HistoricalValuationObservation(
-        observation_date=obs.observation_date,
-        method=method,
-        status=timing,
-        value=value,
-        price=obs.price,
-        shares_outstanding=obs.shares_outstanding,
-        market_cap=market_cap,
-        financial_period=obs.financial_period,
-        financial_period_type=obs.financial_period_type,
-        financials_available_date=obs.financials_available_date,
-        cash_flow_basis=CashFlowBasis.EQUITY_FCF,
-        calculation=calc,
-    )
-
-
-def _compute_ev_fcf(
-    obs: HistoricalObservationInput,
-    method: ValuationMethodType,
-    timing: ObservationStatus,
-    market_cap: Decimal,
-) -> HistoricalValuationObservation:
-    ev_parts = _ev_components(obs, market_cap)
-    if ev_parts is None:
-        return _excluded_obs(
-            obs, method, ObservationStatus.EXCLUDED_MISSING_DATA,
-            market_cap=market_cap, cash_flow_basis=CashFlowBasis.FCFF,
-        )
-    net_debt, ev = ev_parts
-
-    missing_fcff = (
-        obs.ebit is None
-        or obs.effective_tax_rate is None
-        or obs.depreciation_amortization is None
-        or obs.capex is None
-        or obs.delta_nwc is None
-    )
-    if missing_fcff:
-        return _excluded_obs(
-            obs, method, ObservationStatus.EXCLUDED_MISSING_DATA,
-            market_cap=market_cap, enterprise_value=ev, net_debt=net_debt,
-            cash_flow_basis=CashFlowBasis.FCFF,
-        )
-
-    assert obs.ebit is not None  # noqa: S101 — guaranteed by check above
-    assert obs.effective_tax_rate is not None  # noqa: S101
-    assert obs.depreciation_amortization is not None  # noqa: S101
-    assert obs.capex is not None  # noqa: S101
-    assert obs.delta_nwc is not None  # noqa: S101
-
-    nopat = (obs.ebit * (_ONE - obs.effective_tax_rate)).quantize(
-        _CURRENCY_QUANTIZE, rounding=ROUNDING,
-    )
-    fcff = (nopat + obs.depreciation_amortization - obs.capex - obs.delta_nwc).quantize(
-        _CURRENCY_QUANTIZE, rounding=ROUNDING,
-    )
-
-    bad = _denom_status(fcff)
-    if bad is not None:
-        return _excluded_obs(
-            obs, method, bad,
-            market_cap=market_cap, enterprise_value=ev, net_debt=net_debt,
-            cash_flow_basis=CashFlowBasis.FCFF,
-        )
-
-    value, _ = safe_divide(ev, fcff)
-    assert value is not None  # noqa: S101
-
-    calc = CalculationResult(
-        metric="historical_ev_fcf",
-        value=value,
-        inputs={
-            "enterprise_value": ev,
-            "ebit": obs.ebit,
-            "effective_tax_rate": obs.effective_tax_rate,
-            "nopat": nopat,
-            "depreciation_amortization": obs.depreciation_amortization,
-            "capex": obs.capex,
-            "delta_nwc": obs.delta_nwc,
-            "fcff": fcff,
-        },
-        period=obs.financial_period,
-        formula="Enterprise Value / FCFF",
-        version=ENGINE_VERSION,
-        unit="multiple",
-    )
-    return HistoricalValuationObservation(
-        observation_date=obs.observation_date,
-        method=method,
-        status=timing,
-        value=value,
-        price=obs.price,
-        shares_outstanding=obs.shares_outstanding,
-        market_cap=market_cap,
-        enterprise_value=ev,
-        net_debt=net_debt,
-        financial_period=obs.financial_period,
-        financial_period_type=obs.financial_period_type,
-        financials_available_date=obs.financials_available_date,
-        cash_flow_basis=CashFlowBasis.FCFF,
-        calculation=calc,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Statistics helpers
-# ---------------------------------------------------------------------------
-
-
-def _nearest_rank_index(p: Decimal, n: int) -> int:
-    if p == _ZERO:
-        return 0
-    if p == _HUNDRED:
-        return n - 1
-    raw = p * Decimal(n) / _HUNDRED
-    return int(raw.to_integral_value(rounding=ROUND_CEILING)) - 1
-
-
-def _median(sorted_values: list[Decimal]) -> Decimal:
-    n = len(sorted_values)
-    mid = n // 2
-    if n % 2 == 1:
-        return sorted_values[mid]
-    return ((sorted_values[mid - 1] + sorted_values[mid]) / _TWO).quantize(
-        RATIO_QUANTIZE, rounding=ROUNDING,
-    )
-
-
-def _std_dev(values: list[Decimal], mean: Decimal) -> Decimal | None:
-    n = len(values)
-    if n < 2:
-        return None
-    sum_sq = sum((v - mean) ** 2 for v in values)
-    variance = sum_sq / Decimal(n - 1)
-    return variance.sqrt().quantize(RATIO_QUANTIZE, rounding=ROUNDING)
-
-
-def _sufficiency(count: int, thresholds: DataSufficiencyThresholds) -> DataSufficiency:
-    if count == 0:
-        return DataSufficiency.INSUFFICIENT
-    if count < thresholds.min_minimal:
-        return DataSufficiency.MINIMAL
-    if count < thresholds.min_low:
-        return DataSufficiency.LOW
-    if count < thresholds.min_moderate:
-        return DataSufficiency.MODERATE
-    return DataSufficiency.ADEQUATE
 
 
 def _compute_statistics(
@@ -586,12 +125,12 @@ def _compute_statistics(
     sorted_vals = sorted(valid_values)
 
     mean_val = (sum(sorted_vals) / Decimal(n)).quantize(RATIO_QUANTIZE, rounding=ROUNDING)
-    median_val = _median(sorted_vals)
-    sd = _std_dev(valid_values, mean_val)
+    median_val = median_value(sorted_vals)
+    sd = std_dev(valid_values, mean_val)
 
     bands: list[PercentileBand] = []
     for p in percentiles:
-        idx = _nearest_rank_index(p, n)
+        idx = nearest_rank_index(p, n)
         bands.append(PercentileBand(percentile=p, value=sorted_vals[idx]))
 
     audit: list[CalculationResult] = []
@@ -635,7 +174,7 @@ def _compute_statistics(
         median=median_val,
         std_dev=sd,
         bands=bands,
-        data_sufficiency=_sufficiency(n, thresholds),
+        data_sufficiency=sufficiency(n, thresholds),
         lookback_start=lookback_start,
         lookback_end=lookback_end,
         calculations=audit,
@@ -647,16 +186,6 @@ def _compute_statistics(
 # ---------------------------------------------------------------------------
 
 
-def _percentile_rank(current: Decimal, valid_values: list[Decimal]) -> Decimal | None:
-    n = len(valid_values)
-    if n == 0:
-        return None
-    below = sum(1 for v in valid_values if v < current)
-    equal = sum(1 for v in valid_values if v == current)
-    rank = (Decimal(below) + _HALF * Decimal(equal)) / Decimal(n) * _HUNDRED
-    return rank.quantize(RATIO_QUANTIZE, rounding=ROUNDING)
-
-
 def _compute_current_position(
     current_obs: HistoricalObservationInput,
     method: ValuationMethodType,
@@ -664,16 +193,19 @@ def _compute_current_position(
     statistics: ValuationBandStatistics | None,
     percentiles: list[Decimal],
 ) -> CurrentValuationPosition | None:
-    if current_obs.price <= _ZERO or current_obs.shares_outstanding <= _ZERO:
+    if current_obs.price <= ZERO or current_obs.shares_outstanding <= ZERO:
         return None
 
-    timing = _timing_status(current_obs)
-    computed = _compute_observation(current_obs, method, timing)
+    timing = timing_status(current_obs)
+    computed = compute_observation(
+        current_obs, method, timing,
+        engine_version=ENGINE_VERSION, metric_prefix="historical",
+    )
     if computed.value is None:
         return None
 
     current_value = computed.value
-    rank = _percentile_rank(current_value, valid_values)
+    rank = percentile_rank(current_value, valid_values)
 
     vs_median: Decimal | None = None
     dist_median: Decimal | None = None
@@ -682,9 +214,9 @@ def _compute_current_position(
 
     if statistics is not None:
         vs_median = (current_value - statistics.median).quantize(RATIO_QUANTIZE, rounding=ROUNDING)
-        if statistics.median != _ZERO:
+        if statistics.median != ZERO:
             dist_median = (
-                (current_value - statistics.median) / statistics.median * _HUNDRED
+                (current_value - statistics.median) / statistics.median * Decimal("100")
             ).quantize(RATIO_QUANTIZE, rounding=ROUNDING)
 
         p25_band = next((b for b in statistics.bands if b.percentile == Decimal("25")), None)
@@ -741,7 +273,10 @@ def historical_valuation_bands(
         HistoricalValuationResult with observations, statistics, and positioning.
     """
     pctls = percentiles if percentiles is not None else list(_DEFAULT_PERCENTILES)
-    _validate_percentiles(pctls)
+    try:
+        validate_percentiles(pctls)
+    except ValueError as exc:
+        raise HistoricalBandError(str(exc)) from exc
     thresholds = sufficiency_thresholds or _DEFAULT_THRESHOLDS
 
     # --- Filter lookback window ---
@@ -752,8 +287,8 @@ def historical_valuation_bands(
     result_obs: list[HistoricalValuationObservation] = []
 
     for obs in filtered:
-        if obs.price <= _ZERO or obs.shares_outstanding <= _ZERO:
-            result_obs.append(_excluded_obs(obs, method, ObservationStatus.EXCLUDED_MISSING_DATA))
+        if obs.price <= ZERO or obs.shares_outstanding <= ZERO:
+            result_obs.append(excluded_obs(obs, method, ObservationStatus.EXCLUDED_MISSING_DATA))
         else:
             structurally_valid.append(obs)
 
@@ -767,8 +302,11 @@ def historical_valuation_bands(
     excluded_count = len(result_obs)
 
     for obs in non_dup:
-        timing = _timing_status(obs)
-        computed = _compute_observation(obs, method, timing)
+        timing = timing_status(obs)
+        computed = compute_observation(
+            obs, method, timing,
+            engine_version=ENGINE_VERSION, metric_prefix="historical",
+        )
         result_obs.append(computed)
 
         if computed.status == ObservationStatus.VALID and computed.value is not None:

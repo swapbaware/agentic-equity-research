@@ -378,3 +378,108 @@ class HistoricalValuationResult(BaseModel):
     current_position: CurrentValuationPosition | None = None
     engine_version: str
     calculated_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Peer Comparison (Phase 6e.5)
+# ---------------------------------------------------------------------------
+
+
+class PeerSelectionMethod(StrEnum):
+    MANUAL = "manual"
+    SECTOR_BASED = "sector_based"
+    INDUSTRY_BASED = "industry_based"
+    MARKET_CAP_BASED = "market_cap_based"
+    AGENT_PROPOSED = "agent_proposed"
+    CUSTOM = "custom"
+
+
+class PeerSetMetadata(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    peer_set_id: str | None = None
+    selection_method: PeerSelectionMethod
+    selection_criteria: dict[str, str | Decimal | None] | None = None
+    sector: str | None = None
+    industry: str | None = None
+    market_cap_band: str | None = None
+    geography: str | None = None
+    rationale: str | None = None
+    source: str | None = None
+
+
+class PeerObservationInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: str
+    company_name: str | None = None
+    currency: str = "INR"
+    observation: HistoricalObservationInput
+
+
+class PeerValuationObservation(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: str
+    company_name: str | None = None
+    currency: str
+    observation_date: date
+    method: ValuationMethodType
+    status: ObservationStatus
+    value: Decimal | None = None
+    price: Decimal
+    shares_outstanding: Decimal
+    market_cap: Decimal | None = None
+    enterprise_value: Decimal | None = None
+    net_debt: Decimal | None = None
+    financial_period: str
+    financial_period_type: FinancialPeriodType
+    financials_available_date: date | None = None
+    cash_flow_basis: CashFlowBasis | None = None
+    calculation: CalculationResult | None = None
+
+
+class PeerStatistics(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    method: ValuationMethodType
+    valid_count: int
+    unverified_count: int
+    excluded_count: int
+    min: Decimal
+    max: Decimal
+    mean: Decimal
+    median: Decimal
+    std_dev: Decimal | None = None
+    bands: list[PercentileBand]
+    data_sufficiency: DataSufficiency
+    calculations: list[CalculationResult]
+
+
+class TargetVsPeerPosition(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    method: ValuationMethodType
+    target_value: Decimal
+    target_company_id: str
+    peer_median: Decimal
+    difference_from_median: Decimal
+    difference_from_median_pct: Decimal | None = None
+    percentile_rank: Decimal | None = None
+    rank_if_inserted: int
+    peer_count: int
+    vs_p25: Decimal | None = None
+    vs_p75: Decimal | None = None
+
+
+class PeerComparisonResult(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    method: ValuationMethodType
+    target: PeerValuationObservation
+    peers: list[PeerValuationObservation]
+    statistics: PeerStatistics | None = None
+    position: TargetVsPeerPosition | None = None
+    peer_set_metadata: PeerSetMetadata | None = None
+    engine_version: str
+    calculated_at: datetime
