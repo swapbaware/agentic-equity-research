@@ -3,9 +3,31 @@
 All calculations use decimal.Decimal, never float. Every intermediate step
 records its inputs, formula, period, and calculation version via CalculationResult.
 """
+
 from __future__ import annotations
 
 from app.valuation.dcf import dcf_valuation
+from app.valuation.forensic_models import (
+    CompanyType,
+    DataQualityDiagnostic,
+    ForensicCategory,
+    ForensicCategorySummary,
+    ForensicCheckResult,
+    ForensicCheckStatus,
+    ForensicConfig,
+    ForensicPeriodInput,
+    ForensicResult,
+    ForensicSeverity,
+    ThresholdClassification,
+    ThresholdConfig,
+    ThresholdDirection,
+)
+from app.valuation.forensics import (
+    DEFAULT_CONFIG,
+    FINANCIAL_APPLICABLE_CHECKS,
+    ForensicValidationError,
+    forensic_analysis,
+)
 from app.valuation.historical_bands import (
     HistoricalBandError,
     historical_valuation_bands,
@@ -73,6 +95,23 @@ from app.valuation.scenario import (
 
 __all__ = [
     "AssumptionProvenance",
+    "CompanyType",
+    "DEFAULT_CONFIG",
+    "DataQualityDiagnostic",
+    "FINANCIAL_APPLICABLE_CHECKS",
+    "ForensicCategory",
+    "ForensicCategorySummary",
+    "ForensicCheckResult",
+    "ForensicCheckStatus",
+    "ForensicConfig",
+    "ForensicPeriodInput",
+    "ForensicResult",
+    "ForensicSeverity",
+    "ForensicValidationError",
+    "ThresholdClassification",
+    "ThresholdConfig",
+    "ThresholdDirection",
+    "forensic_analysis",
     "CashFlowBasis",
     "ConvergenceStatus",
     "CurrentValuationPosition",

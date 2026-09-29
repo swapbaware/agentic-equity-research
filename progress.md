@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-09-29
+**Last Updated:** 2026-09-29 (Phase 6e.7 complete)
 
 ---
 
@@ -306,11 +306,27 @@
 - [x] FindingType reused from app.models.enums (FACT, CALCULATION, MANAGEMENT_CLAIM, ANALYST_OPINION, AI_INFERENCE, ASSUMPTION, UNCERTAINTY)
 - [x] No persistence, no ORM, no database, no LLM, no network
 
+### Phase 6e.7: Financial Forensics / Red Flag Screening Engine — COMPLETE
+
+- [x] `app/valuation/forensic_models.py` — 12 frozen Pydantic v2 domain models: ForensicCheckStatus (8 values), ForensicSeverity (4), ForensicCategory (5), ThresholdDirection (2), ThresholdClassification (3), CompanyType (2), ForensicPeriodInput (composition with PeriodFinancials), ThresholdConfig, ForensicConfig, DataQualityDiagnostic, ForensicCheckResult, ForensicCategorySummary, ForensicResult
+- [x] `app/valuation/forensics.py` — ~2100-line deterministic forensic engine. 22 individual checks across 5 categories (Earnings Quality, Working Capital, Cash Flow Quality, Leverage, Profitability). 8-status model: FLAGGED, PASS, NOT_COMPUTABLE, INVALID_INPUT, NOT_APPLICABLE, INSUFFICIENT_HISTORY, UNVERIFIED_TIMING, LOOK_AHEAD_RISK. Point-in-time validation (VALID/LOOK_AHEAD_RISK/UNVERIFIED_TIMING). Beneish components (DSRI, GMI, SGI, TATA — composite NOT_COMPUTABLE due to missing ppe_net/retained_earnings). Altman components (X1, X3, X4, X5 — composite NOT_COMPUTABLE due to missing retained_earnings; X4 derives total_liabilities as total_assets − total_equity). Financial company support (exactly 3 of 22 checks applicable). Interest coverage: zero → NOT_COMPUTABLE, negative → INVALID_INPUT. ThresholdClassification (PUBLISHED_MODEL, ACCOUNTING_IDENTITY, PLATFORM_HEURISTIC). No aggregate score. Language safety: never "fraud", "manipulation", etc. Category summaries are descriptive only.
+- [x] `app/valuation/__init__.py` — Updated exports: 13 forensic model types + DEFAULT_CONFIG, FINANCIAL_APPLICABLE_CHECKS, ForensicValidationError, forensic_analysis
+- [x] `tests/test_forensics.py` — 118 tests across 30+ test classes: input validation (5), timing semantics (4), all 22 individual checks, Beneish components (7), Altman components (10), financial company (4), category summaries (4), data quality diagnostics (3), determinism (3), audit trail (5), language safety (2), Decimal enforcement (2), check count (2), no aggregate score (1), golden datasets A-E (12), threshold config (3), edge cases
+- [x] All 118 forensic tests passing
+- [x] Full backend: 1324 passed, 7 skipped, 1 known failure (TD-6)
+- [x] mypy strict: zero new errors (1 preexisting in yahoo_finance.py)
+- [x] ruff: zero errors
+- [x] No DB/ORM/network/LLM/system clock dependencies
+- [x] Decimal-only arithmetic throughout
+- [x] safe_divide() reused from app.analytics._calc
+- [x] CalculationResult audit trail on every check
+- [x] FindingType.CALCULATION reused from app.models.enums
+
 ---
 
 ## Current Phase
 
-**Next Phase:** Phase 6e.7 — Financial Forensics / Red Flag Scoring
+**Next Phase:** Phase 7 — Agent Implementation (LangGraph)
 
 ---
 
@@ -335,6 +351,7 @@
 - Historical Valuation Bands: 6 methods (P/E, EV/EBITDA, P/S, P/B, FCF Yield, EV/FCF), point-in-time correctness, look-ahead bias prevention, nearest-rank percentile bands, midpoint percentile rank, current position, frequency-agnostic, 108 tests with golden datasets
 - Peer Comparison Engine: 6 methods, explicit peer set input, rank_if_inserted positioning, cross-sectional statistics, peer-specific data sufficiency, target-as-peer exclusion, duplicate detection, mixed currencies, shared helper extraction (_valuation_calc.py), 89 tests with golden datasets and cross-engine consistency
 - Scenario Engine (Bear/Base/Bull): thin orchestration over DCF + multiples engines, exactly 3 scenarios required, explicit failure modeling (ScenarioExecutionStatus), probability-weighted value, 6 diagnostics, AssumptionProvenance with FindingType, deterministic calculated_at passthrough, 99 tests with golden datasets
+- Financial Forensics / Red Flag Screening Engine: 22 checks across 5 categories, 8-status model, Beneish/Altman components (composites NOT_COMPUTABLE due to missing fields), point-in-time validation, financial company support (3 applicable checks), language safety, no aggregate score, 118 tests with golden datasets
 
 ---
 
@@ -413,8 +430,8 @@
 | TD-4 | Domain value objects not implemented: Money, Percentage, FinancialRatio, DateRange, SourceCitation, CAGRResult | Phase 3 | Implement when agent layer needs typed value passing; raw Decimal works for current analytics engine |
 | TD-5 | PriceHistory provider interface not implemented — impl plan specified 12 interfaces but only 11 built | Phase 5 | Evaluate whether PriceHistory should be a separate interface or folded into MarketDataProvider when historical analysis features are built |
 | TD-6 | Readiness test (`test_ready_returns_200`) requires running PostgreSQL — cannot pass in unit test mode | Phase 2 | Requires PostgreSQL with migrations applied; document as integration test and verify with infrastructure |
-| TD-7 | Valuation engine gap — financial forensics / red flag scoring not yet implemented (DCF, Reverse DCF, multiples, historical bands, peer comparison, scenario engine complete) | Phase 6 | Phase 6e.7+ — required before agent orchestration |
-| TD-8 | Financial forensics / red flag scoring not implemented | Phase 6 | Phase 6e — part of original Phase 6 scope |
+| TD-7 | ~~Valuation engine gap — financial forensics / red flag scoring not yet implemented~~ | Phase 6 | **RESOLVED** — Phase 6e.7 complete |
+| TD-8 | ~~Financial forensics / red flag scoring not implemented~~ | Phase 6 | **RESOLVED** — Phase 6e.7 complete |
 | TD-9 | Document ingestion pipeline, S3 storage, embedding/pgvector semantic search not implemented (partial evidence subsystem) | Phase 4 | Required for full citation chain; implement before or during agent layer |
 | TD-10 | Repository layer exists only for evidence and screener — not all 28 domain entities | Phase 3 | Build repositories as needed when agents/API endpoints require them |
 | TD-11 | `pytest.mark.integration` not registered — produces PytestUnknownMarkWarning | Phase 3 | Register mark in `pyproject.toml` `[tool.pytest.ini_options]` markers list |
@@ -423,10 +440,7 @@
 
 ## Next Actions
 
-1. **Phase 6e.7: Financial Forensics / Red Flag Scoring**
-   - Forensic quality checks and red flag detection
-   - Golden dataset tests with hand-verified calculations
-2. **Phase 7: Agent Orchestration (LangGraph)**
+1. **Phase 7: Agent Orchestration (LangGraph)**
    - LangGraph state machine with typed ResearchState
    - First 3 agents: DataCollector, FinancialAnalyst, ThesisChallenger
    - Agent tool wiring (providers → agent tools)
