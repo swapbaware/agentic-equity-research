@@ -198,11 +198,30 @@
 - [x] ruff: zero errors
 - [x] tsc strict: zero errors
 
+### Phase 6e.1: Deterministic DCF Valuation Engine — COMPLETE
+
+- [x] `app/valuation/models.py` — Pydantic v2 frozen models: WACCComponents, DCFAssumptions (with model validators), ProjectedYear, TerminalValueResult, SensitivityCell, DCFResult
+- [x] `app/valuation/wacc.py` — WACC calculation: Ke = Rf + β × ERP, Kd = PreTax × (1-tax), WACC = equity_weight × Ke + debt_weight × Kd
+- [x] `app/valuation/projector.py` — Year-by-year FCF projection: Revenue → EBIT → NOPAT → D&A → CapEx → ΔNWC → FCF, with discount factors and PV(FCF)
+- [x] `app/valuation/terminal.py` — Terminal value: Gordon Growth (FCF×(1+g)/(WACC-g)) and Exit Multiple (EBITDA×multiple)
+- [x] `app/valuation/sensitivity.py` — 7×7 WACC × terminal-growth sensitivity grid (±3 steps of 1pp)
+- [x] `app/valuation/dcf.py` — 9-step orchestrator: resolve WACC → validate → project → terminal → EV → equity → per-share → upside/downside → sensitivity
+- [x] `app/valuation/__init__.py` — Public API exporting dcf_valuation and all model types
+- [x] `tests/test_valuation_models.py` — 15 model validation tests (construction, per-year lists, WACC components, frozen immutability, validation errors)
+- [x] `tests/test_valuation_wacc.py` — 5 WACC tests (hand-verified: basic, all-equity, high-beta, decimal enforcement, audit trail)
+- [x] `tests/test_valuation_dcf.py` — 49 DCF tests (golden dataset 5-year hand-verified, WACC components integration, exit multiple, single-year, per-year assumptions, edge cases, sensitivity matrix, audit trail, reproducibility, no-float enforcement)
+- [x] All 69 DCF valuation tests passing
+- [x] Full backend: 686 passed, 1 known failure (TD-6), 7 skipped
+- [x] mypy strict: zero errors on valuation module (7 source files)
+- [x] ruff: zero errors
+- [x] tsc strict: zero errors
+- [x] Frontend: 5 tests passing
+
 ---
 
 ## Current Phase
 
-**Next Phase:** Phase 6e — Valuation Engine & Financial Forensics
+**Next Phase:** Phase 6e.2 — Reverse DCF, Multiple-Based Valuation, Financial Forensics
 
 ---
 
@@ -221,12 +240,13 @@
 - Cross-source data reconciliation with conflict detection
 - Deterministic Financial Analytics Engine: 28 metrics (CAGR, margins, returns, leverage, cash flow, efficiency, quality)
 - Stock Screener: 20 criteria, 8 operators, AND/OR/NOT groups, saved screens, 7 API endpoints, interactive frontend
+- Deterministic DCF Valuation Engine: pure functional, Decimal-only, WACC/FCF/terminal value/sensitivity, CalculationResult audit trail, 69 tests with golden dataset
 
 ---
 
 ## Failing Tests
 
-- `test_health.py::TestReadinessEndpoint::test_ready_returns_200` — pre-existing, requires running PostgreSQL with migrations applied. This is an integration test that validates the readiness endpoint checks Alembic migration state against a live database. Cannot pass without PostgreSQL. 617 other backend tests pass. 5 frontend tests pass. 7 tests skipped (6 integration tests requiring PostgreSQL, 1 provider test requiring API key).
+- `test_health.py::TestReadinessEndpoint::test_ready_returns_200` — pre-existing, requires running PostgreSQL with migrations applied. This is an integration test that validates the readiness endpoint checks Alembic migration state against a live database. Cannot pass without PostgreSQL. 686 other backend tests pass. 5 frontend tests pass. 7 tests skipped (6 integration tests requiring PostgreSQL, 1 provider test requiring API key).
 
 ---
 
@@ -299,7 +319,7 @@
 | TD-4 | Domain value objects not implemented: Money, Percentage, FinancialRatio, DateRange, SourceCitation, CAGRResult | Phase 3 | Implement when agent layer needs typed value passing; raw Decimal works for current analytics engine |
 | TD-5 | PriceHistory provider interface not implemented — impl plan specified 12 interfaces but only 11 built | Phase 5 | Evaluate whether PriceHistory should be a separate interface or folded into MarketDataProvider when historical analysis features are built |
 | TD-6 | Readiness test (`test_ready_returns_200`) requires running PostgreSQL — cannot pass in unit test mode | Phase 2 | Requires PostgreSQL with migrations applied; document as integration test and verify with infrastructure |
-| TD-7 | Valuation engine gap — DCF, Reverse DCF, multiple-based valuation, historical valuation bands, peer comparison, scenario engine not yet implemented | Phase 6 | Phase 6e — required before agent orchestration |
+| TD-7 | Valuation engine gap — Reverse DCF, multiple-based valuation, historical valuation bands, peer comparison, scenario engine not yet implemented (DCF complete in 6e.1) | Phase 6 | Phase 6e.2 — required before agent orchestration |
 | TD-8 | Financial forensics / red flag scoring not implemented | Phase 6 | Phase 6e — part of original Phase 6 scope |
 | TD-9 | Document ingestion pipeline, S3 storage, embedding/pgvector semantic search not implemented (partial evidence subsystem) | Phase 4 | Required for full citation chain; implement before or during agent layer |
 | TD-10 | Repository layer exists only for evidence and screener — not all 28 domain entities | Phase 3 | Build repositories as needed when agents/API endpoints require them |
@@ -309,13 +329,12 @@
 
 ## Next Actions
 
-1. **Phase 6e: Valuation Engine & Financial Forensics**
-   - DCF model with configurable assumptions (Decimal, range output)
+1. **Phase 6e.2: Remaining Valuation Models & Financial Forensics**
    - Reverse DCF (implied growth from market price)
    - Multiple-based valuation models (P/E, EV/EBITDA, P/S, P/B, PEG, FCF Yield, EV/FCF)
    - Historical valuation band analysis
    - Peer comparison engine
-   - Scenario engine (Bear/Base/Bull with explicit assumptions)
+   - Scenario engine (Bear/Base/Bull with explicit assumptions per scenario)
    - Financial forensics / red flag scoring
    - Golden dataset tests with hand-verified calculations
 2. **Phase 7: Agent Orchestration (LangGraph)**

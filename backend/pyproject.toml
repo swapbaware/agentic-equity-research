@@ -56,6 +56,7 @@ select = [
 "app/services/*.py" = ["TCH002", "TCH003"]
 "app/api/**/*.py" = ["TCH001", "TCH002", "TCH003"]
 "app/providers/*.py" = ["TCH001", "TCH002", "TCH003"]
+"app/valuation/*.py" = ["TCH001", "TCH003"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]

@@ -306,7 +306,9 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 
 **Phase 6d (COMPLETE):** Foundation Hardening — mypy strict zero errors, ruff zero errors, documentation synchronized, technical debt register updated.
 
-**Deferred to Phase 6e:** DCF model, Reverse DCF, multiple-based valuation models (P/E, EV/EBITDA, P/S, P/B, PEG, FCF Yield, EV/FCF), historical valuation band analysis, peer comparison engine, scenario engine (Bear/Base/Bull), financial forensics / red flag scoring.
+**Phase 6e.1 (COMPLETE):** Deterministic DCF Valuation Engine — pure functional `dcf_valuation()` under `app/valuation/`, Decimal-only, no DB/HTTP/LLM. WACC calculation (CAPM), year-by-year FCF projection (EBIT-based NOPAT), Gordon Growth and Exit Multiple terminal value, 7×7 sensitivity matrix, CalculationResult audit trail. 69 tests with hand-verified golden dataset. Commit pending.
+
+**Deferred to Phase 6e.2:** Reverse DCF, multiple-based valuation models (P/E, EV/EBITDA, P/S, P/B, PEG, FCF Yield, EV/FCF), historical valuation band analysis, peer comparison engine, scenario engine (Bear/Base/Bull), financial forensics / red flag scoring.
 
 ---
 
