@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-09-28
+**Last Updated:** 2026-09-29
 
 ---
 
@@ -252,11 +252,31 @@
 - [x] tsc strict: zero errors
 - [x] Frontend: 5 tests passing
 
+### Phase 6e.4: Historical Valuation Bands — COMPLETE
+
+- [x] `app/valuation/models.py` — Added FinancialPeriodType enum (ANNUAL, TTM), ObservationStatus enum (7 statuses), DataSufficiency enum (5 levels), DataSufficiencyThresholds, HistoricalObservationInput, HistoricalValuationObservation, PercentileBand, ValuationBandStatistics, CurrentValuationPosition, HistoricalValuationResult
+- [x] `app/valuation/historical_bands.py` — Deterministic, frequency-agnostic engine: 6 methods (P/E, EV/EBITDA, P/S, P/B, FCF Yield, EV/FCF), point-in-time validation, look-ahead bias prevention, duplicate detection (identical→dedup, contradictory→error), nearest-rank percentile bands, midpoint percentile rank, current position with distance_from_median_pct
+- [x] `app/valuation/__init__.py` — Exports: historical_valuation_bands, HistoricalBandError, all new model types
+- [x] Six valuation methods: P/E (Price/EPS), EV/EBITDA, P/S (MCap/Revenue), P/B (MCap/Equity), FCF Yield (EquityFCF/MCap, CashFlowBasis.EQUITY_FCF), EV/FCF (EV/FCFF, CashFlowBasis.FCFF)
+- [x] FCFF = EBIT×(1−t) + D&A − CapEx − ΔNWC (consistent with Phase 6e.3)
+- [x] Point-in-time correctness: financials_available_date <= observation_date → VALID; future → LOOK_AHEAD_RISK; null → UNVERIFIED_TIMING
+- [x] VALID observations only in primary statistics; UNVERIFIED_TIMING and LOOK_AHEAD_RISK excluded
+- [x] Validation order: structural → duplicate → timing → method-specific
+- [x] Determinism: no date.today(), no datetime.now(), calculated_at is caller-supplied passthrough
+- [x] All Decimal arithmetic, never float
+- [x] `tests/test_valuation_bands.py` — 108 tests across 25 test classes: all six methods, point-in-time validation, duplicate detection, structural validation, statistics (min/max/mean/median/std_dev), nearest-rank percentile bands, midpoint percentile rank, data sufficiency, current position, lookback filtering, edge cases, determinism, median/std_dev helpers, immutability, golden datasets (P/E 5-obs, EV/EBITDA 3-obs, FCF Yield, EV/FCF FCFF), TTM period type, mixed statuses, engine version, method field propagation
+- [x] All 108 historical valuation bands tests passing
+- [x] Full backend: 960 passed, 1 known failure (TD-6), 7 skipped
+- [x] mypy strict: zero errors on valuation module
+- [x] ruff: zero errors
+- [x] tsc strict: zero errors
+- [x] Frontend: 5 tests passing
+
 ---
 
 ## Current Phase
 
-**Next Phase:** Phase 6e.4 — Historical Valuation Bands
+**Next Phase:** Phase 6e.5 — Peer Comparison Engine
 
 ---
 
@@ -278,6 +298,7 @@
 - Deterministic DCF Valuation Engine: pure functional, Decimal-only, WACC/FCF/terminal value/sensitivity, CalculationResult audit trail, 69 tests with golden dataset
 - Reverse DCF: bisection solver for implied revenue growth rate, treats forward DCF as black-box oracle, dual convergence criteria, structured no-solution handling, 37 tests with round-trip verification
 - Multiple-Based Valuation Engine: 7 methods (P/E, EV/EBITDA, P/S, P/B, PEG, FCF Yield, EV/FCF), FCFF-based EV/FCF with ΔNWC derivation, CashFlowBasis metadata, 129 tests with golden datasets
+- Historical Valuation Bands: 6 methods (P/E, EV/EBITDA, P/S, P/B, FCF Yield, EV/FCF), point-in-time correctness, look-ahead bias prevention, nearest-rank percentile bands, midpoint percentile rank, current position, frequency-agnostic, 108 tests with golden datasets
 
 ---
 
@@ -356,7 +377,7 @@
 | TD-4 | Domain value objects not implemented: Money, Percentage, FinancialRatio, DateRange, SourceCitation, CAGRResult | Phase 3 | Implement when agent layer needs typed value passing; raw Decimal works for current analytics engine |
 | TD-5 | PriceHistory provider interface not implemented — impl plan specified 12 interfaces but only 11 built | Phase 5 | Evaluate whether PriceHistory should be a separate interface or folded into MarketDataProvider when historical analysis features are built |
 | TD-6 | Readiness test (`test_ready_returns_200`) requires running PostgreSQL — cannot pass in unit test mode | Phase 2 | Requires PostgreSQL with migrations applied; document as integration test and verify with infrastructure |
-| TD-7 | Valuation engine gap — historical valuation bands, peer comparison, scenario engine not yet implemented (DCF, Reverse DCF, multiple-based valuation complete) | Phase 6 | Phase 6e.4+ — required before agent orchestration |
+| TD-7 | Valuation engine gap — peer comparison, scenario engine not yet implemented (DCF, Reverse DCF, multiple-based valuation, historical valuation bands complete) | Phase 6 | Phase 6e.5+ — required before agent orchestration |
 | TD-8 | Financial forensics / red flag scoring not implemented | Phase 6 | Phase 6e — part of original Phase 6 scope |
 | TD-9 | Document ingestion pipeline, S3 storage, embedding/pgvector semantic search not implemented (partial evidence subsystem) | Phase 4 | Required for full citation chain; implement before or during agent layer |
 | TD-10 | Repository layer exists only for evidence and screener — not all 28 domain entities | Phase 3 | Build repositories as needed when agents/API endpoints require them |

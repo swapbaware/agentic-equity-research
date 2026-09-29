@@ -312,7 +312,9 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 
 **Phase 6e.3 (COMPLETE):** Multiple-Based Valuation Engine — 7 deterministic methods (P/E, EV/EBITDA, P/S, P/B, PEG, FCF Yield, EV/FCF) in `app/valuation/multiples.py`. P/E, P/S, P/B, PEG, FCF Yield are equity-based; EV/EBITDA and EV/FCF are enterprise-based with net debt bridge. FCF Yield uses equity FCF (CFO−CapEx) with CashFlowBasis.EQUITY_FCF. EV/FCF uses FCFF (EBIT×(1−t)+D&A−CapEx−ΔNWC) with CashFlowBasis.FCFF, accepting two periods for deterministic ΔNWC derivation. PEG uses growth in percentage points. All Decimal-only, CalculationResult audit trail, frozen Pydantic v2 MultipleValuationResult. 129 tests with golden datasets.
 
-**Deferred to Phase 6e.4+:** Historical valuation band analysis, peer comparison engine, scenario engine (Bear/Base/Bull), financial forensics / red flag scoring.
+**Phase 6e.4 (COMPLETE):** Historical Valuation Bands — Deterministic, frequency-agnostic engine in `app/valuation/historical_bands.py`. 6 methods (P/E, EV/EBITDA, P/S, P/B, FCF Yield, EV/FCF); computation direction is observed price → ratio (opposite of Phase 6e.3). Point-in-time correctness via financials_available_date (VALID, LOOK_AHEAD_RISK, UNVERIFIED_TIMING). Only VALID observations in primary statistics. Validation order: structural → duplicate → timing → method-specific. Duplicate handling: identical→dedup, contradictory→HistoricalBandError. Nearest-rank percentile bands (index=ceil(P/100×N)−1). Midpoint percentile rank ((below+0.5×equal)/total×100). CurrentValuationPosition with distance_from_median_pct. DataSufficiency heuristics (INSUFFICIENT/MINIMAL/LOW/MODERATE/ADEQUATE). Full determinism: no system clock, calculated_at is caller-supplied passthrough. 108 tests with golden datasets. Commit `f4e9465`.
+
+**Deferred to Phase 6e.5+:** Peer comparison engine, scenario engine (Bear/Base/Bull), financial forensics / red flag scoring.
 
 ---
 

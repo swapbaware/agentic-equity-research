@@ -5,7 +5,7 @@ values use decimal.Decimal. Models are frozen for immutability.
 """
 from __future__ import annotations
 
-from datetime import datetime  # noqa: TC003 — Pydantic needs at runtime
+from datetime import date, datetime  # noqa: TC003 — Pydantic needs at runtime
 from decimal import Decimal
 from enum import StrEnum
 
@@ -246,3 +246,135 @@ class MultipleValuationResult(BaseModel):
     calculated_at: datetime
     engine_version: str
     period: str
+
+
+# ---------------------------------------------------------------------------
+# Historical Valuation Bands (Phase 6e.4)
+# ---------------------------------------------------------------------------
+
+
+class FinancialPeriodType(StrEnum):
+    ANNUAL = "annual"
+    TTM = "ttm"
+
+
+class ObservationStatus(StrEnum):
+    VALID = "valid"
+    EXCLUDED_NEGATIVE_DENOMINATOR = "excluded_negative_denominator"
+    EXCLUDED_ZERO_DENOMINATOR = "excluded_zero_denominator"
+    EXCLUDED_MISSING_DATA = "excluded_missing_data"
+    LOOK_AHEAD_RISK = "look_ahead_risk"
+    UNVERIFIED_TIMING = "unverified_timing"
+    DUPLICATE_OBSERVATION = "duplicate_observation"
+
+
+class DataSufficiency(StrEnum):
+    INSUFFICIENT = "insufficient"
+    MINIMAL = "minimal"
+    LOW = "low"
+    MODERATE = "moderate"
+    ADEQUATE = "adequate"
+
+
+class DataSufficiencyThresholds(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    min_minimal: int = 4
+    min_low: int = 12
+    min_moderate: int = 52
+
+
+class HistoricalObservationInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    observation_date: date
+    price: Decimal
+    shares_outstanding: Decimal
+
+    financial_period: str
+    financial_period_type: FinancialPeriodType
+    financials_available_date: date | None = None
+
+    eps: Decimal | None = None
+    revenue: Decimal | None = None
+    ebitda: Decimal | None = None
+    ebit: Decimal | None = None
+
+    total_equity: Decimal | None = None
+    total_debt: Decimal | None = None
+    cash_and_equivalents: Decimal | None = None
+
+    cfo: Decimal | None = None
+    capex: Decimal | None = None
+
+    depreciation_amortization: Decimal | None = None
+    effective_tax_rate: Decimal | None = None
+    delta_nwc: Decimal | None = None
+
+
+class HistoricalValuationObservation(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    observation_date: date
+    method: ValuationMethodType
+    status: ObservationStatus
+    value: Decimal | None = None
+    price: Decimal
+    shares_outstanding: Decimal
+    market_cap: Decimal | None = None
+    enterprise_value: Decimal | None = None
+    net_debt: Decimal | None = None
+    financial_period: str
+    financial_period_type: FinancialPeriodType
+    financials_available_date: date | None = None
+    cash_flow_basis: CashFlowBasis | None = None
+    calculation: CalculationResult | None = None
+
+
+class PercentileBand(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    percentile: Decimal
+    value: Decimal
+
+
+class ValuationBandStatistics(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    method: ValuationMethodType
+    valid_count: int
+    unverified_count: int
+    excluded_count: int
+    min: Decimal
+    max: Decimal
+    mean: Decimal
+    median: Decimal
+    std_dev: Decimal | None = None
+    bands: list[PercentileBand]
+    data_sufficiency: DataSufficiency
+    lookback_start: date | None = None
+    lookback_end: date | None = None
+    calculations: list[CalculationResult]
+
+
+class CurrentValuationPosition(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    method: ValuationMethodType
+    current_value: Decimal
+    percentile_rank: Decimal | None = None
+    distance_from_median_pct: Decimal | None = None
+    vs_median: Decimal | None = None
+    vs_p25: Decimal | None = None
+    vs_p75: Decimal | None = None
+
+
+class HistoricalValuationResult(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    method: ValuationMethodType
+    observations: list[HistoricalValuationObservation]
+    statistics: ValuationBandStatistics | None = None
+    current_position: CurrentValuationPosition | None = None
+    engine_version: str
+    calculated_at: datetime
