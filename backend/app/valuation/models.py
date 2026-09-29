@@ -1,4 +1,4 @@
-"""Pydantic models for the DCF Valuation Engine.
+"""Pydantic models for the Valuation Engine.
 
 Every assumption is an explicit field — no hidden defaults. All financial
 values use decimal.Decimal. Models are frozen for immutability.
@@ -12,6 +12,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from app.analytics.models import CalculationResult
+from app.models.enums import FindingType  # noqa: TC002 — Pydantic needs at runtime
 
 
 class TerminalMethod(StrEnum):
@@ -483,3 +484,119 @@ class PeerComparisonResult(BaseModel):
     peer_set_metadata: PeerSetMetadata | None = None
     engine_version: str
     calculated_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Scenario Engine (Phase 6e.6)
+# ---------------------------------------------------------------------------
+
+
+class ScenarioLabel(StrEnum):
+    BEAR = "bear"
+    BASE = "base"
+    BULL = "bull"
+
+
+class ScenarioExecutionStatus(StrEnum):
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class ScenarioDiagnostic(StrEnum):
+    VALUE_ORDER_UNEXPECTED = "value_order_unexpected"
+    IDENTICAL_ASSUMPTIONS = "identical_assumptions"
+    EXTREME_SPREAD = "extreme_spread"
+    MISSING_PROVENANCE = "missing_provenance"
+    SCENARIO_EXECUTION_FAILED = "scenario_execution_failed"
+    INCOMPLETE_COMPARISON = "incomplete_comparison"
+
+
+class AssumptionProvenance(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    parameter: str
+    value_description: str
+    evidence_category: FindingType
+    rationale: str
+    source_description: str | None = None
+
+
+class MultipleScenarioAssumption(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    method: ValuationMethodType
+    target_multiple: Decimal
+    target_name: str
+    rationale: str
+    evidence_category: FindingType
+
+    @field_validator("target_multiple")
+    @classmethod
+    def _positive(cls, v: Decimal) -> Decimal:
+        if v <= Decimal("0"):
+            msg = "target_multiple must be positive"
+            raise ValueError(msg)
+        return v
+
+
+class ScenarioDefinition(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    label: ScenarioLabel
+    narrative: str
+    dcf_assumptions: DCFAssumptions
+    multiple_assumptions: list[MultipleScenarioAssumption] | None = None
+    assumption_provenance: list[AssumptionProvenance]
+    probability_weight: Decimal | None = None
+
+    @field_validator("probability_weight")
+    @classmethod
+    def _weight_non_negative(cls, v: Decimal | None) -> Decimal | None:
+        if v is not None and v < Decimal("0"):
+            msg = "probability_weight must be >= 0"
+            raise ValueError(msg)
+        return v
+
+
+class SingleScenarioOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    label: ScenarioLabel
+    narrative: str
+    execution_status: ScenarioExecutionStatus
+    dcf_result: DCFResult | None
+    multiple_results: list[MultipleValuationResult]
+    assumption_provenance: list[AssumptionProvenance]
+    probability_weight: Decimal | None
+    implied_value_per_share: Decimal | None
+    error_message: str | None = None
+    diagnostics: list[ScenarioDiagnostic]
+
+
+class ScenarioComparison(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    value_range_low: Decimal | None
+    value_range_high: Decimal | None
+    value_range_midpoint: Decimal | None
+    probability_weighted_value: Decimal | None
+    current_price: Decimal
+    bear_implied_value: Decimal | None
+    base_implied_value: Decimal | None
+    bull_implied_value: Decimal | None
+    upside_to_bear: Decimal | None
+    upside_to_base: Decimal | None
+    upside_to_bull: Decimal | None
+    completed_scenario_count: int
+    calculations: list[CalculationResult]
+
+
+class ScenarioResult(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    scenarios: list[SingleScenarioOutput]
+    comparison: ScenarioComparison
+    calculations: list[CalculationResult]
+    calculated_at: datetime
+    engine_version: str
+    diagnostics: list[ScenarioDiagnostic]

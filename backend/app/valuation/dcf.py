@@ -30,6 +30,8 @@ def dcf_valuation(
     financials: list[PeriodFinancials],
     assumptions: DCFAssumptions,
     current_price: Decimal,
+    *,
+    calculated_at: datetime | None = None,
 ) -> DCFResult:
     """Compute a deterministic DCF valuation for one explicit assumption set.
 
@@ -193,6 +195,6 @@ def dcf_valuation(
         upside_downside_pct=upside_downside,
         sensitivity=sensitivity,
         calculations=audit,
-        calculated_at=datetime.now(UTC),
+        calculated_at=calculated_at if calculated_at is not None else datetime.now(UTC),
         engine_version=ENGINE_VERSION,
     )

@@ -176,6 +176,8 @@ def pe_valuation(
     financials: PeriodFinancials,
     target_pe: Decimal,
     current_price: Decimal | None = None,
+    *,
+    calculated_at: datetime | None = None,
 ) -> MultipleValuationResult:
     """Implied value per share = EPS × Target P/E."""
     eps = _require_positive(financials.eps, "eps")
@@ -219,7 +221,7 @@ def pe_valuation(
         implied_pe=None,
         cash_flow_basis=None,
         calculations=audit,
-        calculated_at=datetime.now(UTC),
+        calculated_at=calculated_at if calculated_at is not None else datetime.now(UTC),
         engine_version=ENGINE_VERSION,
         period=period,
     )
@@ -234,6 +236,8 @@ def ev_ebitda_valuation(
     financials: PeriodFinancials,
     target_ev_ebitda: Decimal,
     current_price: Decimal | None = None,
+    *,
+    calculated_at: datetime | None = None,
 ) -> MultipleValuationResult:
     """Implied EV = EBITDA × Target EV/EBITDA, then EV → equity → per share."""
     ebitda = _require_positive(financials.ebitda, "ebitda")
@@ -283,7 +287,7 @@ def ev_ebitda_valuation(
         implied_pe=None,
         cash_flow_basis=None,
         calculations=audit,
-        calculated_at=datetime.now(UTC),
+        calculated_at=calculated_at if calculated_at is not None else datetime.now(UTC),
         engine_version=ENGINE_VERSION,
         period=period,
     )
@@ -298,6 +302,8 @@ def ps_valuation(
     financials: PeriodFinancials,
     target_ps: Decimal,
     current_price: Decimal | None = None,
+    *,
+    calculated_at: datetime | None = None,
 ) -> MultipleValuationResult:
     """Implied equity value = Revenue × Target P/S, then per share."""
     revenue = _require_positive(financials.revenue, "revenue")
@@ -340,7 +346,7 @@ def ps_valuation(
         implied_pe=None,
         cash_flow_basis=None,
         calculations=audit,
-        calculated_at=datetime.now(UTC),
+        calculated_at=calculated_at if calculated_at is not None else datetime.now(UTC),
         engine_version=ENGINE_VERSION,
         period=period,
     )
@@ -355,6 +361,8 @@ def pb_valuation(
     financials: PeriodFinancials,
     target_pb: Decimal,
     current_price: Decimal | None = None,
+    *,
+    calculated_at: datetime | None = None,
 ) -> MultipleValuationResult:
     """Implied equity value = Book Value (total_equity) × Target P/B, then per share."""
     book_value = _require_positive(financials.total_equity, "total_equity")
@@ -397,7 +405,7 @@ def pb_valuation(
         implied_pe=None,
         cash_flow_basis=None,
         calculations=audit,
-        calculated_at=datetime.now(UTC),
+        calculated_at=calculated_at if calculated_at is not None else datetime.now(UTC),
         engine_version=ENGINE_VERSION,
         period=period,
     )
@@ -413,6 +421,8 @@ def peg_valuation(
     target_peg: Decimal,
     earnings_growth_pct: Decimal,
     current_price: Decimal | None = None,
+    *,
+    calculated_at: datetime | None = None,
 ) -> MultipleValuationResult:
     """Implied P/E = PEG × Growth%, Implied Value = EPS × Implied P/E.
 
@@ -476,7 +486,7 @@ def peg_valuation(
         implied_pe=implied_pe,
         cash_flow_basis=None,
         calculations=audit,
-        calculated_at=datetime.now(UTC),
+        calculated_at=calculated_at if calculated_at is not None else datetime.now(UTC),
         engine_version=ENGINE_VERSION,
         period=period,
     )
@@ -491,6 +501,8 @@ def fcf_yield_valuation(
     financials: PeriodFinancials,
     target_fcf_yield: Decimal,
     current_price: Decimal | None = None,
+    *,
+    calculated_at: datetime | None = None,
 ) -> MultipleValuationResult:
     """Equity FCF = CFO − CapEx. Implied Market Cap = Equity FCF / Target Yield."""
     cfo = _require_present(financials.cfo, "cfo")
@@ -550,7 +562,7 @@ def fcf_yield_valuation(
         implied_pe=None,
         cash_flow_basis=CashFlowBasis.EQUITY_FCF,
         calculations=audit,
-        calculated_at=datetime.now(UTC),
+        calculated_at=calculated_at if calculated_at is not None else datetime.now(UTC),
         engine_version=ENGINE_VERSION,
         period=period,
     )
@@ -566,6 +578,8 @@ def ev_fcf_valuation(
     prior_financials: PeriodFinancials,
     target_ev_fcf: Decimal,
     current_price: Decimal | None = None,
+    *,
+    calculated_at: datetime | None = None,
 ) -> MultipleValuationResult:
     """EV/FCF using FCFF = EBIT×(1−t) + D&A − CapEx − ΔNWC.
 
@@ -698,7 +712,7 @@ def ev_fcf_valuation(
         implied_pe=None,
         cash_flow_basis=CashFlowBasis.FCFF,
         calculations=audit,
-        calculated_at=datetime.now(UTC),
+        calculated_at=calculated_at if calculated_at is not None else datetime.now(UTC),
         engine_version=ENGINE_VERSION,
         period=period,
     )

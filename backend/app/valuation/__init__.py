@@ -11,6 +11,7 @@ from app.valuation.historical_bands import (
     historical_valuation_bands,
 )
 from app.valuation.models import (
+    AssumptionProvenance,
     CashFlowBasis,
     ConvergenceStatus,
     CurrentValuationPosition,
@@ -22,6 +23,7 @@ from app.valuation.models import (
     HistoricalObservationInput,
     HistoricalValuationObservation,
     HistoricalValuationResult,
+    MultipleScenarioAssumption,
     MultipleValuationResult,
     ObservationStatus,
     PeerComparisonResult,
@@ -33,7 +35,14 @@ from app.valuation.models import (
     PercentileBand,
     ProjectedYear,
     ReverseDCFResult,
+    ScenarioComparison,
+    ScenarioDefinition,
+    ScenarioDiagnostic,
+    ScenarioExecutionStatus,
+    ScenarioLabel,
+    ScenarioResult,
     SensitivityCell,
+    SingleScenarioOutput,
     TargetVsPeerPosition,
     TerminalValueResult,
     ValuationBandStatistics,
@@ -55,8 +64,15 @@ from app.valuation.peer_comparison import (
     compare_peers,
 )
 from app.valuation.reverse_dcf import reverse_dcf
+from app.valuation.scenario import (
+    ScenarioEngineError,
+    ScenarioExecutionError,
+    ScenarioValidationError,
+    run_scenarios,
+)
 
 __all__ = [
+    "AssumptionProvenance",
     "CashFlowBasis",
     "ConvergenceStatus",
     "CurrentValuationPosition",
@@ -69,6 +85,7 @@ __all__ = [
     "HistoricalObservationInput",
     "HistoricalValuationObservation",
     "HistoricalValuationResult",
+    "MultipleScenarioAssumption",
     "MultipleValuationError",
     "MultipleValuationResult",
     "ObservationStatus",
@@ -82,7 +99,17 @@ __all__ = [
     "PercentileBand",
     "ProjectedYear",
     "ReverseDCFResult",
+    "ScenarioComparison",
+    "ScenarioDefinition",
+    "ScenarioDiagnostic",
+    "ScenarioEngineError",
+    "ScenarioExecutionError",
+    "ScenarioExecutionStatus",
+    "ScenarioLabel",
+    "ScenarioResult",
+    "ScenarioValidationError",
     "SensitivityCell",
+    "SingleScenarioOutput",
     "TargetVsPeerPosition",
     "TerminalValueResult",
     "ValuationBandStatistics",
@@ -99,4 +126,5 @@ __all__ = [
     "peg_valuation",
     "ps_valuation",
     "reverse_dcf",
+    "run_scenarios",
 ]

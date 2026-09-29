@@ -288,11 +288,27 @@
 - [x] tsc strict: zero errors
 - [x] Frontend: 5 tests passing
 
+### Phase 6e.6: Scenario Engine (Bear/Base/Bull) — COMPLETE
+
+- [x] `app/valuation/models.py` — Added 9 scenario models after PeerComparisonResult: ScenarioLabel (BEAR/BASE/BULL), ScenarioExecutionStatus (COMPLETED/FAILED), ScenarioDiagnostic (6 values), AssumptionProvenance (parameter, value_description, evidence_category via FindingType, rationale), MultipleScenarioAssumption (method + target_multiple with positive validator), ScenarioDefinition (label, narrative, dcf_assumptions, optional multiple_assumptions, optional probability_weight with non-negative validator, optional assumption_provenance), SingleScenarioOutput (execution_status, dcf_result, multiple_results, implied_value, error_message, diagnostics), ScenarioComparison (value_range, midpoint, probability_weighted_value, upside/downside per scenario, completed_scenario_count, calculations audit trail), ScenarioResult (scenarios, comparison, diagnostics, calculated_at, engine_version). All frozen Pydantic v2 with ConfigDict(frozen=True).
+- [x] `app/valuation/dcf.py` — Added `calculated_at: datetime | None = None` keyword argument for caller-supplied determinism. Backward-compatible (defaults to `datetime.now(UTC)`).
+- [x] `app/valuation/multiples.py` — Added `calculated_at: datetime | None = None` to all 7 valuation functions (pe, ev_ebitda, ps, pb, peg, fcf_yield, ev_fcf). Backward-compatible.
+- [x] `app/valuation/scenario.py` — ~280-line scenario engine. Thin orchestration layer, no formula duplication. ENGINE_VERSION="1.0.0". Error hierarchy: ScenarioEngineError → ScenarioValidationError, ScenarioExecutionError. `_validate_scenarios()` enforces exactly 3 labels, probability weight all-or-none + sum-to-1. `_dispatch_multiple()` typed dispatch to 7 existing valuation functions. `_execute_scenario()` delegates to dcf_valuation with error handling (DCFValidationError/TerminalValueError/ValueError). `_build_comparison()` computes range/midpoint/pwv/upside per scenario. `_collect_diagnostics()` detects VALUE_ORDER_UNEXPECTED, IDENTICAL_ASSUMPTIONS, EXTREME_SPREAD, INCOMPLETE_COMPARISON. `run_scenarios()` main entry: validate → execute BEAR/BASE/BULL → build comparison → collect diagnostics → return ScenarioResult. Raises ScenarioExecutionError if all 3 fail.
+- [x] `app/valuation/__init__.py` — Updated exports: ScenarioLabel, ScenarioExecutionStatus, ScenarioDiagnostic, AssumptionProvenance, MultipleScenarioAssumption, ScenarioDefinition, SingleScenarioOutput, ScenarioComparison, ScenarioResult, ScenarioEngineError, ScenarioValidationError, ScenarioExecutionError, run_scenarios
+- [x] `tests/test_scenario_engine.py` — 99 tests across 22+ test classes: model validation, exactly-3-scenarios, duplicate/missing labels, input validation, probability weights, DCF delegation, multiple delegation, scenario failure handling, comparison (range/midpoint/pwv/upside), diagnostics (value ordering/identical assumptions/extreme spread/incomplete), provenance, audit trail, Decimal arithmetic, determinism (calculated_at passthrough), sensitivity boundary, boundaries (zero/max equity), value ordering (diagnostic only), FCFF consistency (EV/FCF two periods), projection validation, error hierarchy, golden dataset A (bear=94.0153, base=223.3635, bull=357.2581), golden dataset B (PE multiples 12x/18x/25x), reverse DCF regression, immutability
+- [x] All 99 scenario engine tests passing
+- [x] All 582 valuation tests passing (483 existing + 99 scenario = zero regressions)
+- [x] Full backend: 1192 passed, 7 skipped, 1 known failure (TD-6)
+- [x] mypy strict: zero errors on valuation module (preexisting numpy stub issue unrelated to this phase)
+- [x] ruff: zero errors
+- [x] FindingType reused from app.models.enums (FACT, CALCULATION, MANAGEMENT_CLAIM, ANALYST_OPINION, AI_INFERENCE, ASSUMPTION, UNCERTAINTY)
+- [x] No persistence, no ORM, no database, no LLM, no network
+
 ---
 
 ## Current Phase
 
-**Next Phase:** Phase 6e.6 — Scenario Engine
+**Next Phase:** Phase 6e.7 — Financial Forensics / Red Flag Scoring
 
 ---
 
@@ -316,6 +332,7 @@
 - Multiple-Based Valuation Engine: 7 methods (P/E, EV/EBITDA, P/S, P/B, PEG, FCF Yield, EV/FCF), FCFF-based EV/FCF with ΔNWC derivation, CashFlowBasis metadata, 129 tests with golden datasets
 - Historical Valuation Bands: 6 methods (P/E, EV/EBITDA, P/S, P/B, FCF Yield, EV/FCF), point-in-time correctness, look-ahead bias prevention, nearest-rank percentile bands, midpoint percentile rank, current position, frequency-agnostic, 108 tests with golden datasets
 - Peer Comparison Engine: 6 methods, explicit peer set input, rank_if_inserted positioning, cross-sectional statistics, peer-specific data sufficiency, target-as-peer exclusion, duplicate detection, mixed currencies, shared helper extraction (_valuation_calc.py), 89 tests with golden datasets and cross-engine consistency
+- Scenario Engine (Bear/Base/Bull): thin orchestration over DCF + multiples engines, exactly 3 scenarios required, explicit failure modeling (ScenarioExecutionStatus), probability-weighted value, 6 diagnostics, AssumptionProvenance with FindingType, deterministic calculated_at passthrough, 99 tests with golden datasets
 
 ---
 
@@ -394,7 +411,7 @@
 | TD-4 | Domain value objects not implemented: Money, Percentage, FinancialRatio, DateRange, SourceCitation, CAGRResult | Phase 3 | Implement when agent layer needs typed value passing; raw Decimal works for current analytics engine |
 | TD-5 | PriceHistory provider interface not implemented — impl plan specified 12 interfaces but only 11 built | Phase 5 | Evaluate whether PriceHistory should be a separate interface or folded into MarketDataProvider when historical analysis features are built |
 | TD-6 | Readiness test (`test_ready_returns_200`) requires running PostgreSQL — cannot pass in unit test mode | Phase 2 | Requires PostgreSQL with migrations applied; document as integration test and verify with infrastructure |
-| TD-7 | Valuation engine gap — scenario engine not yet implemented (DCF, Reverse DCF, multiple-based valuation, historical valuation bands, peer comparison complete) | Phase 6 | Phase 6e.6+ — required before agent orchestration |
+| TD-7 | Valuation engine gap — financial forensics / red flag scoring not yet implemented (DCF, Reverse DCF, multiples, historical bands, peer comparison, scenario engine complete) | Phase 6 | Phase 6e.7+ — required before agent orchestration |
 | TD-8 | Financial forensics / red flag scoring not implemented | Phase 6 | Phase 6e — part of original Phase 6 scope |
 | TD-9 | Document ingestion pipeline, S3 storage, embedding/pgvector semantic search not implemented (partial evidence subsystem) | Phase 4 | Required for full citation chain; implement before or during agent layer |
 | TD-10 | Repository layer exists only for evidence and screener — not all 28 domain entities | Phase 3 | Build repositories as needed when agents/API endpoints require them |
@@ -404,9 +421,8 @@
 
 ## Next Actions
 
-1. **Phase 6e.6: Scenario Engine**
-   - Scenario engine (Bear/Base/Bull with explicit assumptions per scenario)
-   - Financial forensics / red flag scoring
+1. **Phase 6e.7: Financial Forensics / Red Flag Scoring**
+   - Forensic quality checks and red flag detection
    - Golden dataset tests with hand-verified calculations
 2. **Phase 7: Agent Orchestration (LangGraph)**
    - LangGraph state machine with typed ResearchState
