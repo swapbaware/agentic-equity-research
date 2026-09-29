@@ -776,6 +776,90 @@ class TestProvenance:
         for s in result.scenarios:
             assert s.assumption_provenance[0].evidence_category == FindingType.ASSUMPTION
 
+    def test_missing_provenance_diagnostic(self) -> None:
+        bear = ScenarioDefinition(
+            label=ScenarioLabel.BEAR, narrative="No prov",
+            dcf_assumptions=_assumptions(growth=_BEAR_GROWTH, margin=_BEAR_MARGIN, wacc=_BEAR_WACC),
+            assumption_provenance=[],
+        )
+        base = _base_def()
+        bull = _bull_def()
+        result = run_scenarios([_FY2024], [bear, base, bull], _PRICE, _TS)
+        assert ScenarioDiagnostic.MISSING_PROVENANCE in result.diagnostics
+
+    def test_all_provenance_present_no_diagnostic(self) -> None:
+        result = run_scenarios([_FY2024], _standard_scenarios(), _PRICE, _TS)
+        assert ScenarioDiagnostic.MISSING_PROVENANCE not in result.diagnostics
+
+    def test_provenance_covers_dcf_assumptions(self) -> None:
+        prov = [
+            AssumptionProvenance(
+                parameter="revenue_growth_rates", value_description="5% bear",
+                evidence_category=FindingType.ASSUMPTION, rationale="sector decline",
+            ),
+            AssumptionProvenance(
+                parameter="ebit_margin", value_description="15% bear",
+                evidence_category=FindingType.AI_INFERENCE, rationale="margin compression",
+            ),
+            AssumptionProvenance(
+                parameter="wacc", value_description="12%",
+                evidence_category=FindingType.CALCULATION, rationale="CAPM",
+            ),
+            AssumptionProvenance(
+                parameter="terminal_growth_rate", value_description="3%",
+                evidence_category=FindingType.ASSUMPTION, rationale="GDP proxy",
+            ),
+            AssumptionProvenance(
+                parameter="capex_pct_revenue", value_description="5%",
+                evidence_category=FindingType.FACT, rationale="historical average",
+            ),
+            AssumptionProvenance(
+                parameter="da_pct_revenue", value_description="3%",
+                evidence_category=FindingType.FACT, rationale="historical average",
+            ),
+        ]
+        bear = ScenarioDefinition(
+            label=ScenarioLabel.BEAR, narrative="Full provenance",
+            dcf_assumptions=_assumptions(growth=_BEAR_GROWTH, margin=_BEAR_MARGIN, wacc=_BEAR_WACC),
+            assumption_provenance=prov,
+        )
+        base = _base_def()
+        bull = _bull_def()
+        result = run_scenarios([_FY2024], [bear, base, bull], _PRICE, _TS)
+        bear_out = result.scenarios[0]
+        params = {p.parameter for p in bear_out.assumption_provenance}
+        assert "revenue_growth_rates" in params
+        assert "ebit_margin" in params
+        assert "wacc" in params
+        assert "terminal_growth_rate" in params
+        assert "capex_pct_revenue" in params
+        assert "da_pct_revenue" in params
+
+    def test_provenance_covers_multiple_assumptions(self) -> None:
+        prov = [
+            AssumptionProvenance(
+                parameter="target_pe", value_description="12x",
+                evidence_category=FindingType.ANALYST_OPINION, rationale="sector trough",
+            ),
+        ]
+        pe = MultipleScenarioAssumption(
+            method=ValuationMethodType.PE, target_multiple=D("12"),
+            target_name="Bear PE", rationale="sector trough",
+            evidence_category=FindingType.ANALYST_OPINION,
+        )
+        bear = ScenarioDefinition(
+            label=ScenarioLabel.BEAR, narrative="PE bear",
+            dcf_assumptions=_assumptions(growth=_BEAR_GROWTH, margin=_BEAR_MARGIN, wacc=_BEAR_WACC),
+            assumption_provenance=prov,
+            multiple_assumptions=[pe],
+        )
+        base = _base_def()
+        bull = _bull_def()
+        result = run_scenarios([_FY2024], [bear, base, bull], _PRICE, _TS)
+        bear_out = result.scenarios[0]
+        assert bear_out.assumption_provenance[0].parameter == "target_pe"
+        assert bear_out.multiple_results[0].implied_value_per_share == D("180.0000")
+
 
 # ---------------------------------------------------------------------------
 # CalculationResult Audit Trail
@@ -832,12 +916,50 @@ class TestDeterminism:
         assert r1.comparison.value_range_midpoint == r2.comparison.value_range_midpoint
         assert r1.calculated_at == r2.calculated_at
 
-    def test_different_calculated_at_different_result(self) -> None:
+    def test_different_calculated_at_changes_metadata_not_calculations(self) -> None:
         ts2 = datetime(2026, 6, 1, tzinfo=UTC)
         r1 = run_scenarios([_FY2024], _standard_scenarios(), _PRICE, _TS)
         r2 = run_scenarios([_FY2024], _standard_scenarios(), _PRICE, ts2)
         assert r1.calculated_at != r2.calculated_at
         assert r1.comparison.bear_implied_value == r2.comparison.bear_implied_value
+        assert r1.comparison.base_implied_value == r2.comparison.base_implied_value
+        assert r1.comparison.bull_implied_value == r2.comparison.bull_implied_value
+        assert r1.comparison.value_range_midpoint == r2.comparison.value_range_midpoint
+        assert r1.comparison.probability_weighted_value == r2.comparison.probability_weighted_value
+
+    def test_no_hidden_system_clock_dependency(self) -> None:
+        import time
+
+        r1 = run_scenarios([_FY2024], _standard_scenarios(), _PRICE, _TS)
+        time.sleep(0.01)
+        r2 = run_scenarios([_FY2024], _standard_scenarios(), _PRICE, _TS)
+        assert r1.calculated_at == r2.calculated_at == _TS
+        for s1, s2 in zip(r1.scenarios, r2.scenarios, strict=True):
+            assert s1.dcf_result is not None
+            assert s2.dcf_result is not None
+            assert s1.dcf_result.calculated_at == s2.dcf_result.calculated_at == _TS
+            assert s1.dcf_result.implied_value_per_share == s2.dcf_result.implied_value_per_share
+
+    def test_calculated_at_propagated_to_dcf_results(self) -> None:
+        result = run_scenarios([_FY2024], _standard_scenarios(), _PRICE, _TS)
+        for s in result.scenarios:
+            assert s.dcf_result is not None
+            assert s.dcf_result.calculated_at == _TS
+
+    def test_calculated_at_propagated_to_multiple_results(self) -> None:
+        pe = MultipleScenarioAssumption(
+            method=ValuationMethodType.PE, target_multiple=D("15"),
+            target_name="PE", rationale="test",
+            evidence_category=FindingType.ASSUMPTION,
+        )
+        scenarios = [
+            _bear_def(multiple_assumptions=[pe]),
+            _base_def(),
+            _bull_def(),
+        ]
+        result = run_scenarios([_FY2024], scenarios, _PRICE, _TS)
+        mr = result.scenarios[0].multiple_results[0]
+        assert mr.calculated_at == _TS
 
 
 # ---------------------------------------------------------------------------
@@ -857,11 +979,11 @@ class TestDCFCalculatedAt:
         assert r2.calculated_at == ts2
         assert r1.implied_value_per_share == r2.implied_value_per_share
 
-    def test_dcf_none_calculated_at_uses_now(self) -> None:
+    def test_dcf_requires_calculated_at(self) -> None:
         from app.valuation.dcf import dcf_valuation
 
-        r = dcf_valuation([_FY2024], _assumptions(), _PRICE)
-        assert r.calculated_at is not None
+        with pytest.raises(TypeError, match="calculated_at"):
+            dcf_valuation([_FY2024], _assumptions(), _PRICE)  # type: ignore[call-arg]
 
 
 # ---------------------------------------------------------------------------
@@ -1216,7 +1338,7 @@ class TestReverseDCFRegression:
     def test_reverse_dcf_still_works(self) -> None:
         from app.valuation.reverse_dcf import reverse_dcf
 
-        r = reverse_dcf([_FY2024], _assumptions(), D("223"))
+        r = reverse_dcf([_FY2024], _assumptions(), D("223"), calculated_at=_TS)
         assert r.convergence_status.value in {"converged", "max_iterations"}
         assert r.dcf_result is not None
 

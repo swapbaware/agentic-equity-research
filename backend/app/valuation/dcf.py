@@ -8,7 +8,7 @@ All arithmetic uses decimal.Decimal.
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 
 from app.analytics.models import RATIO_QUANTIZE, ROUNDING, CalculationResult, PeriodFinancials
@@ -31,7 +31,7 @@ def dcf_valuation(
     assumptions: DCFAssumptions,
     current_price: Decimal,
     *,
-    calculated_at: datetime | None = None,
+    calculated_at: datetime,
 ) -> DCFResult:
     """Compute a deterministic DCF valuation for one explicit assumption set.
 
@@ -195,6 +195,6 @@ def dcf_valuation(
         upside_downside_pct=upside_downside,
         sensitivity=sensitivity,
         calculations=audit,
-        calculated_at=calculated_at if calculated_at is not None else datetime.now(UTC),
+        calculated_at=calculated_at,
         engine_version=ENGINE_VERSION,
     )

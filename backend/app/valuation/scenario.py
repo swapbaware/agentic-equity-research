@@ -367,6 +367,9 @@ def _collect_diagnostics(
     if 0 < failed_count < 3:  # noqa: PLR2004
         diags.append(ScenarioDiagnostic.INCOMPLETE_COMPARISON)
 
+    if any(not s.assumption_provenance for s in scenarios):
+        diags.append(ScenarioDiagnostic.MISSING_PROVENANCE)
+
     return diags
 
 

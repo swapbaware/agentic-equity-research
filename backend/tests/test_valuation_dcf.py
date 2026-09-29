@@ -5,6 +5,7 @@ validation error tests.
 """
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -18,6 +19,9 @@ from app.valuation.models import (
     WACCComponents,
 )
 from app.valuation.terminal import TerminalValueError
+
+D = Decimal
+_TS = datetime(2026, 1, 1, tzinfo=UTC)
 
 # ---------------------------------------------------------------------------
 # Synthetic historical data (base for projections)
@@ -88,7 +92,7 @@ class TestGoldenDataset:
     """5-year DCF with hand-verified intermediate values."""
 
     def _run(self) -> DCFResult:
-        return dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"))
+        return dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"), calculated_at=_TS)
 
     def test_returns_dcf_result(self) -> None:
         result = self._run()
@@ -199,7 +203,7 @@ class TestWACCComponentsIntegration:
             debt_ratio=Decimal("0.30"),
         )
         assumptions = _base_assumptions(wacc=None, wacc_components=comp)
-        result = dcf_valuation([_FY2024], assumptions, Decimal("150"))
+        result = dcf_valuation([_FY2024], assumptions, Decimal("150"), calculated_at=_TS)
         # WACC = 0.70 × 0.13 + 0.30 × 0.0675 = 0.11125
         assert result.wacc_used == Decimal("0.111250")
         wacc_calcs = [c for c in result.calculations if c.metric == "cost_of_equity"]
@@ -217,7 +221,7 @@ class TestExitMultipleTerminal:
             terminal_method=TerminalMethod.EXIT_MULTIPLE,
             exit_multiple=Decimal("12"),
         )
-        result = dcf_valuation([_FY2024], assumptions, Decimal("150"))
+        result = dcf_valuation([_FY2024], assumptions, Decimal("150"), calculated_at=_TS)
         assert result.terminal_value.method == TerminalMethod.EXIT_MULTIPLE
         assert result.terminal_value.exit_multiple_used == Decimal("12")
         assert result.terminal_value.terminal_ebitda is not None
@@ -232,7 +236,7 @@ class TestExitMultipleTerminal:
 class TestSingleYearProjection:
     def test_one_year(self) -> None:
         assumptions = _base_assumptions(projection_years=1)
-        result = dcf_valuation([_FY2024], assumptions, Decimal("150"))
+        result = dcf_valuation([_FY2024], assumptions, Decimal("150"), calculated_at=_TS)
         assert len(result.projected_years) == 1
         assert result.enterprise_value > Decimal("0")
 
@@ -249,7 +253,7 @@ class TestPerYearAssumptions:
             Decimal("0.08"), Decimal("0.06"),
         ]
         assumptions = _base_assumptions(revenue_growth_rates=rates)
-        result = dcf_valuation([_FY2024], assumptions, Decimal("150"))
+        result = dcf_valuation([_FY2024], assumptions, Decimal("150"), calculated_at=_TS)
         # Year 1: 10000 × 1.15 = 11500
         assert result.projected_years[0].revenue == Decimal("11500.0000")
         # Year 2: 11500 × 1.12 = 12880
@@ -261,7 +265,7 @@ class TestPerYearAssumptions:
             Decimal("0.19"), Decimal("0.18"),
         ]
         assumptions = _base_assumptions(ebit_margin=margins)
-        result = dcf_valuation([_FY2024], assumptions, Decimal("150"))
+        result = dcf_valuation([_FY2024], assumptions, Decimal("150"), calculated_at=_TS)
         # Year 1: 11000 × 0.22 = 2420
         assert result.projected_years[0].ebit == Decimal("2420.0000")
 
@@ -274,7 +278,7 @@ class TestPerYearAssumptions:
 class TestEdgeCases:
     def test_zero_growth(self) -> None:
         assumptions = _base_assumptions(revenue_growth_rates=Decimal("0"))
-        result = dcf_valuation([_FY2024], assumptions, Decimal("150"))
+        result = dcf_valuation([_FY2024], assumptions, Decimal("150"), calculated_at=_TS)
         assert result.projected_years[0].revenue == Decimal("10000.0000")
         assert result.projected_years[4].revenue == Decimal("10000.0000")
         for y in result.projected_years:
@@ -282,17 +286,17 @@ class TestEdgeCases:
 
     def test_negative_growth(self) -> None:
         assumptions = _base_assumptions(revenue_growth_rates=Decimal("-0.05"))
-        result = dcf_valuation([_FY2024], assumptions, Decimal("150"))
+        result = dcf_valuation([_FY2024], assumptions, Decimal("150"), calculated_at=_TS)
         assert result.projected_years[0].revenue < Decimal("10000")
 
     def test_zero_net_debt(self) -> None:
         assumptions = _base_assumptions(net_debt=Decimal("0"))
-        result = dcf_valuation([_FY2024], assumptions, Decimal("150"))
+        result = dcf_valuation([_FY2024], assumptions, Decimal("150"), calculated_at=_TS)
         assert result.equity_value == result.enterprise_value
 
     def test_net_cash_position(self) -> None:
         assumptions = _base_assumptions(net_debt=Decimal("-500"))
-        result = dcf_valuation([_FY2024], assumptions, Decimal("150"))
+        result = dcf_valuation([_FY2024], assumptions, Decimal("150"), calculated_at=_TS)
         assert result.equity_value > result.enterprise_value
 
     def test_wacc_equals_terminal_growth_raises(self) -> None:
@@ -301,7 +305,7 @@ class TestEdgeCases:
             terminal_growth_rate=Decimal("0.03"),
         )
         with pytest.raises(TerminalValueError, match="must be greater"):
-            dcf_valuation([_FY2024], assumptions, Decimal("150"))
+            dcf_valuation([_FY2024], assumptions, Decimal("150"), calculated_at=_TS)
 
     def test_wacc_below_terminal_growth_raises(self) -> None:
         assumptions = _base_assumptions(
@@ -309,24 +313,24 @@ class TestEdgeCases:
             terminal_growth_rate=Decimal("0.03"),
         )
         with pytest.raises(TerminalValueError, match="must be greater"):
-            dcf_valuation([_FY2024], assumptions, Decimal("150"))
+            dcf_valuation([_FY2024], assumptions, Decimal("150"), calculated_at=_TS)
 
     def test_no_financials_raises(self) -> None:
         with pytest.raises(DCFValidationError, match="at least one period"):
-            dcf_valuation([], _base_assumptions(), Decimal("150"))
+            dcf_valuation([], _base_assumptions(), Decimal("150"), calculated_at=_TS)
 
     def test_zero_price_raises(self) -> None:
         with pytest.raises(DCFValidationError, match="current_price must be positive"):
-            dcf_valuation([_FY2024], _base_assumptions(), Decimal("0"))
+            dcf_valuation([_FY2024], _base_assumptions(), Decimal("0"), calculated_at=_TS)
 
     def test_negative_price_raises(self) -> None:
         with pytest.raises(DCFValidationError, match="current_price must be positive"):
-            dcf_valuation([_FY2024], _base_assumptions(), Decimal("-100"))
+            dcf_valuation([_FY2024], _base_assumptions(), Decimal("-100"), calculated_at=_TS)
 
     def test_missing_revenue_raises(self) -> None:
         empty = PeriodFinancials(period="FY2024")
         with pytest.raises(DCFValidationError, match="positive revenue"):
-            dcf_valuation([empty], _base_assumptions(), Decimal("150"))
+            dcf_valuation([empty], _base_assumptions(), Decimal("150"), calculated_at=_TS)
 
 
 # ---------------------------------------------------------------------------
@@ -336,12 +340,12 @@ class TestEdgeCases:
 
 class TestSensitivityMatrix:
     def test_sensitivity_grid_size(self) -> None:
-        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"))
+        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"), calculated_at=_TS)
         # 7 WACC steps × 7 TG steps = 49
         assert len(result.sensitivity) == 49
 
     def test_sensitivity_contains_base_case(self) -> None:
-        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"))
+        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"), calculated_at=_TS)
         base_cell = next(
             (c for c in result.sensitivity
              if c.wacc == Decimal("0.100000") and c.terminal_growth_rate == Decimal("0.030000")),
@@ -351,7 +355,7 @@ class TestSensitivityMatrix:
         assert base_cell.implied_value_per_share is not None
 
     def test_sensitivity_invalid_cells_are_none(self) -> None:
-        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"))
+        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"), calculated_at=_TS)
         invalid_cells = [
             c for c in result.sensitivity
             if c.wacc <= c.terminal_growth_rate
@@ -360,7 +364,7 @@ class TestSensitivityMatrix:
             assert c.implied_value_per_share is None
 
     def test_higher_wacc_lower_value(self) -> None:
-        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"))
+        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"), calculated_at=_TS)
         tg = Decimal("0.030000")
         valid = sorted(
             [c for c in result.sensitivity
@@ -380,26 +384,26 @@ class TestSensitivityMatrix:
 
 class TestAuditTrail:
     def test_calculations_not_empty(self) -> None:
-        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"))
+        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"), calculated_at=_TS)
         assert len(result.calculations) > 0
 
     def test_every_calculation_has_formula(self) -> None:
-        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"))
+        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"), calculated_at=_TS)
         for c in result.calculations:
             assert c.formula, f"{c.metric} missing formula"
 
     def test_every_calculation_has_version(self) -> None:
-        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"))
+        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"), calculated_at=_TS)
         for c in result.calculations:
             assert c.version, f"{c.metric} missing version"
 
     def test_every_calculation_has_inputs(self) -> None:
-        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"))
+        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"), calculated_at=_TS)
         for c in result.calculations:
             assert isinstance(c.inputs, dict), f"{c.metric} bad inputs"
 
     def test_key_metrics_present(self) -> None:
-        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"))
+        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"), calculated_at=_TS)
         metrics = {c.metric for c in result.calculations}
         assert "wacc" in metrics
         assert "enterprise_value" in metrics
@@ -408,7 +412,7 @@ class TestAuditTrail:
         assert "upside_downside_pct" in metrics
 
     def test_projected_fcf_metrics_present(self) -> None:
-        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"))
+        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"), calculated_at=_TS)
         metrics = {c.metric for c in result.calculations}
         for i in range(1, 6):
             assert f"projected_fcf_Y{i}" in metrics
@@ -416,7 +420,7 @@ class TestAuditTrail:
 
     def test_assumptions_echo_back(self) -> None:
         assumptions = _base_assumptions()
-        result = dcf_valuation([_FY2024], assumptions, Decimal("150"))
+        result = dcf_valuation([_FY2024], assumptions, Decimal("150"), calculated_at=_TS)
         assert result.assumptions == assumptions
 
 
@@ -428,8 +432,8 @@ class TestAuditTrail:
 class TestReproducibility:
     def test_repeated_execution_identical(self) -> None:
         a = _base_assumptions()
-        r1 = dcf_valuation([_FY2024], a, Decimal("150"))
-        r2 = dcf_valuation([_FY2024], a, Decimal("150"))
+        r1 = dcf_valuation([_FY2024], a, Decimal("150"), calculated_at=_TS)
+        r2 = dcf_valuation([_FY2024], a, Decimal("150"), calculated_at=_TS)
         assert r1.implied_value_per_share == r2.implied_value_per_share
         assert r1.enterprise_value == r2.enterprise_value
         assert r1.equity_value == r2.equity_value
@@ -441,7 +445,7 @@ class TestReproducibility:
 
 class TestNoFloats:
     def test_all_projected_values_decimal(self) -> None:
-        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"))
+        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"), calculated_at=_TS)
         for y in result.projected_years:
             assert isinstance(y.revenue, Decimal)
             assert isinstance(y.ebit, Decimal)
@@ -451,7 +455,7 @@ class TestNoFloats:
             assert isinstance(y.discount_factor, Decimal)
 
     def test_all_result_values_decimal(self) -> None:
-        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"))
+        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"), calculated_at=_TS)
         assert isinstance(result.wacc_used, Decimal)
         assert isinstance(result.enterprise_value, Decimal)
         assert isinstance(result.equity_value, Decimal)
@@ -460,13 +464,13 @@ class TestNoFloats:
         assert isinstance(result.sum_pv_fcf, Decimal)
 
     def test_all_calculation_values_decimal(self) -> None:
-        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"))
+        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"), calculated_at=_TS)
         for c in result.calculations:
             if c.value is not None:
                 assert isinstance(c.value, Decimal), f"{c.metric} is {type(c.value)}"
 
     def test_sensitivity_values_decimal(self) -> None:
-        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"))
+        result = dcf_valuation([_FY2024], _base_assumptions(), Decimal("150"), calculated_at=_TS)
         for cell in result.sensitivity:
             assert isinstance(cell.wacc, Decimal)
             assert isinstance(cell.terminal_growth_rate, Decimal)

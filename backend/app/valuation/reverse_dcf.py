@@ -10,7 +10,7 @@ All arithmetic uses decimal.Decimal.
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 
 from app.analytics.models import CalculationResult, PeriodFinancials
@@ -36,11 +36,12 @@ def _evaluate(
     base_assumptions: DCFAssumptions,
     growth_rate: Decimal,
     target_price: Decimal,
+    calculated_at: datetime,
 ) -> DCFResult:
     candidate = base_assumptions.model_copy(
         update={"revenue_growth_rates": growth_rate},
     )
-    return dcf_valuation(financials, candidate, target_price)
+    return dcf_valuation(financials, candidate, target_price, calculated_at=calculated_at)
 
 
 def reverse_dcf(
@@ -48,6 +49,7 @@ def reverse_dcf(
     assumptions: DCFAssumptions,
     target_price: Decimal,
     *,
+    calculated_at: datetime,
     lower_bound: Decimal = Decimal("-0.50"),
     upper_bound: Decimal = Decimal("1.00"),
     growth_tolerance: Decimal = Decimal("0.0001"),
@@ -84,8 +86,8 @@ def reverse_dcf(
 
     audit: list[CalculationResult] = []
 
-    lo_result = _evaluate(financials, assumptions, lower_bound, target_price)
-    hi_result = _evaluate(financials, assumptions, upper_bound, target_price)
+    lo_result = _evaluate(financials, assumptions, lower_bound, target_price, calculated_at)
+    hi_result = _evaluate(financials, assumptions, upper_bound, target_price, calculated_at)
 
     lo_value = lo_result.implied_value_per_share
     hi_value = hi_result.implied_value_per_share
@@ -119,6 +121,7 @@ def reverse_dcf(
             lower_bound=lower_bound,
             upper_bound=upper_bound,
             fixed_assumptions=assumptions,
+            calculated_at=calculated_at,
             audit=audit,
             notes="implied_value not monotonically increasing across bounds",
         )
@@ -135,6 +138,7 @@ def reverse_dcf(
             lower_bound=lower_bound,
             upper_bound=upper_bound,
             fixed_assumptions=assumptions,
+            calculated_at=calculated_at,
             audit=audit,
             notes=f"target_price {target_price} below minimum implied value {lo_value} at growth={lower_bound}",
         )
@@ -151,6 +155,7 @@ def reverse_dcf(
             lower_bound=lower_bound,
             upper_bound=upper_bound,
             fixed_assumptions=assumptions,
+            calculated_at=calculated_at,
             audit=audit,
             notes=f"target_price {target_price} above maximum implied value {hi_value} at growth={upper_bound}",
         )
@@ -163,7 +168,7 @@ def reverse_dcf(
 
     for i in range(1, max_iterations + 1):
         mid = ((lo + hi) / _TWO).quantize(_RATIO_QUANTIZE)
-        mid_result = _evaluate(financials, assumptions, mid, target_price)
+        mid_result = _evaluate(financials, assumptions, mid, target_price, calculated_at)
         mid_value = mid_result.implied_value_per_share
         residual = mid_value - target_price
         iterations = i
@@ -200,6 +205,7 @@ def reverse_dcf(
                 lower_bound=lower_bound,
                 upper_bound=upper_bound,
                 fixed_assumptions=assumptions,
+                calculated_at=calculated_at,
                 audit=audit,
             )
 
@@ -219,6 +225,7 @@ def reverse_dcf(
         lower_bound=lower_bound,
         upper_bound=upper_bound,
         fixed_assumptions=assumptions,
+        calculated_at=calculated_at,
         audit=audit,
         notes=f"did not converge after {max_iterations} iterations",
     )
@@ -236,6 +243,7 @@ def _build_result(
     lower_bound: Decimal,
     upper_bound: Decimal,
     fixed_assumptions: DCFAssumptions,
+    calculated_at: datetime,
     audit: list[CalculationResult],
     notes: str | None = None,
 ) -> ReverseDCFResult:
@@ -276,6 +284,6 @@ def _build_result(
         fixed_assumptions=fixed_assumptions,
         dcf_result=dcf,
         calculations=audit,
-        calculated_at=datetime.now(UTC),
+        calculated_at=calculated_at,
         engine_version=ENGINE_VERSION,
     )

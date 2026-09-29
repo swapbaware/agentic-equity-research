@@ -5,6 +5,7 @@ boundary conditions, Decimal enforcement, and audit trail.
 """
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -22,6 +23,8 @@ from app.valuation.reverse_dcf import ReverseDCFError, reverse_dcf
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
+
+_TS = datetime(2026, 1, 1, tzinfo=UTC)
 
 _FY2024 = PeriodFinancials(
     period="FY2024",
@@ -72,10 +75,10 @@ class TestGoldenRoundTrip:
 
     def test_round_trip_growth_10pct(self) -> None:
         assumptions = _base_assumptions()
-        fwd = dcf_valuation([_FY2024], assumptions, Decimal("150"))
+        fwd = dcf_valuation([_FY2024], assumptions, Decimal("150"), calculated_at=_TS)
         assert fwd.implied_value_per_share == Decimal("223.3635")
 
-        result = reverse_dcf([_FY2024], assumptions, fwd.implied_value_per_share)
+        result = reverse_dcf([_FY2024], assumptions, fwd.implied_value_per_share, calculated_at=_TS)
 
         assert result.convergence_status == ConvergenceStatus.CONVERGED
         assert abs(result.implied_growth_rate - Decimal("0.10")) <= Decimal("0.0001")
@@ -83,18 +86,18 @@ class TestGoldenRoundTrip:
 
     def test_round_trip_growth_0pct(self) -> None:
         assumptions = _base_assumptions(revenue_growth_rates=Decimal("0"))
-        fwd = dcf_valuation([_FY2024], assumptions, Decimal("150"))
+        fwd = dcf_valuation([_FY2024], assumptions, Decimal("150"), calculated_at=_TS)
 
-        result = reverse_dcf([_FY2024], assumptions, fwd.implied_value_per_share)
+        result = reverse_dcf([_FY2024], assumptions, fwd.implied_value_per_share, calculated_at=_TS)
 
         assert result.convergence_status == ConvergenceStatus.CONVERGED
         assert abs(result.implied_growth_rate - Decimal("0")) <= Decimal("0.0001")
 
     def test_round_trip_growth_5pct(self) -> None:
         assumptions = _base_assumptions(revenue_growth_rates=Decimal("0.05"))
-        fwd = dcf_valuation([_FY2024], assumptions, Decimal("150"))
+        fwd = dcf_valuation([_FY2024], assumptions, Decimal("150"), calculated_at=_TS)
 
-        result = reverse_dcf([_FY2024], assumptions, fwd.implied_value_per_share)
+        result = reverse_dcf([_FY2024], assumptions, fwd.implied_value_per_share, calculated_at=_TS)
 
         assert result.convergence_status == ConvergenceStatus.CONVERGED
         assert abs(result.implied_growth_rate - Decimal("0.05")) <= Decimal("0.0001")
@@ -108,27 +111,27 @@ class TestGoldenRoundTrip:
 class TestConvergence:
     def test_converged_status(self) -> None:
         result = reverse_dcf(
-            [_FY2024], _base_assumptions(), Decimal("223.3635"),
+            [_FY2024], _base_assumptions(), Decimal("223.3635"), calculated_at=_TS,
         )
         assert result.convergence_status == ConvergenceStatus.CONVERGED
 
     def test_both_tolerances_satisfied(self) -> None:
         result = reverse_dcf(
-            [_FY2024], _base_assumptions(), Decimal("223.3635"),
+            [_FY2024], _base_assumptions(), Decimal("223.3635"), calculated_at=_TS,
         )
         assert result.convergence_status == ConvergenceStatus.CONVERGED
         assert abs(result.residual) <= result.price_tolerance
 
     def test_iterations_reasonable(self) -> None:
         result = reverse_dcf(
-            [_FY2024], _base_assumptions(), Decimal("223.3635"),
+            [_FY2024], _base_assumptions(), Decimal("223.3635"), calculated_at=_TS,
         )
         assert result.iterations <= 20
 
     def test_max_iterations_not_converged(self) -> None:
         result = reverse_dcf(
             [_FY2024], _base_assumptions(), Decimal("223.3635"),
-            max_iterations=1,
+            calculated_at=_TS, max_iterations=1,
         )
         assert result.convergence_status == ConvergenceStatus.MAX_ITERATIONS
         assert result.iterations == 1
@@ -136,7 +139,7 @@ class TestConvergence:
     def test_max_iterations_2_not_converged(self) -> None:
         result = reverse_dcf(
             [_FY2024], _base_assumptions(), Decimal("223.3635"),
-            max_iterations=2,
+            calculated_at=_TS, max_iterations=2,
         )
         assert result.convergence_status == ConvergenceStatus.MAX_ITERATIONS
         assert result.iterations == 2
@@ -150,21 +153,21 @@ class TestConvergence:
 class TestNoSolution:
     def test_no_solution_below(self) -> None:
         result = reverse_dcf(
-            [_FY2024], _base_assumptions(), Decimal("5.00"),
+            [_FY2024], _base_assumptions(), Decimal("5.00"), calculated_at=_TS,
         )
         assert result.convergence_status == ConvergenceStatus.NO_SOLUTION_BELOW
         assert result.iterations == 0
 
     def test_no_solution_above(self) -> None:
         result = reverse_dcf(
-            [_FY2024], _base_assumptions(), Decimal("100000.00"),
+            [_FY2024], _base_assumptions(), Decimal("100000.00"), calculated_at=_TS,
         )
         assert result.convergence_status == ConvergenceStatus.NO_SOLUTION_ABOVE
         assert result.iterations == 0
 
     def test_no_solution_returns_structured_result(self) -> None:
         result = reverse_dcf(
-            [_FY2024], _base_assumptions(), Decimal("5.00"),
+            [_FY2024], _base_assumptions(), Decimal("5.00"), calculated_at=_TS,
         )
         assert isinstance(result, ReverseDCFResult)
         assert result.implied_growth_rate is not None
@@ -173,7 +176,7 @@ class TestNoSolution:
 
     def test_no_solution_above_returns_structured_result(self) -> None:
         result = reverse_dcf(
-            [_FY2024], _base_assumptions(), Decimal("100000.00"),
+            [_FY2024], _base_assumptions(), Decimal("100000.00"), calculated_at=_TS,
         )
         assert isinstance(result, ReverseDCFResult)
         assert result.dcf_result is not None
@@ -192,9 +195,10 @@ class TestBoundaryTargets:
             [_FY2024],
             _base_assumptions(revenue_growth_rates=Decimal("-0.50")),
             Decimal("150"),
+            calculated_at=_TS,
         )
         result = reverse_dcf(
-            [_FY2024], _base_assumptions(), lo_fwd.implied_value_per_share,
+            [_FY2024], _base_assumptions(), lo_fwd.implied_value_per_share, calculated_at=_TS,
         )
         assert result.convergence_status == ConvergenceStatus.CONVERGED
         assert abs(result.implied_growth_rate - Decimal("-0.50")) <= Decimal("0.001")
@@ -204,9 +208,10 @@ class TestBoundaryTargets:
             [_FY2024],
             _base_assumptions(revenue_growth_rates=Decimal("1.00")),
             Decimal("150"),
+            calculated_at=_TS,
         )
         result = reverse_dcf(
-            [_FY2024], _base_assumptions(), hi_fwd.implied_value_per_share,
+            [_FY2024], _base_assumptions(), hi_fwd.implied_value_per_share, calculated_at=_TS,
         )
         assert result.convergence_status == ConvergenceStatus.CONVERGED
         assert abs(result.implied_growth_rate - Decimal("1.00")) <= Decimal("0.001")
@@ -216,9 +221,10 @@ class TestBoundaryTargets:
             [_FY2024],
             _base_assumptions(revenue_growth_rates=Decimal("-0.45")),
             Decimal("150"),
+            calculated_at=_TS,
         )
         result = reverse_dcf(
-            [_FY2024], _base_assumptions(), lo_fwd.implied_value_per_share,
+            [_FY2024], _base_assumptions(), lo_fwd.implied_value_per_share, calculated_at=_TS,
         )
         assert result.convergence_status == ConvergenceStatus.CONVERGED
         assert abs(result.implied_growth_rate - Decimal("-0.45")) <= Decimal("0.001")
@@ -228,9 +234,10 @@ class TestBoundaryTargets:
             [_FY2024],
             _base_assumptions(revenue_growth_rates=Decimal("0.95")),
             Decimal("150"),
+            calculated_at=_TS,
         )
         result = reverse_dcf(
-            [_FY2024], _base_assumptions(), hi_fwd.implied_value_per_share,
+            [_FY2024], _base_assumptions(), hi_fwd.implied_value_per_share, calculated_at=_TS,
         )
         assert result.convergence_status == ConvergenceStatus.CONVERGED
         assert abs(result.implied_growth_rate - Decimal("0.95")) <= Decimal("0.001")
@@ -245,6 +252,7 @@ class TestCustomBounds:
     def test_narrower_bounds(self) -> None:
         result = reverse_dcf(
             [_FY2024], _base_assumptions(), Decimal("223.3635"),
+            calculated_at=_TS,
             lower_bound=Decimal("0.00"),
             upper_bound=Decimal("0.30"),
         )
@@ -254,6 +262,7 @@ class TestCustomBounds:
     def test_custom_bounds_target_outside(self) -> None:
         result = reverse_dcf(
             [_FY2024], _base_assumptions(), Decimal("223.3635"),
+            calculated_at=_TS,
             lower_bound=Decimal("0.20"),
             upper_bound=Decimal("0.50"),
         )
@@ -272,9 +281,9 @@ class TestExitMultiple:
             exit_multiple=Decimal("12"),
             revenue_growth_rates=Decimal("0.10"),
         )
-        fwd = dcf_valuation([_FY2024], assumptions, Decimal("150"))
+        fwd = dcf_valuation([_FY2024], assumptions, Decimal("150"), calculated_at=_TS)
 
-        result = reverse_dcf([_FY2024], assumptions, fwd.implied_value_per_share)
+        result = reverse_dcf([_FY2024], assumptions, fwd.implied_value_per_share, calculated_at=_TS)
 
         assert result.convergence_status == ConvergenceStatus.CONVERGED
         assert abs(result.implied_growth_rate - Decimal("0.10")) <= Decimal("0.0001")
@@ -292,6 +301,7 @@ class TestInputValidation:
                 [_FY2024], _base_assumptions(), Decimal("150"),
                 lower_bound=Decimal("0.50"),
                 upper_bound=Decimal("-0.50"),
+                calculated_at=_TS,
             )
 
     def test_equal_bounds_raises(self) -> None:
@@ -300,15 +310,16 @@ class TestInputValidation:
                 [_FY2024], _base_assumptions(), Decimal("150"),
                 lower_bound=Decimal("0.10"),
                 upper_bound=Decimal("0.10"),
+                calculated_at=_TS,
             )
 
     def test_zero_target_price_raises(self) -> None:
         with pytest.raises(ReverseDCFError, match="target_price must be positive"):
-            reverse_dcf([_FY2024], _base_assumptions(), Decimal("0"))
+            reverse_dcf([_FY2024], _base_assumptions(), Decimal("0"), calculated_at=_TS)
 
     def test_negative_target_price_raises(self) -> None:
         with pytest.raises(ReverseDCFError, match="target_price must be positive"):
-            reverse_dcf([_FY2024], _base_assumptions(), Decimal("-100"))
+            reverse_dcf([_FY2024], _base_assumptions(), Decimal("-100"), calculated_at=_TS)
 
 
 # ---------------------------------------------------------------------------
@@ -320,6 +331,7 @@ class TestDecimalEnforcement:
     def test_all_result_fields_decimal(self) -> None:
         result = reverse_dcf(
             [_FY2024], _base_assumptions(), Decimal("223.3635"),
+            calculated_at=_TS,
         )
         assert isinstance(result.implied_growth_rate, Decimal)
         assert isinstance(result.target_price, Decimal)
@@ -335,6 +347,7 @@ class TestDecimalEnforcement:
     def test_calculation_values_decimal(self) -> None:
         result = reverse_dcf(
             [_FY2024], _base_assumptions(), Decimal("223.3635"),
+            calculated_at=_TS,
         )
         for c in result.calculations:
             if c.value is not None:
@@ -349,8 +362,8 @@ class TestDecimalEnforcement:
 class TestReproducibility:
     def test_identical_inputs_identical_outputs(self) -> None:
         a = _base_assumptions()
-        r1 = reverse_dcf([_FY2024], a, Decimal("223.3635"))
-        r2 = reverse_dcf([_FY2024], a, Decimal("223.3635"))
+        r1 = reverse_dcf([_FY2024], a, Decimal("223.3635"), calculated_at=_TS)
+        r2 = reverse_dcf([_FY2024], a, Decimal("223.3635"), calculated_at=_TS)
         assert r1.implied_growth_rate == r2.implied_growth_rate
         assert r1.iterations == r2.iterations
         assert r1.residual == r2.residual
@@ -366,12 +379,14 @@ class TestAuditTrail:
     def test_calculations_not_empty(self) -> None:
         result = reverse_dcf(
             [_FY2024], _base_assumptions(), Decimal("223.3635"),
+            calculated_at=_TS,
         )
         assert len(result.calculations) > 0
 
     def test_has_bounds_check(self) -> None:
         result = reverse_dcf(
             [_FY2024], _base_assumptions(), Decimal("223.3635"),
+            calculated_at=_TS,
         )
         bounds = [c for c in result.calculations if c.metric == "reverse_dcf_bounds_check"]
         assert len(bounds) == 1
@@ -379,6 +394,7 @@ class TestAuditTrail:
     def test_has_iteration_records(self) -> None:
         result = reverse_dcf(
             [_FY2024], _base_assumptions(), Decimal("223.3635"),
+            calculated_at=_TS,
         )
         iters = [c for c in result.calculations if c.metric.startswith("reverse_dcf_iteration_")]
         assert len(iters) == result.iterations
@@ -386,6 +402,7 @@ class TestAuditTrail:
     def test_has_result_record(self) -> None:
         result = reverse_dcf(
             [_FY2024], _base_assumptions(), Decimal("223.3635"),
+            calculated_at=_TS,
         )
         final = [c for c in result.calculations if c.metric == "reverse_dcf_result"]
         assert len(final) == 1
@@ -393,6 +410,7 @@ class TestAuditTrail:
     def test_every_calculation_has_formula(self) -> None:
         result = reverse_dcf(
             [_FY2024], _base_assumptions(), Decimal("223.3635"),
+            calculated_at=_TS,
         )
         for c in result.calculations:
             assert c.formula, f"{c.metric} missing formula"
@@ -400,6 +418,7 @@ class TestAuditTrail:
     def test_every_calculation_has_version(self) -> None:
         result = reverse_dcf(
             [_FY2024], _base_assumptions(), Decimal("223.3635"),
+            calculated_at=_TS,
         )
         for c in result.calculations:
             assert c.version, f"{c.metric} missing version"
@@ -414,18 +433,20 @@ class TestDCFResultConsistency:
     def test_implied_value_matches_dcf(self) -> None:
         result = reverse_dcf(
             [_FY2024], _base_assumptions(), Decimal("223.3635"),
+            calculated_at=_TS,
         )
         assert result.dcf_result.implied_value_per_share == result.implied_value_at_solution
 
     def test_dcf_assumptions_use_implied_growth(self) -> None:
         result = reverse_dcf(
             [_FY2024], _base_assumptions(), Decimal("223.3635"),
+            calculated_at=_TS,
         )
         assert result.dcf_result.assumptions.revenue_growth_rates == result.implied_growth_rate
 
     def test_fixed_assumptions_echo_original(self) -> None:
         original = _base_assumptions()
-        result = reverse_dcf([_FY2024], original, Decimal("223.3635"))
+        result = reverse_dcf([_FY2024], original, Decimal("223.3635"), calculated_at=_TS)
         assert result.fixed_assumptions.ebit_margin == original.ebit_margin
         assert result.fixed_assumptions.tax_rate == original.tax_rate
         assert result.fixed_assumptions.wacc == original.wacc
@@ -434,6 +455,7 @@ class TestDCFResultConsistency:
     def test_enterprise_and_equity_from_dcf(self) -> None:
         result = reverse_dcf(
             [_FY2024], _base_assumptions(), Decimal("223.3635"),
+            calculated_at=_TS,
         )
         assert result.enterprise_value == result.dcf_result.enterprise_value
         assert result.equity_value == result.dcf_result.equity_value
@@ -448,6 +470,7 @@ class TestPurity:
     def test_runs_without_external_deps(self) -> None:
         result = reverse_dcf(
             [_FY2024], _base_assumptions(), Decimal("200"),
+            calculated_at=_TS,
         )
         assert isinstance(result, ReverseDCFResult)
         assert result.convergence_status == ConvergenceStatus.CONVERGED
