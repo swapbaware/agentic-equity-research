@@ -11,6 +11,7 @@ This document describes the implementation roadmap for the Agentic Equity Resear
 3. **Backend before frontend:** API contracts before UI, because the frontend is a consumer of backend capabilities.
 4. **Abstractions before implementations:** Provider interfaces before concrete integrations, enabling parallel work and easy swapping.
 5. **Phase-by-phase with quality gates:** Each phase is complete with tests before moving to the next.
+6. **Agent logic before orchestration:** Agent business logic and research execution persistence are established before LangGraph orchestration. Individual agents are independently testable domain modules; the graph wiring is a separate integration layer.
 
 ---
 
@@ -322,37 +323,400 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 
 ---
 
-## Phase 7 — Agent Implementation
+## Phase 7 — Research Run Infrastructure
 
-**Goal:** Implement all 17 agents with LangGraph orchestration, quality gates, and cost controls.
+**Goal:** Establish persistence models, execution tracking, and the agent base protocol for research runs — the foundation all agents and orchestration depend on.
 
-**Dependencies:** Phase 5 (evidence system), Phase 6 (calculation engine), Phase 4 (all providers).
+**Dependencies:** Phase 6 (calculation engine), Phase 5 (evidence system), Phase 4 (providers).
+
+**Deliverables:**
+- Research execution domain models: ResearchRun, ResearchRunStep, ResearchFinding, ResearchArtifact, ResearchSource, ResearchExecution, AgentExecution, ThesisVersion
+- Alembic migrations for research execution tables
+- Agent base protocol (input/output schemas, tool interface, timeout contract, token budget contract)
+- Typed `ResearchState` (shared state that agents read from and write to)
+- Research run lifecycle management (create, start, step, complete, fail)
+- Agent execution tracking (start, output, error, token usage, duration)
+- Finding persistence (agent findings with evidence references, finding type classification)
+- Repository layer for research execution entities
+
+**Acceptance Criteria:**
+- All research execution models implemented with correct field types
+- All financial columns use `NUMERIC`
+- UUID primary keys on all entities
+- Migrations reversible (`downgrade()` tested)
+- Agent base protocol defines typed input/output contract
+- ResearchState is a typed Pydantic model, not arbitrary dict
+- Research run lifecycle transitions are validated (no invalid state transitions)
+- Agent execution records capture: agent_id, status, token_usage, duration, error
+- Finding records capture: finding_type (7-type classification), evidence references, source tier
+
+**Tests:**
+- Model validation: valid data accepted, invalid rejected
+- Migration up/down cycle
+- Research run lifecycle: create → start → step → complete
+- Research run lifecycle: create → start → fail
+- Agent execution tracking: start → output → token usage recorded
+- Finding persistence: finding with evidence reference round-trip
+- ResearchState typed access: correct fields, type safety
+
+**Status:** NOT STARTED
+
+---
+
+## Phase 8 — Company Research Agent
+
+**Goal:** First research agent — gathers and structures company profile data from providers.
+
+**Dependencies:** Phase 7 (research run infrastructure), Phase 4 (data providers).
+
+**Deliverables:**
+- Company Research Agent implementation
+- Typed agent input/output schemas
+- Tool wiring to MarketData, FinancialData, CorporateFilings providers
+- Company profile structuring (business description, segments, key metrics)
+- Source attribution on all gathered data
+- Agent unit tests with mock providers
+
+**Acceptance Criteria:**
+- Agent produces output conforming to its Pydantic output schema
+- Every factual claim in output has a source citation
+- Agent respects timeout and token budget contracts from Phase 7
+- Agent handles provider errors gracefully (marks findings as unavailable, not fabricated)
+- Output includes data provenance (source, retrieval timestamp, confidence)
+- No LLM-fabricated financial data in output
+
+**Tests:**
+- Output schema validation with mock providers
+- Provider error handling (timeout, rate limit, not found)
+- Source attribution completeness (every FACT has citation)
+- Timeout enforcement
+- Token budget enforcement
+- Reproducibility (same inputs → structurally consistent output)
+
+**Status:** NOT STARTED
+
+---
+
+## Phase 9 — Industry Research Agent
+
+**Goal:** Analyzes industry structure, competitive dynamics, and sector trends.
+
+**Dependencies:** Phase 7 (research run infrastructure), Phase 4 (providers).
+
+**Deliverables:**
+- Industry Research Agent implementation
+- Industry classification and peer identification
+- Sector-level metrics aggregation
+- Industry trend analysis
+- Source attribution on all findings
+
+**Acceptance Criteria:**
+- Agent produces typed output with industry classification
+- Peer set identified with rationale
+- Industry metrics sourced from providers, not fabricated
+- Source tier recorded on all evidence
+
+**Tests:**
+- Output schema validation
+- Peer identification logic
+- Provider error handling
+- Source attribution completeness
+
+**Status:** NOT STARTED
+
+---
+
+## Phase 10 — Competitive Moat Agent
+
+**Goal:** Assesses competitive advantages using the moat framework from `docs/research-methodology.md`.
+
+**Dependencies:** Phase 7 (research run infrastructure), Phase 8 (company data), Phase 9 (industry data).
+
+**Deliverables:**
+- Competitive Moat Agent implementation
+- Moat strength assessment (NONE/NARROW/WIDE) with evidence
+- Moat source identification (brand, switching costs, network effects, cost advantages, intangibles)
+- Moat durability analysis
+- Conservative defaults (NONE until evidence upgrades)
+
+**Acceptance Criteria:**
+- Default moat strength is NONE; evidence required to upgrade
+- Every moat claim references source evidence
+- Moat assessment includes durability estimate
+- Output follows MANAGEMENT_CLAIM vs FACT vs AI_INFERENCE classification
+
+**Tests:**
+- Default moat is NONE with no evidence
+- Moat upgrade requires evidence
+- Output schema validation
+- Classification correctness (claims vs facts vs inferences)
+
+**Status:** NOT STARTED
+
+---
+
+## Phase 11 — Management & Governance Agent
+
+**Goal:** Evaluates management quality, governance practices, and related-party transactions.
+
+**Dependencies:** Phase 7 (research run infrastructure), Phase 4 (CorporateFilings, Shareholding providers).
+
+**Deliverables:**
+- Management & Governance Agent implementation
+- Management track record analysis
+- Governance red flag detection (pledge levels, related-party, audit qualifications)
+- Shareholding pattern analysis (promoter, institutional, public)
+- Management claims separated from facts
+
+**Acceptance Criteria:**
+- Management statements labeled as MANAGEMENT_CLAIM, never FACT
+- Governance red flags sourced from filings (Tier 1)
+- Shareholding data from authoritative sources
+- No LLM-fabricated governance data
+
+**Tests:**
+- Management claim classification
+- Governance flag detection from sample filings
+- Shareholding analysis with mock data
+- Output schema validation
+
+**Status:** NOT STARTED
+
+---
+
+## Phase 12 — Future Growth & Optionality Agent
+
+**Goal:** Identifies growth drivers, optionality, and expansion potential.
+
+**Dependencies:** Phase 7 (research run infrastructure), Phase 8 (company data), Phase 9 (industry data).
+
+**Deliverables:**
+- Future Growth & Optionality Agent implementation
+- Growth driver identification with evidence
+- Addressable market estimation
+- Optionality assessment (new markets, products, adjacencies)
+- Growth assumptions explicitly labeled as AI_INFERENCE or ASSUMPTION
+
+**Acceptance Criteria:**
+- Growth projections labeled as AI_INFERENCE or ASSUMPTION, never FACT
+- Every growth driver references source data
+- Market size estimates include methodology and uncertainty ranges
+
+**Tests:**
+- Classification correctness (inferences and assumptions labeled)
+- Source attribution
+- Output schema validation
+
+**Status:** NOT STARTED
+
+---
+
+## Phase 13 — Macro Economics Agent
+
+**Goal:** Analyzes macroeconomic factors relevant to the company and sector.
+
+**Dependencies:** Phase 7 (research run infrastructure), Phase 4 (MacroData provider).
+
+**Deliverables:**
+- Macro Economics Agent implementation
+- India-specific macro indicators (GDP, inflation, interest rates, INR)
+- Sector-specific macro sensitivity analysis
+- Regulatory environment assessment
+- Source attribution on all macro data
+
+**Acceptance Criteria:**
+- Macro data sourced from providers, not fabricated
+- India-specific focus (INR, RBI policy, SEBI regulations)
+- Sensitivity analysis links macro changes to company impact
+- Source tier recorded (Tier 1 for RBI/SEBI data)
+
+**Tests:**
+- Output schema validation
+- Macro data source attribution
+- Provider error handling
+- India-specific data correctness
+
+**Status:** NOT STARTED
+
+---
+
+## Phase 14 — Competitor Analysis Agent
+
+**Goal:** Detailed competitor profiling and competitive positioning analysis.
+
+**Dependencies:** Phase 7 (research run infrastructure), Phase 9 (industry data), Phase 6 (financial calculations).
+
+**Deliverables:**
+- Competitor Analysis Agent implementation
+- Competitor financial comparison using peer comparison engine (Phase 6e.5)
+- Market share analysis
+- Competitive positioning matrix
+- Source attribution on all competitor data
+
+**Acceptance Criteria:**
+- Competitor data sourced from providers, not fabricated
+- Financial comparisons use the deterministic peer comparison engine
+- Competitor claims distinguished from facts
+
+**Tests:**
+- Output schema validation
+- Integration with peer comparison engine
+- Source attribution completeness
+
+**Status:** NOT STARTED
+
+---
+
+## Phase 15 — Risk Assessment / Bull-Bear Agent
+
+**Goal:** Systematic risk identification and bull/bear case construction.
+
+**Dependencies:** Phase 7 (research run infrastructure), Phase 6e.6 (scenario engine), Phase 6e.7 (forensics).
+
+**Deliverables:**
+- Risk Assessment Agent implementation
+- Risk identification across categories (business, financial, regulatory, market, operational)
+- Bull case construction with evidence
+- Bear case construction with evidence
+- Integration with scenario engine for quantified risk impact
+- Integration with forensic engine for financial red flags
+
+**Acceptance Criteria:**
+- Every thesis includes a bear case (never omitted)
+- Risk factors sourced from evidence, not fabricated
+- Bull/bear cases reference specific data points
+- Scenario engine provides quantified ranges for each case
+- Forensic flags incorporated into risk assessment
+
+**Tests:**
+- Bear case always present
+- Risk factor source attribution
+- Scenario engine integration
+- Forensic integration
+- Output schema validation
+
+**Status:** NOT STARTED
+
+---
+
+## Phase 16 — Thesis Challenger Agent
+
+**Goal:** Adversarial agent that attempts to disprove the investment thesis.
+
+**Dependencies:** Phase 7 (research run infrastructure), Phases 8-15 (agent outputs to challenge).
+
+**Deliverables:**
+- Thesis Challenger Agent implementation
+- Counter-evidence gathering
+- Thesis stress testing
+- Identification of unaddressed risks and assumptions
+- Challenge results fed back into quality gates
+
+**Acceptance Criteria:**
+- Challenger attempts to disprove accumulated findings
+- Counter-evidence sourced, not fabricated
+- Unaddressed assumptions flagged
+- Challenge results influence final thesis confidence
+
+**Tests:**
+- Challenger identifies known weaknesses in test thesis
+- Counter-evidence has source attribution
+- Challenge output schema validation
+
+**Status:** NOT STARTED
+
+---
+
+## Phase 17 — Evidence Verification Agent
+
+**Goal:** Validates evidence integrity, cross-checks financial figures, and ensures citation completeness.
+
+**Dependencies:** Phase 7 (research run infrastructure), Phase 5 (evidence system).
+
+**Deliverables:**
+- Evidence Verification Agent implementation
+- Deterministic structural checks (document exists, financial cross-checks)
+- Citation completeness validation (every FACT has source)
+- Cross-statement consistency checks (balance sheet equation, CFO derivation)
+- Evidence tier validation (financial data from Tier 1 sources)
+
+**Acceptance Criteria:**
+- FACT without citation → flagged
+- Financial cross-checks use deterministic code, not LLM
+- Balance sheet equation verified
+- Source tier validated for financial data
+
+**Tests:**
+- Missing citation detection
+- Cross-statement consistency (correct and incorrect)
+- Source tier validation
+- Deterministic vs LLM check separation
+
+**Status:** NOT STARTED
+
+---
+
+## Phase 18 — Research Synthesis Agent
+
+**Goal:** Synthesizes findings from all agents into a coherent research report with proper classification.
+
+**Dependencies:** Phase 7 (research run infrastructure), Phases 8-17 (all agent outputs).
+
+**Deliverables:**
+- Research Synthesis Agent implementation
+- Multi-agent output aggregation
+- Finding classification enforcement (FACT/CALCULATION/MANAGEMENT_CLAIM/ANALYST_OPINION/AI_INFERENCE/ASSUMPTION/UNCERTAINTY)
+- Research report generation with evidence labels
+- Company scoring (10 dimensions from research methodology)
+- Score defaults: 0 until evidence supports upgrade
+
+**Acceptance Criteria:**
+- All 7 finding types correctly classified in output
+- Every statement in report labeled with its classification
+- Company scores default to 0, evidence required to upgrade
+- Report includes all required sections from research methodology
+- No mixing or conflation of finding types
+
+**Tests:**
+- Finding classification correctness
+- Score default behavior (0 without evidence)
+- Report section completeness
+- Evidence label propagation
+- Output schema validation
+
+**Status:** NOT STARTED
+
+---
+
+## Phase 19 — LangGraph Orchestration
+
+**Goal:** Wire all agents into a LangGraph state machine with quality gates, checkpointing, and cost controls.
+
+**Dependencies:** Phase 7 (research run infrastructure), Phases 8-18 (all agents).
 
 **Deliverables:**
 - LangGraph workflow graph with typed `ResearchState`
-- Agent base class and tool framework (input/output schemas, auth, logging, timeout)
-- All 17 agents (see `architecture/agent-architecture.md`)
-- Quality gate engine (12 gates)
-- Per-agent timeout enforcement
-- Per-agent token budget enforcement
+- Agent execution ordering (parallel where independent, sequential where dependent)
+- Quality gate engine (12 gates from `docs/research-methodology.md`)
+- Per-agent timeout enforcement (60s-180s per agent)
+- Per-agent token budget enforcement (~325K total per run)
+- Total run timeout (15 minutes)
 - LangGraph checkpointing for resume on failure
 - Redis advisory lock for concurrent run prevention
-- Agent workflow tests with mock LLM
-- Reproducibility tests
+- Max 2 iterations (1 initial + 1 retry) for quality gate loop
+- Failed agent handling (mark FAILED, continue with independent agents)
 
 **Acceptance Criteria:**
 - LangGraph graph compiles and executes with mock LLM
-- All 17 agents produce outputs conforming to their Pydantic output schemas
+- All agents produce outputs conforming to their schemas
 - Parallel execution: agents without data dependencies run concurrently
-- Quality gate loop: max 2 iterations (1 initial + 1 retry), then INCOMPLETE
+- Quality gate loop: max 2 iterations, then INCOMPLETE
 - Per-agent timeout: agent killed after timeout, workflow continues
 - Per-agent token budget: agent stopped if budget exceeded
 - Total run timeout: 15 minutes max
 - Redis lock: concurrent research on same company blocked
 - LangGraph checkpointing: interrupted run can resume from last checkpoint
-- Evidence Verification Agent performs deterministic structural checks (document exists, financial figures cross-checked) in addition to semantic checks
-- Thesis Challenger runs in parallel with Bull/Bear, challenges accumulated findings
-- Failed agent: marked FAILED, workflow continues with independent agents
+- Failed agent: marked FAILED, workflow continues
 - Quality gate failure: output marked RESEARCH INCOMPLETE, not fabricated
 - Moat default: NONE. Score default: 0. Evidence required to upgrade.
 
@@ -361,13 +725,12 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - Agent output schema: each agent's output validates against Pydantic model
 - Parallel execution: verify concurrent agents via timing assertions
 - Quality gate pass: known-good inputs → all 12 gates pass
-- Quality gate fail: incomplete data → specific gates fail → INCOMPLETE status
+- Quality gate fail: incomplete data → specific gates fail → INCOMPLETE
 - Retry limit: quality gate fails twice → no third attempt → INCOMPLETE
 - Timeout: slow mock agent → killed after timeout → workflow continues
 - Token budget: verbose mock agent → stopped at budget → workflow continues
 - Concurrent run lock: two research runs on same company → second blocked
 - Checkpoint resume: interrupted run → resume → completes from checkpoint
-- Evidence verification: FACT without document → flagged; FACT with valid document → passes
 - Reproducibility: same inputs twice → structurally consistent outputs
 
 **Status:** NOT STARTED
@@ -377,127 +740,185 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 
 ---
 
-## Phase 8 — API Layer
+## Phase 20 — Research UI & API Layer
 
-**Goal:** RESTful API exposing all platform capabilities with authentication and authorization.
+**Goal:** Web interface and API layer for viewing research reports, company analysis, and financial data.
 
-**Dependencies:** Phase 7 (agents), Phase 6 (screening/valuation), Phase 3 (all models).
+**Dependencies:** Phase 19 (orchestration), Phase 6 (calculation engine).
 
 **Deliverables:**
-- Company CRUD and search endpoints
-- Financial data endpoints (statements, ratios, time-series)
-- Screening endpoints (filter, save, load screens)
-- Research run endpoints (initiate, status, results)
-- Thesis and report endpoints
-- Watchlist/portfolio endpoints
-- Research chat endpoint (WebSocket)
-- Authentication (OAuth 2.0 / JWT)
-- Authorization (RBAC: viewer, analyst, admin)
+- RESTful API layer for research data (authentication, authorization, pagination)
+- Authentication (OAuth 2.0 / JWT) and authorization (RBAC: viewer, analyst, admin)
+- Company detail page (overview, financials, moat, valuation, thesis, risks, catalysts)
+- Research report viewer with evidence labels (FACT/CALCULATION/MANAGEMENT_CLAIM/etc.)
+- Company scorecard (10-dimension, evidence drill-down)
+- Interactive financial charts
+- Stock screener integration (existing Phase 6c)
+- Company search
 - OpenAPI documentation
-- API tests (httpx TestClient)
+- Frontend tests (Vitest + Playwright)
 
 **Acceptance Criteria:**
-- All endpoints follow URL-prefix versioning (`/api/v1/...`)
-- List endpoints use cursor-based pagination (next_cursor, has_more)
-- Error responses use consistent JSON format (`{"error": {"code", "message", "details"}}`)
-- All endpoints except health check require authentication
-- Role-based access enforced (viewer/analyst/admin permissions correct)
-- Research run initiation returns run ID, status queryable via polling
-- WebSocket research chat sends/receives JSON messages with `type` field
-- CSRF protection via double-submit cookie pattern
-- Rate limiting per user and per endpoint
-- OpenAPI spec generated and accessible at `/docs`
-- No financial data returned as float in any response
+- All API endpoints follow URL-prefix versioning (`/api/v1/...`)
+- Error responses use consistent JSON format
+- Research report: every statement shows classification label
+- Scorecard: every score clickable → shows sub-scores → shows evidence
+- No financial data returned as float in any API response
+- Responsive design (mobile + desktop)
+- TypeScript strict mode, zero type errors
 
 **Tests:**
-- Auth: unauthenticated request → 401; wrong role → 403; valid token → 200
-- CRUD: create/read/update/delete company → correct responses
-- Pagination: large dataset → correct cursor-based pages
-- Screening: complex filter → correct results (verified against direct DB query)
-- Research run: initiate → poll status → retrieve results
-- WebSocket: connect → send message → receive response with citations
-- Error format: invalid input → consistent error JSON
-- Rate limiting: exceed limit → 429 with Retry-After header
+- API endpoint tests (auth, CRUD, pagination, error format)
+- Component tests (company detail, report viewer, scorecard)
+- E2E: search company → view research → drill into scores
+- Responsive: screenshots at mobile and desktop widths
 - RBAC: viewer cannot initiate research; analyst can; admin can manage users
 
 **Status:** NOT STARTED
 
 ---
 
-## Phase 9 — Frontend Dashboard
+## Phase 21 — Research Copilot
 
-**Goal:** A web dashboard for research, screening, monitoring, and interactive AI chat.
+**Goal:** Interactive AI chat for asking questions about company research with citation support.
 
-**Dependencies:** Phase 8 (API layer).
+**Dependencies:** Phase 20 (research UI), Phase 5 (evidence system), Phase 19 (orchestration).
 
 **Deliverables:**
-- Next.js + TypeScript strict + Tailwind CSS project
-- Authentication UI (OAuth flow)
-- Main dashboard (market overview, sector heatmap, research candidates, alerts)
-- Stock screener (interactive filters, AND/OR, saved screens)
-- Company detail page (overview, financials, moat, valuation, thesis, risks, catalysts)
-- Company scorecard (10-dimension, evidence drill-down, no opaque scores)
-- Research report viewer (with evidence labels: FACT/CALCULATION/etc.)
-- AI research chat (interactive questions per company)
-- Watchlist/portfolio management with alerts
-- Interactive financial charts
-- Responsive design (mobile + desktop)
-- Frontend tests (Vitest + Playwright)
+- Research chat endpoint (WebSocket)
+- Context-aware question answering per company
+- Citation linking (answer → evidence → source document)
+- Conversation history
+- Prompt injection defense for user input
 
 **Acceptance Criteria:**
-- TypeScript strict mode, zero type errors
-- All pages render correctly at mobile (375px) and desktop (1440px) widths
-- Authentication flow works end-to-end (login → dashboard → logout)
-- Screener: filter → results update → save screen → reload screen
-- Company detail: all sections render with real data from API
-- Scorecard: every score clickable → shows sub-scores → shows evidence
-- Research report: every statement shows its classification label (FACT, AI_INFERENCE, etc.)
 - Chat: send question → receive answer with citation links → click citation → see source
-- Charts: render with valid data, show empty state for missing data
-- No hardcoded API URLs (all from environment/config)
+- Answers grounded in research data, not hallucinated
+- User input validated and sanitized
+- Prompt injection defense active
 
 **Tests:**
-- Component unit tests (Vitest): each component renders with mock data
-- Screener logic: AND/OR filter combinations produce correct UI state
-- Responsive: Playwright screenshots at mobile and desktop widths
-- E2E: login → search company → view research → drill into scores
-- E2E: login → open screener → set filters → view results → save screen
-- E2E: login → chat → ask question → receive cited answer
-- Accessibility: key pages pass axe-core checks
+- WebSocket: connect → send message → receive response with citations
+- Citation link validity
+- Prompt injection: adversarial input → defense engaged
+- Conversation context maintained
 
 **Status:** NOT STARTED
 
 ---
 
-## Phase 10 — Integration & Deployment
+## Phase 22 — Monitoring & Watchlist
 
-**Goal:** Production-ready deployment with observability, end-to-end validation, and documentation.
+**Goal:** Ongoing monitoring of researched companies with alerts for material changes.
+
+**Dependencies:** Phase 20 (research UI), Phase 4 (data providers).
+
+**Deliverables:**
+- Watchlist/portfolio management
+- Alert configuration (price, financial, governance triggers)
+- Background monitoring jobs
+- Alert notification delivery
+- Thesis invalidation detection
+
+**Acceptance Criteria:**
+- Watchlist: add/remove companies, configure alerts
+- Alerts fire on configured triggers
+- Background jobs run without blocking research runs
+- Thesis invalidation: material change → alert → re-research prompt
+
+**Tests:**
+- Watchlist CRUD
+- Alert trigger detection
+- Background job execution
+- Alert delivery
+
+**Status:** NOT STARTED
+
+---
+
+## Phase 23 — Evaluation & Quality
+
+**Goal:** Systematic evaluation of research quality, agent accuracy, and platform reliability.
+
+**Dependencies:** Phase 19 (orchestration), Phase 6 (golden datasets).
+
+**Deliverables:**
+- Research quality metrics framework
+- Agent accuracy evaluation (against golden datasets)
+- End-to-end research quality scoring
+- Citation accuracy measurement
+- Regression detection for research outputs
+
+**Acceptance Criteria:**
+- Quality metrics defined and measurable
+- Golden dataset tests: research outputs match hand-verified baselines
+- Citation accuracy: verified percentage of citations link to correct sources
+- Regression: new agent versions tested against baseline quality
+
+**Tests:**
+- Quality metric calculation
+- Golden dataset comparison
+- Citation accuracy measurement
+- Regression detection
+
+**Status:** NOT STARTED
+
+---
+
+## Phase 24 — Security Hardening
+
+**Goal:** Security audit, penetration testing preparation, and compliance verification.
+
+**Dependencies:** Phase 20 (full platform running).
+
+**Deliverables:**
+- Authentication hardening (OAuth 2.0 / JWT review)
+- Authorization review (RBAC enforcement across all endpoints)
+- Prompt injection defense audit
+- Dependency vulnerability scanning
+- DPDP Act compliance review
+- Security documentation
+
+**Acceptance Criteria:**
+- No known critical or high severity vulnerabilities
+- All endpoints enforce authentication and authorization
+- Prompt injection defense tested with adversarial inputs
+- Dependencies scanned and patched
+- DPDP Act gaps documented with remediation plan
+
+**Tests:**
+- Auth: unauthenticated → 401; wrong role → 403
+- Prompt injection: adversarial documents → defense holds
+- Dependency scan: clean report
+- RBAC: comprehensive role-based access tests
+
+**Status:** NOT STARTED
+
+---
+
+## Phase 25 — Production Readiness
+
+**Goal:** Production deployment with observability, seed data, and operational documentation.
 
 **Dependencies:** All previous phases.
 
 **Deliverables:**
-- Docker Compose with all 7 services (frontend, backend, worker, beat, db, redis, minio)
-- Multi-stage Dockerfiles (backend, frontend)
+- Docker Compose with all services (frontend, backend, worker, beat, db, redis, minio)
+- Multi-stage Dockerfiles
 - Database seed data (10-20 representative Indian companies)
 - OpenTelemetry integration (traces, metrics, structured logs)
-- Prometheus/Grafana dashboards (5 dashboards: system health, research ops, LLM usage, data pipeline, user activity)
-- Alerting (8 alerts: service down, error rate, research failures, LLM errors, cost spike, data staleness, disk usage, quality gate degradation)
-- End-to-end tests (Playwright: full research workflow)
-- Security review
+- Prometheus/Grafana dashboards
+- Alerting (service health, error rate, research failures, LLM costs)
+- End-to-end Playwright tests
 - Performance baseline
-- Documentation finalization
 - Production deployment guide
+- Documentation finalization
 
 **Acceptance Criteria:**
 - `docker-compose up` starts all services, all health checks pass
-- Seed data loads: 10-20 companies with financial data visible in UI
-- Full research workflow: initiate research → agents run → quality gates → report generated
-- OpenTelemetry traces: request → backend → agent → LLM call fully traced
-- Prometheus metrics: all 9 metric types from deployment architecture collected
-- Grafana dashboards: all 5 render with data
-- Alerting: test alerts fire for simulated conditions
-- E2E: Playwright runs full user workflows without failure
-- No known critical or high severity security issues
+- Seed data loads: companies visible in UI
+- Full research workflow: initiate → agents → quality gates → report
+- Traces: request → backend → agent → LLM call fully traced
 - Backend response time: < 200ms for non-research endpoints (p95)
 - Research run: completes in < 5 minutes for single company
 - All documentation current and accurate
@@ -505,32 +926,31 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 **Tests:**
 - Docker Compose: all services start and pass health checks
 - Seed data: company list endpoint returns seeded companies
-- E2E research: full workflow from UI initiation to report viewing
-- Trace completeness: end-to-end trace spans present
-- Alert test: simulated failures trigger correct alerts
-- Performance: load test confirms p95 response times meet targets
-- Security: dependency scan clean, no known vulnerabilities
+- E2E: full workflow from UI to report viewing
+- Trace completeness
+- Performance: load test confirms p95 targets
+- Security: dependency scan clean
 
 **Status:** NOT STARTED
 
 ---
 
-## MVP Scope (Phases 2–8)
+## MVP Scope (Phases 2–21)
 
 The minimum viable product includes:
 
-1. Indian stock universe (NSE/BSE)
-2. Financial data ingestion from at least one provider
-3. Company search
-4. Stock screener with financial filters
-5. Financial dashboard per company
-6. Basic valuation (multiples + DCF)
-7. Company research agent (full 17-agent workflow for single company)
-8. Moat analysis with evidence
-9. Industry analysis
-10. Research report with source citations
-11. AI research chat
-12. Quality gates
+1. Indian stock universe (NSE/BSE) — Phase 4
+2. Financial data ingestion from at least one provider — Phase 4
+3. Company search — Phase 20
+4. Stock screener with financial filters — Phase 6c (complete)
+5. Financial dashboard per company — Phase 20
+6. Basic valuation (multiples + DCF) — Phase 6e (complete)
+7. Company research (all research agents for single company) — Phases 8-18
+8. Moat analysis with evidence — Phase 10
+9. Industry analysis — Phase 9
+10. Research report with source citations and evidence labels — Phases 18, 20
+11. AI research chat — Phase 21
+12. Quality gates and LangGraph orchestration — Phase 19
 
 ---
 

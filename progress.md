@@ -326,7 +326,7 @@
 
 ## Current Phase
 
-**Next Phase:** Phase 7 — Agent Implementation (LangGraph)
+**Next Phase:** Phase 7 — Research Run Infrastructure
 
 ---
 
@@ -368,9 +368,9 @@
 | K-1 | NSE does not offer a free, open API — primary data source at risk | Critical | Phase 4 |
 | K-2 | Background task processor not decided (Celery vs Temporal) | Medium | Phase 2 |
 | K-3 | Embedding dimension hardcoded to 1536 — should be configurable | Low | Phase 5 |
-| K-4 | LLMProvider interface may not align with LangGraph native invocation | Medium | Phase 7 |
+| K-4 | LLMProvider interface may not align with LangGraph native invocation | Medium | Phase 19 |
 | K-5 | DPDP Act 2023 compliance requires legal review before commercialization | Medium | Pre-launch |
-| K-6 | Evidence Verification Agent has circular LLM dependency — mitigated by partial deterministic checks | Low | Phase 7 |
+| K-6 | Evidence Verification Agent has circular LLM dependency — mitigated by partial deterministic checks | Low | Phase 17 |
 
 ---
 
@@ -412,8 +412,8 @@
 | Yahoo Finance India | MarketData, FinancialData, CorporateActions | Implemented | Phase 6 — YahooFinanceProvider |
 | Alpha Vantage | MarketData, FinancialData | Implemented | Phase 6 — AlphaVantageProvider (API key required) |
 | NSE | CorporateFilingsProvider | Placeholder | Phase 6 — metadata-only, NSE restricts automated access |
-| Anthropic Claude | LLMProvider | Not started | Phase 7 |
-| OpenAI | LLMProvider, EmbeddingProvider | Not started | Phase 5/7 |
+| Anthropic Claude | LLMProvider | Not started | Phase 8 (first agent needing LLM) |
+| OpenAI | LLMProvider, EmbeddingProvider | Not started | Phase 5/8 |
 | MinIO / S3 | Object Storage | Not started | Phase 5 |
 | PostgreSQL + pgvector | Data layer | Configured | Connection pooling, async engine, Alembic migrations |
 | Redis | Cache, rate limiting, locks | Configured | Async client, health check wired |
@@ -440,10 +440,12 @@
 
 ## Next Actions
 
-1. **Phase 7: Agent Orchestration (LangGraph)**
-   - LangGraph state machine with typed ResearchState
-   - First 3 agents: DataCollector, FinancialAnalyst, ThesisChallenger
-   - Agent tool wiring (providers → agent tools)
-   - Quality gate framework (12 gates)
+1. **Phase 7: Research Run Infrastructure**
+   - Research execution domain models (ResearchRun, ResearchRunStep, ResearchFinding, ResearchArtifact, ResearchSource, ResearchExecution, AgentExecution, ThesisVersion)
+   - Alembic migrations for research execution tables
+   - Agent base protocol (typed input/output, tool interface, timeout/token budget contracts)
+   - Typed ResearchState (shared state for agents)
+   - Research run lifecycle management and agent execution tracking
+2. **Phase 8: Company Research Agent** — first agent implementation using Phase 7 infrastructure
 3. **SEBI XBRL integration** for authoritative financial data
 4. **Evaluate Celery vs Temporal** (ADR-002) for background tasks
