@@ -308,9 +308,11 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 
 **Phase 6e.1 (COMPLETE):** Deterministic DCF Valuation Engine — pure functional `dcf_valuation()` under `app/valuation/`, Decimal-only, no DB/HTTP/LLM. WACC calculation (CAPM), year-by-year FCF projection (EBIT-based NOPAT), Gordon Growth and Exit Multiple terminal value, 7×7 sensitivity matrix, CalculationResult audit trail. 69 tests with hand-verified golden dataset. Commit `fe6dee3`.
 
-**Phase 6e.2 (COMPLETE):** Reverse DCF — bisection solver `reverse_dcf()` treating `dcf_valuation()` as black-box oracle. Solves for uniform implied revenue growth rate. Dual convergence criteria (growth tolerance AND price tolerance). ConvergenceStatus enum (CONVERGED, MAX_ITERATIONS, NO_SOLUTION_BELOW, NO_SOLUTION_ABOVE). ReverseDCFResult with embedded full DCF at solution. 37 tests with forward→reverse round-trip verification. Commit pending.
+**Phase 6e.2 (COMPLETE):** Reverse DCF — bisection solver `reverse_dcf()` treating `dcf_valuation()` as black-box oracle. Solves for uniform implied revenue growth rate. Dual convergence criteria (growth tolerance AND price tolerance). ConvergenceStatus enum (CONVERGED, MAX_ITERATIONS, NO_SOLUTION_BELOW, NO_SOLUTION_ABOVE). ReverseDCFResult with embedded full DCF at solution. 37 tests with forward→reverse round-trip verification. Commit `e8a8fbc`.
 
-**Deferred to Phase 6e.3:** Multiple-based valuation models (P/E, EV/EBITDA, P/S, P/B, PEG, FCF Yield, EV/FCF), historical valuation band analysis, peer comparison engine, scenario engine (Bear/Base/Bull), financial forensics / red flag scoring.
+**Phase 6e.3 (COMPLETE):** Multiple-Based Valuation Engine — 7 deterministic methods (P/E, EV/EBITDA, P/S, P/B, PEG, FCF Yield, EV/FCF) in `app/valuation/multiples.py`. P/E, P/S, P/B, PEG, FCF Yield are equity-based; EV/EBITDA and EV/FCF are enterprise-based with net debt bridge. FCF Yield uses equity FCF (CFO−CapEx) with CashFlowBasis.EQUITY_FCF. EV/FCF uses FCFF (EBIT×(1−t)+D&A−CapEx−ΔNWC) with CashFlowBasis.FCFF, accepting two periods for deterministic ΔNWC derivation. PEG uses growth in percentage points. All Decimal-only, CalculationResult audit trail, frozen Pydantic v2 MultipleValuationResult. 129 tests with golden datasets.
+
+**Deferred to Phase 6e.4+:** Historical valuation band analysis, peer comparison engine, scenario engine (Bear/Base/Bull), financial forensics / red flag scoring.
 
 ---
 

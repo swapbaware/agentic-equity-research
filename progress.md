@@ -230,11 +230,33 @@
 - [x] tsc strict: zero errors
 - [x] Frontend: 5 tests passing
 
+### Phase 6e.3: Multiple-Based Valuation Engine — COMPLETE
+
+- [x] `app/valuation/models.py` — Added ValuationMethodType enum (7 methods), CashFlowBasis enum (EQUITY_FCF, FCFF), MultipleValuationResult model (frozen Pydantic v2)
+- [x] `app/valuation/multiples.py` — Seven deterministic valuation functions: pe_valuation, ev_ebitda_valuation, ps_valuation, pb_valuation, peg_valuation, fcf_yield_valuation, ev_fcf_valuation. Shared helpers for net debt derivation, upside/downside, EV-to-per-share pipeline, equity-to-per-share. MultipleValuationError for invalid inputs.
+- [x] `app/valuation/__init__.py` — Exports all seven functions + CashFlowBasis, ValuationMethodType, MultipleValuationResult, MultipleValuationError
+- [x] P/E: equity-based, EPS × Target P/E
+- [x] EV/EBITDA: enterprise-based, EBITDA × multiple → EV → equity → per share
+- [x] P/S: equity-based, Revenue × Target P/S
+- [x] P/B: equity-based, Total Equity × Target P/B
+- [x] PEG: equity-based, growth in percentage points (15 = 15%), Implied P/E = PEG × Growth%
+- [x] FCF Yield: equity-based, Equity FCF = CFO − CapEx, CashFlowBasis.EQUITY_FCF
+- [x] EV/FCF: enterprise-based, FCFF = EBIT×(1−t) + D&A − CapEx − ΔNWC, accepts two periods, CashFlowBasis.FCFF
+- [x] ΔNWC derived deterministically from current and prior PeriodFinancials
+- [x] Net debt/net cash handled correctly for all enterprise-value methods
+- [x] `tests/test_valuation_multiples.py` — 129 tests across 22 test classes: golden datasets (Company A zero ΔNWC, Company B positive ΔNWC), all seven methods, validation (zero/negative/missing inputs), audit trail, cross-method cash-flow-basis consistency, Decimal enforcement, reproducibility, upside/downside
+- [x] All 129 multiple valuation tests passing
+- [x] Full backend: 852 passed, 1 known failure (TD-6), 7 skipped
+- [x] mypy strict: zero errors on valuation module (9 source files)
+- [x] ruff: zero errors
+- [x] tsc strict: zero errors
+- [x] Frontend: 5 tests passing
+
 ---
 
 ## Current Phase
 
-**Next Phase:** Phase 6e.3 — Multiple-Based Valuation, Financial Forensics
+**Next Phase:** Phase 6e.4 — Historical Valuation Bands
 
 ---
 
@@ -255,6 +277,7 @@
 - Stock Screener: 20 criteria, 8 operators, AND/OR/NOT groups, saved screens, 7 API endpoints, interactive frontend
 - Deterministic DCF Valuation Engine: pure functional, Decimal-only, WACC/FCF/terminal value/sensitivity, CalculationResult audit trail, 69 tests with golden dataset
 - Reverse DCF: bisection solver for implied revenue growth rate, treats forward DCF as black-box oracle, dual convergence criteria, structured no-solution handling, 37 tests with round-trip verification
+- Multiple-Based Valuation Engine: 7 methods (P/E, EV/EBITDA, P/S, P/B, PEG, FCF Yield, EV/FCF), FCFF-based EV/FCF with ΔNWC derivation, CashFlowBasis metadata, 129 tests with golden datasets
 
 ---
 
@@ -333,7 +356,7 @@
 | TD-4 | Domain value objects not implemented: Money, Percentage, FinancialRatio, DateRange, SourceCitation, CAGRResult | Phase 3 | Implement when agent layer needs typed value passing; raw Decimal works for current analytics engine |
 | TD-5 | PriceHistory provider interface not implemented — impl plan specified 12 interfaces but only 11 built | Phase 5 | Evaluate whether PriceHistory should be a separate interface or folded into MarketDataProvider when historical analysis features are built |
 | TD-6 | Readiness test (`test_ready_returns_200`) requires running PostgreSQL — cannot pass in unit test mode | Phase 2 | Requires PostgreSQL with migrations applied; document as integration test and verify with infrastructure |
-| TD-7 | Valuation engine gap — Reverse DCF, multiple-based valuation, historical valuation bands, peer comparison, scenario engine not yet implemented (DCF complete in 6e.1) | Phase 6 | Phase 6e.2 — required before agent orchestration |
+| TD-7 | Valuation engine gap — historical valuation bands, peer comparison, scenario engine not yet implemented (DCF, Reverse DCF, multiple-based valuation complete) | Phase 6 | Phase 6e.4+ — required before agent orchestration |
 | TD-8 | Financial forensics / red flag scoring not implemented | Phase 6 | Phase 6e — part of original Phase 6 scope |
 | TD-9 | Document ingestion pipeline, S3 storage, embedding/pgvector semantic search not implemented (partial evidence subsystem) | Phase 4 | Required for full citation chain; implement before or during agent layer |
 | TD-10 | Repository layer exists only for evidence and screener — not all 28 domain entities | Phase 3 | Build repositories as needed when agents/API endpoints require them |
@@ -343,8 +366,7 @@
 
 ## Next Actions
 
-1. **Phase 6e.3: Remaining Valuation Models & Financial Forensics**
-   - Multiple-based valuation models (P/E, EV/EBITDA, P/S, P/B, PEG, FCF Yield, EV/FCF)
+1. **Phase 6e.4: Historical Valuation Bands**
    - Historical valuation band analysis
    - Peer comparison engine
    - Scenario engine (Bear/Base/Bull with explicit assumptions per scenario)

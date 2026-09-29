@@ -26,6 +26,21 @@ class ConvergenceStatus(StrEnum):
     NO_SOLUTION_ABOVE = "no_solution_above"
 
 
+class ValuationMethodType(StrEnum):
+    PE = "pe"
+    EV_EBITDA = "ev_ebitda"
+    PS = "ps"
+    PB = "pb"
+    PEG = "peg"
+    FCF_YIELD = "fcf_yield"
+    EV_FCF = "ev_fcf"
+
+
+class CashFlowBasis(StrEnum):
+    EQUITY_FCF = "equity_fcf"
+    FCFF = "fcff"
+
+
 class WACCComponents(BaseModel):
     """Components for bottom-up WACC calculation."""
 
@@ -197,3 +212,37 @@ class ReverseDCFResult(BaseModel):
     calculations: list[CalculationResult]
     calculated_at: datetime
     engine_version: str
+
+
+class MultipleValuationResult(BaseModel):
+    """Result of a multiple-based valuation — one method, one assumption set."""
+
+    model_config = ConfigDict(frozen=True)
+
+    method: ValuationMethodType
+
+    input_metric_name: str
+    input_metric_value: Decimal
+
+    target_name: str
+    target_value: Decimal
+
+    implied_enterprise_value: Decimal | None
+    net_debt: Decimal | None
+
+    implied_equity_value: Decimal
+    shares_outstanding: Decimal
+    implied_value_per_share: Decimal
+
+    current_price: Decimal | None
+    upside_downside_pct: Decimal | None
+
+    earnings_growth_pct: Decimal | None
+    implied_pe: Decimal | None
+
+    cash_flow_basis: CashFlowBasis | None
+
+    calculations: list[CalculationResult]
+    calculated_at: datetime
+    engine_version: str
+    period: str
