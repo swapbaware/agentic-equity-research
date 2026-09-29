@@ -306,9 +306,11 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 
 **Phase 6d (COMPLETE):** Foundation Hardening — mypy strict zero errors, ruff zero errors, documentation synchronized, technical debt register updated.
 
-**Phase 6e.1 (COMPLETE):** Deterministic DCF Valuation Engine — pure functional `dcf_valuation()` under `app/valuation/`, Decimal-only, no DB/HTTP/LLM. WACC calculation (CAPM), year-by-year FCF projection (EBIT-based NOPAT), Gordon Growth and Exit Multiple terminal value, 7×7 sensitivity matrix, CalculationResult audit trail. 69 tests with hand-verified golden dataset. Commit pending.
+**Phase 6e.1 (COMPLETE):** Deterministic DCF Valuation Engine — pure functional `dcf_valuation()` under `app/valuation/`, Decimal-only, no DB/HTTP/LLM. WACC calculation (CAPM), year-by-year FCF projection (EBIT-based NOPAT), Gordon Growth and Exit Multiple terminal value, 7×7 sensitivity matrix, CalculationResult audit trail. 69 tests with hand-verified golden dataset. Commit `fe6dee3`.
 
-**Deferred to Phase 6e.2:** Reverse DCF, multiple-based valuation models (P/E, EV/EBITDA, P/S, P/B, PEG, FCF Yield, EV/FCF), historical valuation band analysis, peer comparison engine, scenario engine (Bear/Base/Bull), financial forensics / red flag scoring.
+**Phase 6e.2 (COMPLETE):** Reverse DCF — bisection solver `reverse_dcf()` treating `dcf_valuation()` as black-box oracle. Solves for uniform implied revenue growth rate. Dual convergence criteria (growth tolerance AND price tolerance). ConvergenceStatus enum (CONVERGED, MAX_ITERATIONS, NO_SOLUTION_BELOW, NO_SOLUTION_ABOVE). ReverseDCFResult with embedded full DCF at solution. 37 tests with forward→reverse round-trip verification. Commit pending.
+
+**Deferred to Phase 6e.3:** Multiple-based valuation models (P/E, EV/EBITDA, P/S, P/B, PEG, FCF Yield, EV/FCF), historical valuation band analysis, peer comparison engine, scenario engine (Bear/Base/Bull), financial forensics / red flag scoring.
 
 ---
 

@@ -19,6 +19,13 @@ class TerminalMethod(StrEnum):
     EXIT_MULTIPLE = "exit_multiple"
 
 
+class ConvergenceStatus(StrEnum):
+    CONVERGED = "converged"
+    MAX_ITERATIONS = "max_iterations"
+    NO_SOLUTION_BELOW = "no_solution_below"
+    NO_SOLUTION_ABOVE = "no_solution_above"
+
+
 class WACCComponents(BaseModel):
     """Components for bottom-up WACC calculation."""
 
@@ -162,6 +169,31 @@ class DCFResult(BaseModel):
     current_price: Decimal
     upside_downside_pct: Decimal
     sensitivity: list[SensitivityCell]
+    calculations: list[CalculationResult]
+    calculated_at: datetime
+    engine_version: str
+
+
+class ReverseDCFResult(BaseModel):
+    """Result of a reverse DCF: the implied revenue growth rate that
+    justifies a given market price, holding all other assumptions fixed."""
+
+    model_config = ConfigDict(frozen=True)
+
+    implied_growth_rate: Decimal
+    target_price: Decimal
+    implied_value_at_solution: Decimal
+    residual: Decimal
+    enterprise_value: Decimal
+    equity_value: Decimal
+    convergence_status: ConvergenceStatus
+    iterations: int
+    growth_rate_tolerance: Decimal
+    price_tolerance: Decimal
+    search_lower_bound: Decimal
+    search_upper_bound: Decimal
+    fixed_assumptions: DCFAssumptions
+    dcf_result: DCFResult
     calculations: list[CalculationResult]
     calculated_at: datetime
     engine_version: str

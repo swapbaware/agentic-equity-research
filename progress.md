@@ -217,11 +217,24 @@
 - [x] tsc strict: zero errors
 - [x] Frontend: 5 tests passing
 
+### Phase 6e.2: Reverse DCF Valuation — COMPLETE
+
+- [x] `app/valuation/models.py` — Added ConvergenceStatus enum (CONVERGED, MAX_ITERATIONS, NO_SOLUTION_BELOW, NO_SOLUTION_ABOVE) and ReverseDCFResult model
+- [x] `app/valuation/reverse_dcf.py` — Bisection solver treating dcf_valuation() as black-box oracle. Solves for implied uniform revenue growth rate. Dual convergence criteria (growth tolerance AND price tolerance). Structured no-solution handling.
+- [x] `app/valuation/__init__.py` — Exports: reverse_dcf, ReverseDCFResult, ConvergenceStatus
+- [x] `tests/test_valuation_reverse_dcf.py` — 37 tests across 12 test classes: golden round-trip (10%/0%/5%), convergence, max_iterations, no-solution below/above, boundary targets, custom bounds, exit multiple, input validation, Decimal enforcement, reproducibility, audit trail, DCF result consistency, purity
+- [x] All 37 reverse DCF tests passing
+- [x] Full backend: 723 passed, 1 known failure (TD-6), 7 skipped
+- [x] mypy strict: zero errors on valuation module (8 source files)
+- [x] ruff: zero errors
+- [x] tsc strict: zero errors
+- [x] Frontend: 5 tests passing
+
 ---
 
 ## Current Phase
 
-**Next Phase:** Phase 6e.2 — Reverse DCF, Multiple-Based Valuation, Financial Forensics
+**Next Phase:** Phase 6e.3 — Multiple-Based Valuation, Financial Forensics
 
 ---
 
@@ -241,12 +254,13 @@
 - Deterministic Financial Analytics Engine: 28 metrics (CAGR, margins, returns, leverage, cash flow, efficiency, quality)
 - Stock Screener: 20 criteria, 8 operators, AND/OR/NOT groups, saved screens, 7 API endpoints, interactive frontend
 - Deterministic DCF Valuation Engine: pure functional, Decimal-only, WACC/FCF/terminal value/sensitivity, CalculationResult audit trail, 69 tests with golden dataset
+- Reverse DCF: bisection solver for implied revenue growth rate, treats forward DCF as black-box oracle, dual convergence criteria, structured no-solution handling, 37 tests with round-trip verification
 
 ---
 
 ## Failing Tests
 
-- `test_health.py::TestReadinessEndpoint::test_ready_returns_200` — pre-existing, requires running PostgreSQL with migrations applied. This is an integration test that validates the readiness endpoint checks Alembic migration state against a live database. Cannot pass without PostgreSQL. 686 other backend tests pass. 5 frontend tests pass. 7 tests skipped (6 integration tests requiring PostgreSQL, 1 provider test requiring API key).
+- `test_health.py::TestReadinessEndpoint::test_ready_returns_200` — pre-existing, requires running PostgreSQL with migrations applied. This is an integration test that validates the readiness endpoint checks Alembic migration state against a live database. Cannot pass without PostgreSQL. 723 other backend tests pass. 5 frontend tests pass. 7 tests skipped (6 integration tests requiring PostgreSQL, 1 provider test requiring API key).
 
 ---
 
@@ -329,8 +343,7 @@
 
 ## Next Actions
 
-1. **Phase 6e.2: Remaining Valuation Models & Financial Forensics**
-   - Reverse DCF (implied growth from market price)
+1. **Phase 6e.3: Remaining Valuation Models & Financial Forensics**
    - Multiple-based valuation models (P/E, EV/EBITDA, P/S, P/B, PEG, FCF Yield, EV/FCF)
    - Historical valuation band analysis
    - Peer comparison engine
