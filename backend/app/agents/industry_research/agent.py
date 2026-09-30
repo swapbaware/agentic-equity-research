@@ -13,6 +13,7 @@ fully functional.
 Dependencies are injected via Protocol interfaces — the agent never
 imports a concrete provider.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -114,7 +115,8 @@ class IndustryResearchAgent:
         )
 
     async def execute(
-        self, request: IndustryResearchRequest,
+        self,
+        request: IndustryResearchRequest,
     ) -> IndustryResearchResult:
         config = request.configuration or IndustryResearchConfig()
         token_budget = TokenBudget(
@@ -122,18 +124,20 @@ class IndustryResearchAgent:
             warning_threshold=config.token_warning_threshold,
         )
 
-        run = await self._run_service.initiate_run(ResearchRunCreate(
-            target_type="industry",
-            industry_id=request.industry_id,
-            initiated_by=request.initiated_by,
-            run_type="industry_research",
-            trigger_type="manual",
-            observation_date=request.observation_date,
-            configuration={
-                "token_budget": config.token_budget,
-                "source_limit": config.source_limit,
-            },
-        ))
+        run = await self._run_service.initiate_run(
+            ResearchRunCreate(
+                target_type="industry",
+                industry_id=request.industry_id,
+                initiated_by=request.initiated_by,
+                run_type="industry_research",
+                trigger_type="manual",
+                observation_date=request.observation_date,
+                configuration={
+                    "token_budget": config.token_budget,
+                    "source_limit": config.source_limit,
+                },
+            )
+        )
         run_id = run.id
 
         step_defs = [
@@ -182,7 +186,9 @@ class IndustryResearchAgent:
             await self._run_step_deterministic(
                 step_map["document_retrieval"],
                 self._step_document_retrieval(
-                    sources, config, run_id=run_id,
+                    sources,
+                    config,
+                    run_id=run_id,
                 ),
             )
             steps_completed += 1
@@ -313,7 +319,8 @@ class IndustryResearchAgent:
         if token_budget.is_exhausted:
             await self._run_service.skip_step(step_id)
             raise TokenBudgetExhaustedError(
-                token_budget.total_tokens, token_budget.budget,
+                token_budget.total_tokens,
+                token_budget.budget,
             )
 
         await self._run_service.start_step(step_id)
@@ -321,7 +328,8 @@ class IndustryResearchAgent:
         last_error: Exception | None = None
         for attempt in range(1, max_attempts + 1):
             execution = await self._run_service.record_agent_execution(
-                run_id, step_id,
+                run_id,
+                step_id,
                 AgentExecutionCreate(
                     agent_name=INDUSTRY_AGENT_NAME,
                     attempt_number=attempt,
@@ -350,7 +358,10 @@ class IndustryResearchAgent:
                 last_error = exc
                 logger.warning(
                     "LLM attempt %d/%d failed for %s: %s",
-                    attempt, max_attempts, step_name, exc,
+                    attempt,
+                    max_attempts,
+                    step_name,
+                    exc,
                 )
                 await self._run_service.fail_agent(
                     execution.id,
@@ -380,7 +391,8 @@ class IndustryResearchAgent:
     # -----------------------------------------------------------------------
 
     async def _step_industry_validation(
-        self, request: IndustryResearchRequest,
+        self,
+        request: IndustryResearchRequest,
     ) -> ValidateIndustryOutput:
         return await self._tools.validate_industry(
             ValidateIndustryInput(
@@ -427,16 +439,20 @@ class IndustryResearchAgent:
                     )
                     documents[candidate.source_id] = doc
                     doc_id = await self._tools.create_research_document(
-                        candidate, doc.content_hash,
+                        candidate,
+                        doc.content_hash,
                     )
                     document_ids[candidate.source_id] = doc_id
                     if run_id is not None:
                         await self._run_service.record_source_access(
-                            run_id, doc_id, "retrieved",
+                            run_id,
+                            doc_id,
+                            "retrieved",
                         )
                 except ProviderError:
                     logger.warning(
-                        "Failed to retrieve document %s", candidate.source_id,
+                        "Failed to retrieve document %s",
+                        candidate.source_id,
                     )
 
         tasks = [_retrieve(c) for c in sources]
@@ -467,21 +483,25 @@ class IndustryResearchAgent:
 
         for i, f in enumerate(findings):
             if not hasattr(f, "category"):
-                issues.append(FindingValidationIssue(
-                    finding_index=i,
-                    issue_type="missing_category",
-                    message="Finding lacks a category attribute",
-                ))
+                issues.append(
+                    FindingValidationIssue(
+                        finding_index=i,
+                        issue_type="missing_category",
+                        message="Finding lacks a category attribute",
+                    )
+                )
                 rejected_count += 1
                 continue
 
             category = f.category
             if category not in INDUSTRY_FINDING_CATEGORIES:
-                issues.append(FindingValidationIssue(
-                    finding_index=i,
-                    issue_type="invalid_category",
-                    message=f"Category '{category}' not in allowed industry categories",
-                ))
+                issues.append(
+                    FindingValidationIssue(
+                        finding_index=i,
+                        issue_type="invalid_category",
+                        message=f"Category '{category}' not in allowed industry categories",
+                    )
+                )
                 rejected_count += 1
                 continue
 

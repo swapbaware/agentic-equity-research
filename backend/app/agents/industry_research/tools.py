@@ -1,10 +1,28 @@
 """Tool implementations for the Industry Research Agent.
 
-Each public method corresponds to one of the 5 new industry-specific tool
-contracts plus 3 adapted tool contracts (retrieve_document, persist_evidence,
-persist_findings) defined in ``app.agents.contracts``.  Tools depend on
-provider Protocol interfaces and the database session — never on concrete
-provider implementations.
+Each public method corresponds to one of the 8 agent-facing tool contracts
+defined in ``app.agents.contracts``:
+
+  1. validate_industry
+  2. discover_industry_sources
+  3. retrieve_industry_document
+  4. get_industry_profile
+  5. search_industry_news
+  6. retrieve_document          (adapted from Company Research — uses SearchProvider)
+  7. persist_evidence            (industry-aware)
+  8. persist_findings            (industry-aware)
+
+Internal helper (NOT agent-facing): create_research_document.
+
+Tools depend on provider Protocol interfaces and the database session —
+never on concrete provider implementations.
+
+Note on temporal semantics: The canonical filtering rule is
+``information_available_date <= observation_date``. Where a provider
+(e.g. NewsProvider) exposes only ``published_at``, the agent treats it as
+the best available proxy but does NOT relabel it as
+``information_available_date``. When availability date is unknown, the
+field is preserved as-is (None) — never fabricated.
 """
 
 from __future__ import annotations
@@ -31,6 +49,8 @@ from app.agents.contracts import (
     PersistFindingsInput,
     PersistFindingsOutput,
     RejectedFinding,
+    RetrieveDocumentInput,
+    RetrieveDocumentOutput,
     RetrieveIndustryDocumentInput,
     RetrieveIndustryDocumentOutput,
     SearchIndustryNewsInput,
@@ -60,10 +80,10 @@ logger = logging.getLogger(__name__)
 class IndustryResearchTools:
     """Implements the 8 agent-facing tool contracts for the Industry Research Agent.
 
-    5 new industry-specific tools plus 3 adapted tools (persist_evidence,
-    persist_findings, retrieve_industry_document) using industry-specific
-    constants.  Also provides the ``create_research_document`` internal
-    helper (not agent-facing).
+    5 new industry-specific tools plus 3 adapted tools (retrieve_document,
+    persist_evidence, persist_findings) using industry-specific constants.
+    Also provides the ``create_research_document`` internal helper (not
+    agent-facing).
 
     Provider dependencies are limited to SearchProvider and NewsProvider
     per architecture §17.  MacroDataProvider and LLMProvider belong at the
@@ -280,7 +300,29 @@ class IndustryResearchTools:
                 )
         return SearchIndustryNewsOutput(articles=results)
 
-    # -- Adapted Tool 6: persist_evidence (industry-aware) ---------------------
+    # -- Adapted Tool 6: retrieve_document (industry-adapted) ------------------
+
+    async def retrieve_document(
+        self,
+        inp: RetrieveDocumentInput,
+    ) -> RetrieveDocumentOutput:
+        """Generic document retrieval adapted for industry context.
+
+        Uses SearchProvider (not CorporateFilingsProvider) since industry-level
+        documents come from search results rather than company filings.
+        """
+        results = await self._search.search(inp.filing_id, num_results=1)
+        content = "" if not results else results[0].snippet
+
+        content_hash = hashlib.sha256(content.encode()).hexdigest()
+        return RetrieveDocumentOutput(
+            content=content,
+            content_type="text/snippet",
+            content_hash=content_hash,
+            filing_id=inp.filing_id,
+        )
+
+    # -- Adapted Tool 7: persist_evidence (industry-aware) ---------------------
 
     async def persist_evidence(
         self,
@@ -303,7 +345,7 @@ class IndustryResearchTools:
             evidence_ids.append(record.id)
         return PersistEvidenceOutput(evidence_ids=evidence_ids)
 
-    # -- Adapted Tool 7: persist_findings (industry-aware) ---------------------
+    # -- Adapted Tool 8: persist_findings (industry-aware) ---------------------
 
     async def persist_findings(
         self,

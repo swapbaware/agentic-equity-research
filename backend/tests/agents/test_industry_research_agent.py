@@ -15,7 +15,12 @@ Covers:
 12. LLM stub boundary verification (no fabricated findings)
 13. IndustryResearchResult contract
 14. Step map construction from INDUSTRY_RESEARCH_STEPS
+15. Configuration defaults
+16. Agent attribution
+17. Tool registry verification (canonical 8 agent-facing tools)
+18. Temporal semantics (information_available_date vs publication_date)
 """
+
 from __future__ import annotations
 
 import uuid
@@ -39,7 +44,9 @@ from app.agents.contracts import (
     FindingValidationResult,
     IndustryResearchConfig,
     IndustryResearchRequest,
+    NewsArticleResult,
     RetrieveIndustryDocumentOutput,
+    SearchIndustryNewsInput,
     SourceCandidate,
     TokenBudget,
     ValidateIndustryOutput,
@@ -49,6 +56,7 @@ from app.agents.industry_research.agent import (
     IndustryResearchResult,
 )
 from app.agents.industry_research.exceptions import IndustryNotFoundError
+from app.agents.industry_research.tools import IndustryResearchTools
 from app.models.enums import (
     AgentExecutionStatus,
     DocumentType,
@@ -110,6 +118,7 @@ def _make_doc_output(
     content: str = "Sample industry report content.",
 ) -> RetrieveIndustryDocumentOutput:
     import hashlib
+
     content_hash = hashlib.sha256(content.encode()).hexdigest()
     return RetrieveIndustryDocumentOutput(
         content=content,
@@ -377,7 +386,8 @@ class TestDeterministicStepRunner:
         step = _make_step("industry_validation", 1)
 
         result = await agent._run_step_deterministic(
-            step, _async_return(_make_validate_output()),
+            step,
+            _async_return(_make_validate_output()),
         )
 
         svc.start_step.assert_called_once_with(step.id)
@@ -391,7 +401,8 @@ class TestDeterministicStepRunner:
 
         with pytest.raises(StepFailedError):
             await agent._run_step_deterministic(
-                step, _async_raise(ValueError("test error")),
+                step,
+                _async_raise(ValueError("test error")),
             )
 
         svc.start_step.assert_called_once()
@@ -412,7 +423,10 @@ class TestLLMStepRunner:
         config = IndustryResearchConfig()
 
         await agent._run_step_llm(
-            step, RUN_UUID, token_budget, config,
+            step,
+            RUN_UUID,
+            token_budget,
+            config,
             lambda exec_id: _async_return_val([]),
         )
 
@@ -428,7 +442,10 @@ class TestLLMStepRunner:
 
         with pytest.raises(TokenBudgetExhaustedError):
             await agent._run_step_llm(
-                step, RUN_UUID, token_budget, IndustryResearchConfig(),
+                step,
+                RUN_UUID,
+                token_budget,
+                IndustryResearchConfig(),
                 lambda exec_id: _async_return_val([]),
             )
 
@@ -451,7 +468,10 @@ class TestLLMStepRunner:
             return []
 
         await agent._run_step_llm(
-            step, RUN_UUID, token_budget, config,
+            step,
+            RUN_UUID,
+            token_budget,
+            config,
             _failing_then_success,
         )
 
@@ -471,7 +491,10 @@ class TestLLMStepRunner:
 
         with pytest.raises(StepFailedError, match="persistent failure"):
             await agent._run_step_llm(
-                step, RUN_UUID, token_budget, config,
+                step,
+                RUN_UUID,
+                token_budget,
+                config,
                 _always_fails,
             )
 
@@ -684,7 +707,10 @@ class TestSourceDiscoveryStep:
 
         config = IndustryResearchConfig()
         result = await agent._step_source_discovery(
-            INDUSTRY_UUID, "Information Technology", OBS_DATE, config,
+            INDUSTRY_UUID,
+            "Information Technology",
+            OBS_DATE,
+            config,
         )
 
         agent._tools.discover_industry_sources.assert_called_once()
@@ -712,7 +738,9 @@ class TestDocumentRetrievalStep:
 
         config = IndustryResearchConfig()
         docs, doc_ids = await agent._step_document_retrieval(
-            [candidate], config, run_id=RUN_UUID,
+            [candidate],
+            config,
+            run_id=RUN_UUID,
         )
 
         assert candidate.source_id in docs
@@ -730,7 +758,9 @@ class TestDocumentRetrievalStep:
 
         config = IndustryResearchConfig()
         docs, doc_ids = await agent._step_document_retrieval(
-            [candidate], config, run_id=RUN_UUID,
+            [candidate],
+            config,
+            run_id=RUN_UUID,
         )
 
         assert len(docs) == 0
@@ -741,7 +771,9 @@ class TestDocumentRetrievalStep:
         agent, _, _ = _build_agent()
         config = IndustryResearchConfig()
         docs, doc_ids = await agent._step_document_retrieval(
-            [], config, run_id=RUN_UUID,
+            [],
+            config,
+            run_id=RUN_UUID,
         )
         assert docs == {}
         assert doc_ids == {}
@@ -916,12 +948,167 @@ class TestAgentAttribution:
         config = IndustryResearchConfig()
 
         await agent._run_step_llm(
-            step, RUN_UUID, token_budget, config,
+            step,
+            RUN_UUID,
+            token_budget,
+            config,
             lambda exec_id: _async_return_val([]),
         )
 
         call_data = svc.record_agent_execution.call_args[0][2]
         assert call_data.agent_name == INDUSTRY_AGENT_NAME
+
+
+# ---------------------------------------------------------------------------
+# 17. Tool registry verification
+# ---------------------------------------------------------------------------
+
+CANONICAL_AGENT_TOOLS = frozenset(
+    {
+        "validate_industry",
+        "discover_industry_sources",
+        "retrieve_industry_document",
+        "get_industry_profile",
+        "search_industry_news",
+        "retrieve_document",
+        "persist_evidence",
+        "persist_findings",
+    }
+)
+
+
+class TestToolRegistry:
+    def test_exactly_8_agent_facing_tools(self) -> None:
+        tools = IndustryResearchTools(
+            session=AsyncMock(),
+            run_service=AsyncMock(),
+            search=AsyncMock(),
+            news=AsyncMock(),
+        )
+        public_methods = {name for name in dir(tools) if not name.startswith("_") and callable(getattr(tools, name))}
+        internal_helpers = {"create_research_document"}
+        agent_facing = public_methods - internal_helpers
+        assert agent_facing == CANONICAL_AGENT_TOOLS
+        assert len(agent_facing) == 8
+
+    def test_retrieve_document_present(self) -> None:
+        tools = IndustryResearchTools(
+            session=AsyncMock(),
+            run_service=AsyncMock(),
+            search=AsyncMock(),
+            news=AsyncMock(),
+        )
+        assert hasattr(tools, "retrieve_document")
+        assert callable(tools.retrieve_document)
+
+    def test_create_research_document_is_internal(self) -> None:
+        tools = IndustryResearchTools(
+            session=AsyncMock(),
+            run_service=AsyncMock(),
+            search=AsyncMock(),
+            news=AsyncMock(),
+        )
+        assert hasattr(tools, "create_research_document")
+        assert "create_research_document" not in CANONICAL_AGENT_TOOLS
+
+    def test_no_company_only_tools_exposed(self) -> None:
+        tools = IndustryResearchTools(
+            session=AsyncMock(),
+            run_service=AsyncMock(),
+            search=AsyncMock(),
+            news=AsyncMock(),
+        )
+        company_only_tools = {
+            "get_company_profile",
+            "get_financial_data",
+            "search_filings",
+            "get_transcript",
+        }
+        public_methods = {name for name in dir(tools) if not name.startswith("_") and callable(getattr(tools, name))}
+        assert company_only_tools.isdisjoint(public_methods)
+
+    def test_unknown_tools_not_present(self) -> None:
+        tools = IndustryResearchTools(
+            session=AsyncMock(),
+            run_service=AsyncMock(),
+            search=AsyncMock(),
+            news=AsyncMock(),
+        )
+        public_methods = {name for name in dir(tools) if not name.startswith("_") and callable(getattr(tools, name))}
+        internal_helpers = {"create_research_document"}
+        agent_facing = public_methods - internal_helpers
+        unexpected = agent_facing - CANONICAL_AGENT_TOOLS
+        assert unexpected == set(), f"Unexpected tools: {unexpected}"
+
+
+# ---------------------------------------------------------------------------
+# 18. Temporal semantics
+# ---------------------------------------------------------------------------
+
+
+class TestTemporalSemantics:
+    def test_source_candidate_stores_publication_date_not_relabeled(self) -> None:
+        candidate = _make_source_candidate()
+        assert hasattr(candidate, "publication_date")
+        assert candidate.publication_date == date(2025, 5, 30)
+
+    def test_source_candidate_publication_date_can_be_none(self) -> None:
+        candidate = SourceCandidate(
+            source_id="search-result-1",
+            source_type=DocumentType.RESEARCH_REPORT,
+            provider="search",
+            title="Industry Report",
+            publication_date=None,
+            source_tier=SourceTier.TIER_2,
+            url="https://example.com/report",
+        )
+        assert candidate.publication_date is None
+
+    @pytest.mark.asyncio
+    async def test_news_filtering_uses_observation_date(self) -> None:
+        tools = IndustryResearchTools(
+            session=AsyncMock(),
+            run_service=AsyncMock(),
+            search=AsyncMock(),
+            news=AsyncMock(),
+        )
+        future_article = AsyncMock()
+        future_article.published_at = datetime(2025, 7, 1, tzinfo=UTC)
+        future_article.url = "https://example.com/future"
+        future_article.title = "Future Article"
+        future_article.source = "news"
+        future_article.summary = "Summary"
+
+        past_article = AsyncMock()
+        past_article.published_at = datetime(2025, 6, 1, tzinfo=UTC)
+        past_article.url = "https://example.com/past"
+        past_article.title = "Past Article"
+        past_article.source = "news"
+        past_article.summary = "Summary"
+
+        tools._news.search_news = AsyncMock(
+            return_value=[future_article, past_article],
+        )
+
+        result = await tools.search_industry_news(
+            SearchIndustryNewsInput(
+                industry_name="IT",
+                observation_date=OBS_DATE,
+                limit=10,
+            ),
+        )
+        assert len(result.articles) == 1
+        assert result.articles[0].title == "Past Article"
+
+    def test_news_article_result_preserves_published_at(self) -> None:
+        article = NewsArticleResult(
+            title="Test",
+            url="https://example.com",
+            source="test",
+            published_at=datetime(2025, 6, 1, tzinfo=UTC),
+            summary="test",
+        )
+        assert article.published_at == datetime(2025, 6, 1, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------
