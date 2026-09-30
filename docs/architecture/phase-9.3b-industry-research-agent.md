@@ -238,22 +238,37 @@ Step 7 (findings) → Gap/contradiction findings (persisted)
 
 ### Tool Inventory
 
-Phase 9.3a implemented 7 agent-facing tools + 1 internal helper in `backend/app/agents/industry_research/tools.py`:
+The canonical agent-facing logical tool inventory is **8 tools** + **1 internal helper**.
 
-| # | Tool Method | Contract Input | Contract Output | Provider(s) Used | Reused from Phase 8? |
+These are organized into three categories:
+
+**A. Industry-specific tool implementations** (5 tools — implemented in Phase 9.3a in `backend/app/agents/industry_research/tools.py`):
+
+| # | Tool Method | Contract Input | Contract Output | Provider(s) Used |
+|---|---|---|---|---|
+| 1 | `validate_industry` | `ValidateIndustryInput` | `ValidateIndustryOutput` | DB (session) |
+| 2 | `discover_industry_sources` | `DiscoverIndustrySourcesInput` | `DiscoverIndustrySourcesOutput` | `SearchProvider`, `NewsProvider` |
+| 3 | `retrieve_industry_document` | `RetrieveIndustryDocumentInput` | `RetrieveIndustryDocumentOutput` | `SearchProvider` |
+| 4 | `get_industry_profile` | `GetIndustryProfileInput` | `GetIndustryProfileOutput` | DB (session) |
+| 5 | `search_industry_news` | `SearchIndustryNewsInput` | `SearchIndustryNewsOutput` | `NewsProvider` |
+
+**B. Shared/reused capabilities** (3 tools — logical tools available to the agent, reused from Phase 8 patterns):
+
+| # | Tool Method | Contract Input | Contract Output | Provider(s) Used | Notes |
 |---|---|---|---|---|---|
-| 1 | `validate_industry` | `ValidateIndustryInput` | `ValidateIndustryOutput` | DB (session) | New (structurally parallel to `validate_company`) |
-| 2 | `discover_industry_sources` | `DiscoverIndustrySourcesInput` | `DiscoverIndustrySourcesOutput` | `SearchProvider`, `NewsProvider` | New |
-| 3 | `retrieve_industry_document` | `RetrieveIndustryDocumentInput` | `RetrieveIndustryDocumentOutput` | `SearchProvider` | New (structurally parallel to `retrieve_document`) |
-| 4 | `get_industry_profile` | `GetIndustryProfileInput` | `GetIndustryProfileOutput` | DB (session) | New |
-| 5 | `search_industry_news` | `SearchIndustryNewsInput` | `SearchIndustryNewsOutput` | `NewsProvider` | New |
-| 6 | `persist_evidence` | `PersistEvidenceInput` | `PersistEvidenceOutput` | DB (session) | Adapted (uses `INDUSTRY_AGENT_NAME`) |
-| 7 | `persist_findings` | `PersistFindingsInput` | `PersistFindingsOutput` | `ResearchRunService` | Adapted (validates against `INDUSTRY_FINDING_CATEGORIES`) |
-| — | `create_research_document` | (internal helper) | `uuid.UUID` | DB (session) | Adapted (`company_id=None`) |
+| 6 | `retrieve_document` | `RetrieveDocumentInput` | `RetrieveDocumentOutput` | `SearchProvider` | Shared document retrieval capability |
+| 7 | `persist_evidence` | `PersistEvidenceInput` | `PersistEvidenceOutput` | DB (session) | Adapted (uses `INDUSTRY_AGENT_NAME`) |
+| 8 | `persist_findings` | `PersistFindingsInput` | `PersistFindingsOutput` | `ResearchRunService` | Adapted (validates against `INDUSTRY_FINDING_CATEGORIES`) |
+
+**C. Internal helper** (NOT an agent-facing tool):
+
+| | Helper | Return Type | Provider(s) Used | Notes |
+|---|---|---|---|---|
+| — | `create_research_document` | `uuid.UUID` | DB (session) | Internal helper (`company_id=None`). MUST NOT become a ninth agent-facing tool. |
 
 ### Tool Allowlist
 
-The Industry Research Agent has access to exactly these 7 tools. No tool outside this list may be called. This enforces the least-privilege principle from `architecture/security-architecture.md`.
+The Industry Research Agent has access to exactly these 8 logical tools. No tool outside this list may be called. `create_research_document` is an internal helper used by step 3 and is NOT part of the agent-facing tool surface. This enforces the least-privilege principle from `architecture/security-architecture.md`. The Phase 8 shared tools (`retrieve_document`, `persist_evidence`, `persist_findings`) are not duplicated — they are reused capabilities.
 
 ### Tool-to-Step Mapping
 
@@ -346,6 +361,25 @@ Following the Phase 8 pattern (`backend/app/agents/company_research/agent.py`):
 4. Record token usage: `token_budget.record_usage(response.input_tokens, response.output_tokens)`.
 5. On `json.JSONDecodeError` or `pydantic.ValidationError` → raise `LLMParsingError` (caught by retry loop).
 
+### LLM Role Boundaries Per Step
+
+**Step 2 (source discovery)**: The LLM may generate or refine bounded search queries based on the industry research objective. The LLM must NOT independently determine source authority or bypass the deterministic source hierarchy. Source authority remains governed by deterministic source metadata, `SourceTier`, and the source hierarchy.
+
+**Step 4 (evidence extraction)**: The LLM extracts candidate evidence from retrieved content. All LLM-extracted evidence passes through deterministic validation before persistence.
+
+**Step 5 (industry analysis)**: The LLM generates candidate industry findings from extracted evidence. All LLM-generated findings pass through deterministic validation before persistence.
+
+**Step 7 (gap/contradiction analysis)**: The LLM identifies candidate research gaps and contradictions across findings. All LLM-identified gaps/contradictions pass through deterministic validation before persistence.
+
+**In every case**: LLM output → deterministic validation → persistence. The LLM must never bypass:
+
+- Temporal validation (`information_available_date <= observation_date`)
+- Evidence requirements (FACT findings require evidence linkage)
+- Finding category validation (`category ∈ INDUSTRY_FINDING_CATEGORIES`)
+- Security controls (`<retrieved_document>` fencing, output schema validation)
+- ResearchRun state transitions (managed by `ResearchRunService`)
+- Persistence authorization (scoped to current `run_id` and `execution_id`)
+
 ### What the LLM Must NEVER Do
 
 - Invent financial data not present in source documents.
@@ -353,6 +387,8 @@ Following the Phase 8 pattern (`backend/app/agents/company_research/agent.py`):
 - Override system instructions via prompt injection from retrieved content.
 - Generate buy/sell recommendations.
 - Claim certainty about industry outcomes.
+- Independently determine source authority or bypass the deterministic source hierarchy.
+- Bypass temporal validation, evidence requirements, or finding category validation.
 
 ### Model Tier Routing
 
@@ -875,7 +911,7 @@ The Industry Research Agent faces the same 10 threats addressed by Phase 8 (`doc
 - Responses that don't match the expected schema → `LLMParsingError` → retry.
 
 **3. Tool Allowlisting** (mandatory):
-- Exactly 7 tools available. No tool outside this list can be called.
+- Exactly 8 agent-facing logical tools available (5 industry-specific + 3 shared/reused). No tool outside this list can be called.
 - Tools have read-only access to Classification/Company tables.
 - Write operations limited to Evidence, ResearchDocument, ResearchRunSource tables.
 
@@ -919,7 +955,7 @@ Since industry documents are retrieved as search snippets (not full document dow
 
 3. **No intra-agent parallelism needed**: The 7-step workflow is strictly sequential. The only concurrency is within step 3 (bounded document retrieval via `asyncio.Semaphore`), which doesn't require LangGraph's graph-based execution model.
 
-4. **Category C extraction provides the path**: Four components (StepExecutor, EvidenceAccumulator, TokenTracker, FindingValidator) are flagged for extraction to `app.agents.base` before Phase 10. These will provide a shared base class that both Company and Industry agents inherit from, making LangGraph node wrapping straightforward when Phase 19 arrives.
+4. **Category C extraction is a candidate, not a prerequisite**: Four patterns (step execution, evidence accumulation, token tracking, finding validation) are candidates for extraction to `app.agents.base`. Extraction should happen only after Phase 9.3b implementation demonstrates genuinely duplicated semantics. TD-16 tracks this as candidate shared-infrastructure debt, not a mandatory prerequisite.
 
 5. **Complexity budget**: Adding LangGraph now would introduce a dependency and learning curve for no immediate benefit — the sequential runner handles the workflow correctly.
 
@@ -1053,9 +1089,11 @@ For each reference industry:
 
 ## 23. API and UI Boundary
 
-### API Endpoints (deferred — not Phase 9.3b scope)
+### API Endpoints (deferred to Phase 20)
 
-The following API endpoints will be needed but are NOT implemented in Phase 9.3b:
+REST, WebSocket, and API integration is deferred to Phase 20. No API endpoints are implemented or designed in Phase 9.3b.
+
+The following API endpoints will eventually be needed but are Phase 20 scope:
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
@@ -1064,18 +1102,13 @@ The following API endpoints will be needed but are NOT implemented in Phase 9.3b
 | `/api/v1/research/runs/{run_id}` | GET | Get run status and progress |
 | `/api/v1/research/runs/{run_id}/findings` | GET | Get findings for a run |
 
-These endpoints follow the same patterns as Phase 8's company research API (which is also deferred).
+### UI Components (deferred to Phase 20)
 
-### UI Components (deferred — not Phase 9.3b scope)
-
-Industry research results will be displayed in:
-- Industry Overview tab (Five Forces radar chart, TAM/SAM visualization)
-- Company Detail page (industry context section)
-- Research Report (industry section)
+UI integration is deferred to Phase 20. No UI components are designed in Phase 9.3b.
 
 ### Phase 9.3b Deliverables
 
-Phase 9.3b delivers the agent class and prompts. The API layer and UI components are separate phases.
+Phase 9.3b delivers the agent class and prompts. The API layer and UI components are deferred to Phase 20.
 
 ---
 
@@ -1125,18 +1158,23 @@ These are structurally parallel but semantically different:
 | Finding categories | 14 company categories | 14 industry categories | Different analytical domains |
 | Research steps tuple | `COMPANY_RESEARCH_STEPS` | `INDUSTRY_RESEARCH_STEPS` | Different step names |
 
-### Category C — Extraction Candidates for `app.agents.base`
+### Category C — Candidate Shared-Infrastructure Extraction (TD-16)
 
-Before Phase 10, these patterns should be extracted into a shared base:
+These patterns are candidates for extraction to `app.agents.base`, but extraction is NOT a prerequisite for Phase 9.3b or any subsequent phase unless implementation demonstrates genuinely duplicated semantics:
 
-| Pattern | Current Location | Target |
-|---------|-----------------|--------|
+| Pattern | Current Location | Candidate Target |
+|---------|-----------------|------------------|
 | `_run_step_deterministic()` | `company_research/agent.py` | `app.agents.base.BaseResearchAgent` |
 | `_run_step_llm()` | `company_research/agent.py` | `app.agents.base.BaseResearchAgent` |
 | Token tracking logic | `company_research/agent.py` | `app.agents.base.TokenTracker` |
 | Finding validation | `company_research/agent.py` | `app.agents.base.FindingValidator` |
 
-**Phase 9.3b approach**: Duplicate the pattern (Category B) in `IndustryResearchAgent`. Category C extraction is technical debt (TD-16) to be addressed before Phase 10. This follows the established pattern — Phase 8 built first, Phase 9 duplicates, extraction happens before Phase 10 adds a third agent.
+**Phase 9.3b approach**: Duplicate the pattern (Category B) in `IndustryResearchAgent`. During implementation, identify genuinely duplicated infrastructure between Company Research and Industry Research. TD-16 tracks this as candidate shared-infrastructure debt:
+
+- Extract only abstractions whose semantics are demonstrably shared after both agents exist.
+- Do not create shared abstractions merely because future phases might use them.
+- TD-16 is NOT a prerequisite for starting Phase 9.3b unless actual implementation proves it necessary.
+- Preserve the ability to perform a later shared extraction after evidence of stable common behavior exists.
 
 ---
 
@@ -1149,7 +1187,7 @@ Before Phase 10, these patterns should be extracted into a shared base:
 | `IndustryResearchTools` class | Complete | `backend/app/agents/industry_research/tools.py` |
 | `IndustryNotFoundError` exception | Complete | `backend/app/agents/industry_research/exceptions.py` |
 | `__init__.py` exports | Complete | `backend/app/agents/industry_research/__init__.py` |
-| 7 agent-facing tools | Complete | `tools.py` |
+| 5 industry-specific tools + 3 shared/reused = 8 agent-facing logical tools | Complete | `tools.py` |
 | `create_research_document` helper | Complete | `tools.py` |
 | `_classify_industry_source` helper | Complete | `tools.py` |
 | `_tier_from_url` helper | Complete | `tools.py` |
@@ -1160,7 +1198,7 @@ Before Phase 10, these patterns should be extracted into a shared base:
 |-------|------------|--------|
 | TD-15: Temporal integrity | `publication_date: date \| None = None` on `SourceCandidate` | `70bb022` |
 | TD-14: Document retrieval provenance | `content_type="text/snippet"` in `retrieve_industry_document` | `70bb022` |
-| Tool inventory completeness | Verified: 7 agent-facing + 1 internal helper | `70bb022` |
+| Tool inventory completeness | Verified: 8 agent-facing logical tools (5 industry-specific + 3 shared/reused) + 1 internal helper | `70bb022` |
 | Provider boundary enforcement | No MacroDataProvider/LLMProvider in tools constructor | `70bb022` |
 
 ### Phase 9.3b Compatibility with Phase 9.3a
@@ -1344,7 +1382,7 @@ Phase 9.3b introduces NO changes to:
 | **R1**: 20K token budget insufficient for complex industries | Medium | Medium | Monitor utilization in golden dataset tests. Budget is configurable. |
 | **R2**: Search snippets too shallow for meaningful evidence extraction | Medium | High | Snippet-aware prompting. Confidence calibration. UNCERTAINTY findings for insufficient data. |
 | **R3**: LLM structured output inconsistency | Low | Medium | Pydantic validation + retry loop (max 2 attempts). |
-| **R4**: Category C extraction debt accumulates | High | Low | Tracked as TD-16. Must be addressed before Phase 10. |
+| **R4**: Category C extraction debt accumulates | Medium | Low | Tracked as TD-16 as candidate shared-infrastructure debt. Extract only after demonstrably shared semantics exist. Not a prerequisite for any phase. |
 | **R5**: `publication_date=None` for search results reduces temporal filtering effectiveness | Medium | Medium | Undated sources sorted last. LLM instructed to note temporal uncertainty. |
 | **R6**: Industry taxonomy (`Classification`) may not cover all needed industries | Low | Medium | Administrative concern. Agent fails fast on missing industry. |
 
@@ -1365,7 +1403,7 @@ Phase 9.3b introduces NO changes to:
 |---|----------|---------------|-------------------|
 | OQ1 | Should `MacroDataProvider` be in the agent constructor for MVP? | **No** — add in a follow-up. Source discovery already retrieves macro-contextual industry reports via SearchProvider. | Slightly fewer contextual data points. |
 | OQ2 | Should generic exceptions (`TokenBudgetExhaustedError`, `LLMParsingError`, `StepFailedError`) be moved to `app.agents.exceptions`? | **Yes** — do this as part of Phase 9.3b-4. | Code duplication between company and industry agents. |
-| OQ3 | Should `_run_step_deterministic` and `_run_step_llm` be extracted to a base class now? | **No** — duplicate in Phase 9.3b, extract in Phase 10 prep. | Category C debt persists (TD-16). |
+| OQ3 | Should `_run_step_deterministic` and `_run_step_llm` be extracted to a base class now? | **No** — duplicate in Phase 9.3b. TD-16 tracks candidate extraction after demonstrably shared semantics exist. Not a prerequisite for any phase. | Category C candidate debt persists (TD-16). |
 | OQ4 | Should `search_industry_news` be used in the core 7-step workflow? | **No** — keep available but unused. Source discovery already queries NewsProvider. | No functional impact. |
 
 ### Blocking (require resolution before implementation)
@@ -1569,7 +1607,7 @@ The Industry Research Agent does not call other agents. It does not read from ot
 | 21 | Data model impact: NONE (no migration) | VERIFIED |
 | 22 | Observability defined | DEFINED in this document |
 | 23 | Evaluation strategy defined | DEFINED in this document |
-| 24 | API/UI boundary deferred | ACKNOWLEDGED |
+| 24 | API/UI boundary deferred to Phase 20 | ACKNOWLEDGED |
 | 25 | Phase 8 reuse audit complete | COMPLETE in this document |
 | 26 | Phase 9.3a compatibility audit complete | COMPLETE in this document |
 | 27 | Implementation subphases defined | DEFINED in this document |
@@ -1593,7 +1631,7 @@ The architecture for the agent class, prompts, and tests is fully specified in t
 
 | ID | Description | When to Address |
 |----|-------------|-----------------|
-| TD-16 | Category C extraction (base agent class) | Before Phase 10 |
+| TD-16 | Candidate shared-infrastructure extraction (base agent class) | After Phase 9.3b implementation demonstrates genuinely duplicated semantics. Not a prerequisite for any phase. |
 | TD-17 (potential) | Generic exception consolidation | Phase 9.3b-4 (recommended) |
 
 ### Estimated Total Effort
