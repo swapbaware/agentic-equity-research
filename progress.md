@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-09-30 (Phase 9.3a remediation complete)
+**Last Updated:** 2026-09-30 (Phase 9.3b.1 agent skeleton complete)
 
 ---
 
@@ -473,7 +473,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Current Phase
 
-**Current Phase:** Phase 9 — Industry Research Agent (9.1 Schema Migration COMPLETE, 9.2 Contracts COMPLETE, 9.3a Tools COMPLETE)
+**Current Phase:** Phase 9 — Industry Research Agent (9.1 COMPLETE, 9.2 COMPLETE, 9.3a COMPLETE, 9.3b.1 COMPLETE)
 
 ### Phase 9.1: ResearchRun Schema Migration — COMPLETE
 
@@ -548,7 +548,31 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 - [x] Provider boundaries: removed unused `MacroDataProvider` and `LLMProvider` from `IndustryResearchTools` constructor per architecture §17
 - [x] Defensive sort fix applied to `company_research/tools.py` for consistency
 
-**Next Sub-Phase:** Phase 9.3b — Industry Research Agent implementation (agent workflow, prompts, LangGraph)
+### Phase 9.3b.1: Industry Research Agent Skeleton — COMPLETE
+
+- [x] `IndustryResearchAgent` class in `backend/app/agents/industry_research/agent.py`
+- [x] Seven-step sequential deterministic runner (no LangGraph)
+- [x] Steps: industry_validation → industry_source_discovery → document_retrieval → evidence_extraction → industry_analysis → finding_validation → gap_contradiction_analysis
+- [x] `IndustryResearchResult` frozen Pydantic model (run_id, status, industry_id, industry_name, findings_count, evidence_count, steps_completed, steps_total, token_budget, validation_result, error)
+- [x] Deterministic steps (1, 6) fully functional
+- [x] Provider-call steps (2, 3) fully functional
+- [x] LLM reasoning steps (4, 5, 7) are stub boundaries — record AgentExecution but perform no LLM calls, produce no findings
+- [x] `_run_step_deterministic()` — starts step, runs coroutine, completes/fails step, wraps in StepFailedError
+- [x] `_run_step_llm()` — token budget check, AgentExecution lifecycle, retry loop (MAX_LLM_ATTEMPTS=2), ProviderError/LLMParsingError retry, TokenBudgetExhaustedError propagation
+- [x] Three-tier error handling: TokenBudgetExhaustedError → PARTIAL; StepFailedError (≥5 steps → PARTIAL, <5 → FAILED); Exception → FAILED
+- [x] ResearchRun lifecycle: initiate_run(target_type="industry") → create_steps → enqueue → start → complete/partial/fail
+- [x] ResearchRunStep lifecycle: start → complete/fail/skip per step
+- [x] AgentExecution lifecycle: record → complete/fail per LLM attempt
+- [x] Tool integration: delegates to IndustryResearchTools (Phase 9.3a)
+- [x] Agent attribution: uses INDUSTRY_AGENT_NAME constant throughout
+- [x] No fabricated findings, no fabricated token usage
+- [x] `__init__.py` updated to export IndustryResearchAgent and IndustryResearchResult
+- [x] 46 unit tests across 16 test classes:
+  - Agent construction (3), happy-path execution (6), deterministic step runner (2), LLM step runner (4), token budget (2), finding validation (4), error handling partial (3), unexpected exception (1), industry validation step (1), source discovery step (1), document retrieval step (3), LLM stub boundaries (5), result contract (3), step definitions (4), configuration (2), agent attribution (2)
+- [x] All 1882 backend tests passing (46 new), zero regressions
+- [x] ruff check clean, mypy clean (only pre-existing yahoo_finance.py warning)
+
+**Next Sub-Phase:** Phase 9.3b.2 — Industry Research Agent LLM reasoning (prompts, evidence extraction, finding generation, gap analysis)
 
 ---
 
@@ -576,6 +600,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 - Financial Forensics / Red Flag Screening Engine: 22 checks across 5 categories, 8-status model, Beneish/Altman components (composites NOT_COMPUTABLE due to missing fields), point-in-time validation, financial company support (3 applicable checks), language safety, no aggregate score, 118 tests with golden datasets
 - Research Run Infrastructure: ResearchRun lifecycle (7-state machine), ResearchRunStep, AgentExecution (with reproducibility metadata), ResearchFinding (with temporal integrity and supersession), ResearchArtifact, ResearchRunSource; state machines, repository layer (6 Protocol interfaces + SQLAlchemy implementations), service layer with concurrent run prevention, MAX_AGENT_RETRIES=3, temporal validation; 138 tests
 - Company Research Agent: 7-step sequential orchestrator (validate → discover → retrieve → extract → generate → validate → gap/contradiction), 8 tool implementations, LLM integration with structured output parsing, evidence extraction and persistence, finding generation with evidence linking, deterministic finding validation, gap/contradiction detection, token budget enforcement (30K hard/24K warning), retry handling (MAX_LLM_ATTEMPTS=2), prompt injection defense; 64 tests with 5 golden scenarios
+- Industry Research Agent Skeleton (Phase 9.3b.1): 7-step sequential orchestrator (industry_validation → source_discovery → document_retrieval → evidence_extraction[stub] → industry_analysis[stub] → finding_validation → gap_contradiction[stub]), token budget enforcement (20K hard/16K warning), three-tier error handling, ResearchRun lifecycle (target_type="industry"), LLM steps as stub boundaries; 46 tests
 
 ---
 
