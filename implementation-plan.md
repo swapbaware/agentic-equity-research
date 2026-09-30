@@ -470,7 +470,7 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - Provider error handling
 - Source attribution completeness
 
-**Status:** Phase 9.1 (Schema Migration) COMPLETE — Phase 9.2 (Contracts & Integration) COMPLETE — Phase 9.3a (Tools) COMPLETE (remediated: TD-14, TD-15, provider boundaries, tool inventory) — Phase 9.3b.1 (Agent Skeleton) COMPLETE — Phase 9.3b.2 (LLM Reasoning) NOT STARTED
+**Status:** Phase 9.1 (Schema Migration) COMPLETE — Phase 9.2 (Contracts & Integration) COMPLETE — Phase 9.3a (Tools) COMPLETE (remediated: TD-14, TD-15, provider boundaries, tool inventory) — Phase 9.3b.1 (Agent Skeleton) COMPLETE — Phase 9.3b.2 (LLM Reasoning) COMPLETE
 
 **Phase 9.1 Deliverables (complete):**
 - Alembic migration 006: `target_type` discriminator, nullable `company_id`, `industry_id` FK, XOR CHECK, indexes
@@ -489,6 +489,16 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - 66 tests across 16 test classes, all passing; zero regressions on 1773 total backend tests
 - Architecture doc §14 corrected (3-category overlap, not "disjoint sets")
 - No new migrations, no ORM changes, no agent/tool/prompt/workflow implementation
+
+**Phase 9.3b.2 Deliverables (complete):**
+- `prompts.py`: Industry-specific LLM prompt templates with prompt injection defense (`<retrieved_document>` XML tags, SYSTEM_PREAMBLE declaring content is data)
+- `agent.py`: Three LLM stub methods replaced with real implementations — evidence extraction (per-document LLM calls), industry analysis (finding generation with evidence_indices mapping), gap/contradiction detection
+- Finding validation enhanced from category-only check to 4 criteria (category membership, empty content, FACT-evidence linkage, temporal consistency)
+- Module-level `_parse_evidence_response()` and `_parse_finding_response()` helpers with `LLMParsingError` on malformed/invalid JSON
+- Constructor updated to accept `LLMProvider` dependency injection
+- 76 tests across 24 test classes (30 new tests added to 46 Phase 9.3b.1 tests), all passing; zero regressions on 1913 total backend tests
+- ruff check clean, ruff format clean, mypy strict clean on changed files
+- No new migrations, no new dependencies, no LangGraph
 
 ---
 

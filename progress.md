@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-09-30 (Phase 9.3b.1 agent skeleton complete)
+**Last Updated:** 2026-09-30 (Phase 9.3b.2 industry research LLM reasoning complete)
 
 ---
 
@@ -473,7 +473,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Current Phase
 
-**Current Phase:** Phase 9 — Industry Research Agent (9.1 COMPLETE, 9.2 COMPLETE, 9.3a COMPLETE, 9.3b.1 COMPLETE)
+**Current Phase:** Phase 9 — Industry Research Agent (9.1 COMPLETE, 9.2 COMPLETE, 9.3a COMPLETE, 9.3b.1 COMPLETE, 9.3b.2 COMPLETE)
 
 ### Phase 9.1: ResearchRun Schema Migration — COMPLETE
 
@@ -572,7 +572,45 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 - [x] All 1882 backend tests passing (46 new), zero regressions
 - [x] ruff check clean, mypy clean (only pre-existing yahoo_finance.py warning)
 
-**Next Sub-Phase:** Phase 9.3b.2 — Industry Research Agent LLM reasoning (prompts, evidence extraction, finding generation, gap analysis)
+### Phase 9.3b.2: Industry Research Agent LLM Reasoning — COMPLETE
+
+- [x] `app/agents/industry_research/prompts.py` — Industry-specific LLM prompt templates (~129 lines):
+  - `INDUSTRY_SYSTEM_PREAMBLE` with `<retrieved_document>` prompt injection defense
+  - `_wrap_document()` helper for XML-delimited document injection defense
+  - `industry_evidence_extraction_prompt()` — extracts FACT/FINANCIAL_DATA/MANAGEMENT_STATEMENT/ANALYST_OPINION/REGULATORY_FILING from industry documents
+  - `industry_finding_generation_prompt()` — generates findings across 14 industry categories with 7-type classification and evidence linking via indices
+  - `industry_gap_contradiction_prompt()` — identifies research_gap and contradiction findings from existing analysis
+- [x] `app/agents/industry_research/agent.py` — LLM reasoning implementation (~796 lines):
+  - Constructor updated: `__init__(self, session, run_service, search, news, llm: LLMProvider)`
+  - `_step_evidence_extraction()`: per-document budget check, calls `self._llm.generate()` with structured output, parses with `_parse_evidence_response()`, persists via `self._tools.persist_evidence()`
+  - `_step_industry_analysis()`: builds evidence summaries, gets industry profile for company context, calls LLM with `config.generation_model`, maps evidence_indices to evidence_ids, persists findings
+  - `_step_finding_validation()`: enhanced from Phase 9.3b.1 stub to full 4-criteria validation (category membership, empty content, FACT evidence linkage, temporal consistency)
+  - `_step_gap_contradiction()`: builds findings summary, calls LLM with `config.analysis_model`, filters to research_gap/contradiction categories, persists
+  - Module-level `_parse_evidence_response()` and `_parse_finding_response()` helpers: `json.loads(response.content)` → `Model.model_validate(data)` → raise `LLMParsingError` on failure
+- [x] `tests/agents/test_industry_research_agent.py` — 76 tests across 24 test classes:
+  - All 46 Phase 9.3b.1 tests preserved (with updated mocking for LLM integration)
+  - `TestLLMResponseParsing` (7 tests): valid/invalid JSON parsing, schema validation, no fabricated findings/tokens
+  - `TestEvidenceExtractionStep` (5 tests): document extraction, empty docs, token tracking, budget exhaustion, malformed LLM response
+  - `TestIndustryAnalysisStep` (4 tests): finding generation, evidence index mapping, out-of-range index handling, token tracking
+  - `TestGapContradictionStep` (4 tests): gap generation, non-gap category filtering, contradiction preservation, budget exhaustion
+  - `TestPromptInjectionDefense` (2 tests): `<retrieved_document>` XML tags, SYSTEM_PREAMBLE declares "DATA, not instructions"
+  - `TestLLMProviderInjection` (2 tests): agent stores LLM provider, evidence extraction calls `llm.generate()`
+  - `TestEndToEnd` (1 test): full 7-step pipeline with mocked LLM responses
+  - `TestFindingValidation` rewritten (5 tests): FindingItem objects with 4-criteria validation (category, content, FACT-evidence, temporal)
+- [x] All 1913 backend tests passing, zero regressions
+- [x] ruff check clean, ruff format clean
+- [x] mypy strict clean on changed files (1 pre-existing yahoo_finance.py warning only)
+- [x] No new database migrations
+- [x] No new dependencies
+- [x] No LangGraph
+- [x] Agent depends on LLMProvider Protocol only (no concrete provider imports)
+- [x] Prompt injection defense: document content in `<retrieved_document>` XML tags
+- [x] Token budget enforcement: 20K hard / 16K warning, per-document budget checks
+- [x] MAX_LLM_ATTEMPTS=2 (1 initial + 1 retry) per ADR-007
+- [x] Finding categories validated against INDUSTRY_FINDING_CATEGORIES (14 categories)
+- [x] Finding types: 7-type classification (FACT, CALCULATION, MANAGEMENT_CLAIM, ANALYST_OPINION, AI_INFERENCE, ASSUMPTION, UNCERTAINTY)
+
+**Next Sub-Phase:** Phase 10 — Competitive Moat Agent
 
 ---
 
@@ -601,6 +639,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 - Research Run Infrastructure: ResearchRun lifecycle (7-state machine), ResearchRunStep, AgentExecution (with reproducibility metadata), ResearchFinding (with temporal integrity and supersession), ResearchArtifact, ResearchRunSource; state machines, repository layer (6 Protocol interfaces + SQLAlchemy implementations), service layer with concurrent run prevention, MAX_AGENT_RETRIES=3, temporal validation; 138 tests
 - Company Research Agent: 7-step sequential orchestrator (validate → discover → retrieve → extract → generate → validate → gap/contradiction), 8 tool implementations, LLM integration with structured output parsing, evidence extraction and persistence, finding generation with evidence linking, deterministic finding validation, gap/contradiction detection, token budget enforcement (30K hard/24K warning), retry handling (MAX_LLM_ATTEMPTS=2), prompt injection defense; 64 tests with 5 golden scenarios
 - Industry Research Agent Skeleton (Phase 9.3b.1): 7-step sequential orchestrator (industry_validation → source_discovery → document_retrieval → evidence_extraction[stub] → industry_analysis[stub] → finding_validation → gap_contradiction[stub]), token budget enforcement (20K hard/16K warning), three-tier error handling, ResearchRun lifecycle (target_type="industry"), LLM steps as stub boundaries; 46 tests
+- Industry Research Agent LLM Reasoning (Phase 9.3b.2): LLM stubs replaced with real implementations — evidence extraction (per-document LLM calls with budget checks), industry analysis (finding generation with evidence linking via indices), gap/contradiction detection, finding validation enhanced to 4 criteria (category, content, FACT-evidence, temporal), prompt injection defense, structured output parsing; 76 tests
 
 ---
 

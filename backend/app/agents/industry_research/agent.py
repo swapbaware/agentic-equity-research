@@ -1,14 +1,13 @@
 """Industry Research Agent — seven-step sequential orchestrator.
 
-Implements Phase 9.3b.1 of the Agentic Equity Research Platform.  The agent
+Implements Phase 9.3b of the Agentic Equity Research Platform.  The agent
 runs a fixed seven-step workflow (no LangGraph), tracks token budgets,
 enforces retry limits, and persists all outputs through the
 ``ResearchRunService`` (Phase 7).
 
-LLM reasoning steps (4, 5, 7) are stub boundaries in this phase — they
-record agent executions but perform no actual LLM calls and produce no
-findings.  Deterministic steps (1, 6) and provider-call steps (2, 3) are
-fully functional.
+LLM reasoning steps (4, 5, 7) use ``LLMProvider`` to extract evidence,
+generate findings, and identify gaps/contradictions.  Deterministic steps
+(1, 6) and provider-call steps (2, 3) are fully functional without LLM.
 
 Dependencies are injected via Protocol interfaces — the agent never
 imports a concrete provider.
@@ -17,6 +16,7 @@ imports a concrete provider.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 import uuid
@@ -37,10 +37,18 @@ from app.agents.contracts import (
     INDUSTRY_FINDING_CATEGORIES,
     INDUSTRY_RESEARCH_STEPS,
     DiscoverIndustrySourcesInput,
+    EvidenceExtractionOutput,
+    EvidenceItem,
+    ExtractedEvidence,
+    FindingGenerationOutput,
+    FindingItem,
     FindingValidationIssue,
     FindingValidationResult,
+    GetIndustryProfileInput,
     IndustryResearchConfig,
     IndustryResearchRequest,
+    PersistEvidenceInput,
+    PersistFindingsInput,
     RetrieveIndustryDocumentInput,
     RetrieveIndustryDocumentOutput,
     SourceCandidate,
@@ -48,13 +56,21 @@ from app.agents.contracts import (
     ValidateIndustryInput,
     ValidateIndustryOutput,
 )
+from app.agents.industry_research.prompts import (
+    industry_evidence_extraction_prompt,
+    industry_finding_generation_prompt,
+    industry_gap_contradiction_prompt,
+)
 from app.agents.industry_research.tools import IndustryResearchTools
+from app.models.enums import FindingType
 from app.models.research import ResearchRunStep
 from app.providers.errors import ProviderError
 from app.providers.interfaces import (
+    LLMProvider,
     NewsProvider,
     SearchProvider,
 )
+from app.providers.types import LLMResponse
 from app.schemas.research_run import (
     AgentExecutionCreate,
     ResearchRunCreate,
@@ -103,9 +119,11 @@ class IndustryResearchAgent:
         run_service: ResearchRunService,
         search: SearchProvider,
         news: NewsProvider,
+        llm: LLMProvider,
     ) -> None:
         self._session = session
         self._run_service = run_service
+        self._llm = llm
 
         self._tools = IndustryResearchTools(
             session=session,
@@ -156,8 +174,11 @@ class IndustryResearchAgent:
 
         industry_info: ValidateIndustryOutput | None = None
         sources: list[SourceCandidate] = []
+        documents: dict[str, RetrieveIndustryDocumentOutput] = {}
+        document_ids: dict[str, uuid.UUID] = {}
+        all_evidence: list[ExtractedEvidence] = []
         all_evidence_ids: list[uuid.UUID] = []
-        all_findings: list[object] = []
+        all_findings: list[FindingItem] = []
         validation_result: FindingValidationResult | None = None
         steps_completed = 0
         error_msg: str | None = None
@@ -183,7 +204,7 @@ class IndustryResearchAgent:
             steps_completed += 1
 
             # -- Step 3: document_retrieval -------------------------------------
-            await self._run_step_deterministic(
+            documents, document_ids = await self._run_step_deterministic(
                 step_map["document_retrieval"],
                 self._step_document_retrieval(
                     sources,
@@ -193,26 +214,38 @@ class IndustryResearchAgent:
             )
             steps_completed += 1
 
-            # -- Step 4: evidence_extraction (LLM stub) -------------------------
-            all_evidence_ids = await self._run_step_llm(
+            # -- Step 4: evidence_extraction (LLM) -----------------------------
+            all_evidence, all_evidence_ids = await self._run_step_llm(
                 step_map["evidence_extraction"],
                 run_id,
                 token_budget,
                 config,
-                lambda exec_id: self._step_evidence_extraction_stub(
+                lambda exec_id: self._step_evidence_extraction(
+                    industry_info,
+                    documents,
+                    document_ids,
                     exec_id,
+                    token_budget,
+                    config,
                 ),
             )
             steps_completed += 1
 
-            # -- Step 5: industry_analysis (LLM stub) ---------------------------
+            # -- Step 5: industry_analysis (LLM) -------------------------------
             analysis_findings = await self._run_step_llm(
                 step_map["industry_analysis"],
                 run_id,
                 token_budget,
                 config,
-                lambda exec_id: self._step_industry_analysis_stub(
+                lambda exec_id: self._step_industry_analysis(
+                    industry_info,
+                    all_evidence,
+                    all_evidence_ids,
+                    run_id,
                     exec_id,
+                    token_budget,
+                    config,
+                    request.observation_date,
                 ),
             )
             all_findings.extend(analysis_findings)
@@ -221,18 +254,28 @@ class IndustryResearchAgent:
             # -- Step 6: finding_validation (deterministic) ---------------------
             validation_result = await self._run_step_deterministic(
                 step_map["finding_validation"],
-                self._step_finding_validation(all_findings),
+                self._step_finding_validation(
+                    all_findings,
+                    all_evidence_ids,
+                    request.observation_date,
+                ),
             )
             steps_completed += 1
 
-            # -- Step 7: gap_contradiction_analysis (LLM stub) ------------------
+            # -- Step 7: gap_contradiction_analysis (LLM) ----------------------
             gap_findings = await self._run_step_llm(
                 step_map["gap_contradiction_analysis"],
                 run_id,
                 token_budget,
                 config,
-                lambda exec_id: self._step_gap_contradiction_stub(
+                lambda exec_id: self._step_gap_contradiction(
+                    industry_info,
+                    all_findings,
+                    run_id,
                     exec_id,
+                    token_budget,
+                    config,
+                    request.observation_date,
                 ),
             )
             all_findings.extend(gap_findings)
@@ -459,64 +502,307 @@ class IndustryResearchAgent:
         await asyncio.gather(*tasks)
         return documents, document_ids
 
-    async def _step_evidence_extraction_stub(
-        self,
-        execution_id: uuid.UUID,
-    ) -> list[uuid.UUID]:
-        """LLM stub — returns empty evidence list. Phase 9.3b.2 adds real extraction."""
-        return []
+    # -- Step 4: evidence_extraction (LLM) ------------------------------------
 
-    async def _step_industry_analysis_stub(
+    async def _step_evidence_extraction(
         self,
+        industry_info: ValidateIndustryOutput,
+        documents: dict[str, RetrieveIndustryDocumentOutput],
+        document_ids: dict[str, uuid.UUID],
         execution_id: uuid.UUID,
-    ) -> list[object]:
-        """LLM stub — returns empty findings list. Phase 9.3b.2 adds real analysis."""
-        return []
+        token_budget: TokenBudget,
+        config: IndustryResearchConfig,
+    ) -> tuple[list[ExtractedEvidence], list[uuid.UUID]]:
+        all_evidence: list[ExtractedEvidence] = []
+        all_evidence_ids: list[uuid.UUID] = []
+
+        for source_id, doc in documents.items():
+            if token_budget.is_exhausted:
+                raise TokenBudgetExhaustedError(
+                    token_budget.total_tokens,
+                    token_budget.budget,
+                )
+
+            prompt = industry_evidence_extraction_prompt(
+                industry_name=industry_info.name,
+                sector_name=industry_info.parent_sector_name,
+                document_content=doc.content,
+                source_id=source_id,
+                document_title=source_id,
+            )
+
+            schema = EvidenceExtractionOutput.model_json_schema()
+            response = await self._llm.generate(
+                prompt,
+                model=config.extraction_model,
+                response_schema=schema,
+            )
+            token_budget.record_usage(
+                response.usage.input_tokens,
+                response.usage.output_tokens,
+            )
+
+            extracted = _parse_evidence_response(response)
+            all_evidence.extend(extracted.evidences)
+
+            if source_id in document_ids:
+                evidence_items = [
+                    EvidenceItem(
+                        evidence_type=ev.evidence_type,
+                        claim=ev.claim,
+                        context=ev.context,
+                        page_or_section=ev.page_or_section,
+                        confidence=ev.confidence,
+                    )
+                    for ev in extracted.evidences
+                ]
+                if evidence_items:
+                    persist_result = await self._tools.persist_evidence(
+                        PersistEvidenceInput(
+                            document_id=document_ids[source_id],
+                            evidences=evidence_items,
+                        ),
+                    )
+                    all_evidence_ids.extend(persist_result.evidence_ids)
+
+        return all_evidence, all_evidence_ids
+
+    # -- Step 5: industry_analysis (LLM) -------------------------------------
+
+    async def _step_industry_analysis(
+        self,
+        industry_info: ValidateIndustryOutput,
+        evidence: list[ExtractedEvidence],
+        evidence_ids: list[uuid.UUID],
+        run_id: uuid.UUID,
+        execution_id: uuid.UUID,
+        token_budget: TokenBudget,
+        config: IndustryResearchConfig,
+        observation_date: date,
+    ) -> list[FindingItem]:
+        if token_budget.is_exhausted:
+            raise TokenBudgetExhaustedError(
+                token_budget.total_tokens,
+                token_budget.budget,
+            )
+
+        evidence_summaries = "\n".join(f"[{i}] ({ev.evidence_type}) {ev.claim}" for i, ev in enumerate(evidence))
+
+        company_list_summary: str | None = None
+        try:
+            profile = await self._tools.get_industry_profile(
+                GetIndustryProfileInput(industry_id=industry_info.industry_id),
+            )
+            if profile.companies:
+                company_list_summary = "\n".join(
+                    f"- {c.name} (market cap: {c.market_cap})" for c in profile.companies[:10]
+                )
+        except Exception:
+            logger.warning("Failed to get industry profile for context")
+
+        prompt = industry_finding_generation_prompt(
+            industry_name=industry_info.name,
+            sector_name=industry_info.parent_sector_name,
+            evidence_summaries=evidence_summaries,
+            company_list_summary=company_list_summary,
+        )
+
+        schema = FindingGenerationOutput.model_json_schema()
+        response = await self._llm.generate(
+            prompt,
+            model=config.generation_model,
+            response_schema=schema,
+        )
+        token_budget.record_usage(
+            response.usage.input_tokens,
+            response.usage.output_tokens,
+        )
+
+        generated = _parse_finding_response(response)
+
+        findings: list[FindingItem] = []
+        for gf in generated.findings:
+            linked_evidence: list[uuid.UUID] = []
+            if gf.evidence_indices:
+                for idx in gf.evidence_indices:
+                    if 0 <= idx < len(evidence_ids):
+                        linked_evidence.append(evidence_ids[idx])
+
+            findings.append(
+                FindingItem(
+                    agent_name=INDUSTRY_AGENT_NAME,
+                    finding_type=gf.finding_type,
+                    category=gf.category,
+                    content=gf.content,
+                    confidence=gf.confidence,
+                    observation_date=observation_date,
+                    source_publication_date=gf.source_publication_date,
+                    evidence_ids=linked_evidence or None,
+                )
+            )
+
+        if findings:
+            await self._tools.persist_findings(
+                PersistFindingsInput(
+                    run_id=run_id,
+                    execution_id=execution_id,
+                    findings=findings,
+                )
+            )
+
+        return findings
+
+    # -- Step 6: finding_validation (deterministic) ---------------------------
 
     async def _step_finding_validation(
         self,
-        findings: list[object],
+        findings: list[FindingItem],
+        evidence_ids: list[uuid.UUID],
+        observation_date: date,
     ) -> FindingValidationResult:
         issues: list[FindingValidationIssue] = []
-        valid_count = 0
-        rejected_count = 0
 
         for i, f in enumerate(findings):
-            if not hasattr(f, "category"):
-                issues.append(
-                    FindingValidationIssue(
-                        finding_index=i,
-                        issue_type="missing_category",
-                        message="Finding lacks a category attribute",
-                    )
-                )
-                rejected_count += 1
-                continue
-
-            category = f.category
-            if category not in INDUSTRY_FINDING_CATEGORIES:
+            if f.category not in INDUSTRY_FINDING_CATEGORIES:
                 issues.append(
                     FindingValidationIssue(
                         finding_index=i,
                         issue_type="invalid_category",
-                        message=f"Category '{category}' not in allowed industry categories",
+                        message=f"Category '{f.category}' not in allowed industry categories",
                     )
                 )
-                rejected_count += 1
-                continue
 
-            valid_count += 1
+            if not f.content or not f.content.strip():
+                issues.append(
+                    FindingValidationIssue(
+                        finding_index=i,
+                        issue_type="empty_content",
+                        message="Finding content is empty",
+                    )
+                )
+
+            if f.finding_type == FindingType.FACT and not f.evidence_ids:
+                issues.append(
+                    FindingValidationIssue(
+                        finding_index=i,
+                        issue_type="fact_without_evidence",
+                        message="FACT-type finding must have linked evidence",
+                    )
+                )
+
+            if f.source_publication_date is not None and f.source_publication_date > observation_date:
+                issues.append(
+                    FindingValidationIssue(
+                        finding_index=i,
+                        issue_type="temporal_inconsistency",
+                        message=(
+                            f"source_publication_date ({f.source_publication_date})"
+                            f" is after observation_date ({observation_date})"
+                        ),
+                    )
+                )
+
+        rejected_indices = {iss.finding_index for iss in issues}
+        valid_count = len(findings) - len(rejected_indices)
 
         return FindingValidationResult(
             total_findings=len(findings),
             valid_count=valid_count,
-            rejected_count=rejected_count,
+            rejected_count=len(rejected_indices),
             issues=issues,
         )
 
-    async def _step_gap_contradiction_stub(
+    # -- Step 7: gap_contradiction_analysis (LLM) -----------------------------
+
+    async def _step_gap_contradiction(
         self,
+        industry_info: ValidateIndustryOutput,
+        existing_findings: list[FindingItem],
+        run_id: uuid.UUID,
         execution_id: uuid.UUID,
-    ) -> list[object]:
-        """LLM stub — returns empty gap/contradiction list. Phase 9.3b.2 adds real analysis."""
-        return []
+        token_budget: TokenBudget,
+        config: IndustryResearchConfig,
+        observation_date: date,
+    ) -> list[FindingItem]:
+        if token_budget.is_exhausted:
+            raise TokenBudgetExhaustedError(
+                token_budget.total_tokens,
+                token_budget.budget,
+            )
+
+        findings_summary = "\n".join(
+            f"[{i}] ({f.finding_type}/{f.category}) {f.content}" for i, f in enumerate(existing_findings)
+        )
+
+        prompt = industry_gap_contradiction_prompt(
+            industry_name=industry_info.name,
+            findings_summary=findings_summary,
+        )
+
+        schema = FindingGenerationOutput.model_json_schema()
+        response = await self._llm.generate(
+            prompt,
+            model=config.analysis_model,
+            response_schema=schema,
+        )
+        token_budget.record_usage(
+            response.usage.input_tokens,
+            response.usage.output_tokens,
+        )
+
+        generated = _parse_finding_response(response)
+
+        gap_findings: list[FindingItem] = []
+        for gf in generated.findings:
+            if gf.category not in ("research_gap", "contradiction"):
+                continue
+            gap_findings.append(
+                FindingItem(
+                    agent_name=INDUSTRY_AGENT_NAME,
+                    finding_type=gf.finding_type,
+                    category=gf.category,
+                    content=gf.content,
+                    confidence=gf.confidence,
+                    observation_date=observation_date,
+                    source_publication_date=None,
+                    evidence_ids=None,
+                )
+            )
+
+        if gap_findings:
+            await self._tools.persist_findings(
+                PersistFindingsInput(
+                    run_id=run_id,
+                    execution_id=execution_id,
+                    findings=gap_findings,
+                )
+            )
+
+        return gap_findings
+
+
+# ---------------------------------------------------------------------------
+# LLM response parsing helpers
+# ---------------------------------------------------------------------------
+
+
+def _parse_evidence_response(response: LLMResponse) -> EvidenceExtractionOutput:
+    try:
+        data = json.loads(response.content)
+        return EvidenceExtractionOutput.model_validate(data)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise LLMParsingError(
+            "evidence_extraction",
+            str(exc),
+        ) from exc
+
+
+def _parse_finding_response(response: LLMResponse) -> FindingGenerationOutput:
+    try:
+        data = json.loads(response.content)
+        return FindingGenerationOutput.model_validate(data)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise LLMParsingError(
+            "finding_generation",
+            str(exc),
+        ) from exc
