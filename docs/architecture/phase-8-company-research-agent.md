@@ -303,13 +303,19 @@ Step 7: GAP_AND_CONTRADICTION_ANALYSIS [LLM reasoning + deterministic]
 ResearchRun completed (Phase 7 infrastructure)
 ```
 
+### Sequential Workflow with Bounded Concurrency
+
+The seven logical research steps execute **sequentially** — each step depends on the prior step's output. There is no parallel execution or conditional branching between steps.
+
+**Exception: bounded concurrency within Step 3.** Within document retrieval (Step 3), individual document retrieval operations are independent of each other and may execute concurrently using `asyncio.gather()` with a bounded concurrency limit (default: 5 concurrent retrievals, configurable via `ResearchRun.configuration`). This reduces wall-clock time for the retrieval step while respecting provider rate limits.
+
 ### Step Classification
 
 | Step | Type | Uses LLM | Uses Provider | Writes to DB |
 |---|---|---|---|---|
 | 1. Company Validation | Deterministic | No | No | Step status only |
 | 2. Source Discovery | Provider/tool call | No | Yes | Artifact (candidate list) |
-| 3. Document Retrieval | Provider/tool call | No | Yes | ResearchDocument, DocumentVersion, ResearchRunSource |
+| 3. Document Retrieval | Provider/tool call (bounded concurrency within step) | No | Yes | ResearchDocument, DocumentVersion, ResearchRunSource |
 | 4. Evidence Extraction | LLM reasoning | Yes | No | Evidence |
 | 5. Finding Generation | LLM reasoning | Yes | No | ResearchFinding, research_finding_evidence |
 | 6. Finding Validation | Deterministic | No | No | Artifact (validation report) |
@@ -359,6 +365,28 @@ ResearchFinding           (research.research_finding)
 - Every ResearchDocument has a foreign key to its Source (`source_id`) and carries its own `source_tier`.
 - Every ResearchFinding has an `agent_execution_id` linking to the AgentExecution that produced it, which records the model, prompt version, and tool versions used.
 - Every document access during the research run is recorded as a `ResearchRunSource` entry.
+
+### EvidenceType-to-FindingType Mapping
+
+EvidenceType and FindingType are separate concepts operating at different layers. EvidenceType classifies what was extracted from a document. FindingType classifies the research output produced by the agent. The mapping between them:
+
+| EvidenceType (on Evidence record) | Typical FindingType(s) produced | Mapping rationale |
+|---|---|---|
+| `FACT` | `FACT` | Verifiable factual statement from a document produces a FACT finding |
+| `FINANCIAL_DATA` | `FACT` or `CALCULATION` | Financial figures extracted from documents produce FACT findings. The Company Research Agent produces FACT (not CALCULATION) because it does not compute; the analytics engine produces CALCULATION findings. |
+| `MANAGEMENT_STATEMENT` | `MANAGEMENT_CLAIM` | Forward-looking or unverifiable management statements produce MANAGEMENT_CLAIM findings. A MANAGEMENT_CLAIM finding must reference evidence of type MANAGEMENT_STATEMENT. |
+| `ANALYST_OPINION` | `ANALYST_OPINION` | Third-party analyst views produce ANALYST_OPINION findings |
+| `REGULATORY_FILING` | `FACT` | Regulatory filings (SEBI, exchange disclosures) are authoritative and produce FACT findings |
+
+FindingTypes that do NOT require a specific EvidenceType:
+
+| FindingType | Evidence requirement | Description |
+|---|---|---|
+| `AI_INFERENCE` | No evidence linkage required (but should reference informing evidence in content) | Agent's own synthesis, clearly labeled |
+| `ASSUMPTION` | No evidence linkage required | Assumptions the agent makes to proceed |
+| `UNCERTAINTY` | No evidence linkage required | Explicit acknowledgment of missing information |
+
+Key invariant: EvidenceType and FindingType remain separate enums. A finding is not a promoted evidence record — it is a research output that references evidence. Multiple evidence records of different types may inform a single finding.
 
 ### How Unsupported Statements Are Handled
 
@@ -456,32 +484,52 @@ Phase 7 established temporal validation in `ResearchRunService._validate_tempora
 
 Phase 8 reuses this validation without modification.
 
+### Canonical Information-Availability Rule
+
+The fundamental temporal constraint for all Phase 8 operations is:
+
+```
+information_available_date <= observation_date
+```
+
+"What was knowable as of observation_date?" — NOT "What is known today?"
+
+The `information_available_date` is the date information became publicly accessible. This is distinct from the content date of the information itself:
+
+- A company's FY2025 annual report covers the financial period ending 2025-03-31, but was filed on 2025-05-30. The `information_available_date` is 2025-05-30 (the filing date), not 2025-03-31 (the period end).
+- A quarterly result for Q3 FY2025 covers the period ending 2024-12-31, but was published on 2025-01-25. The `information_available_date` is 2025-01-25.
+- A news article dated 2025-06-15 has `information_available_date` = 2025-06-15 (its publication date).
+
 ### Temporal Dimensions
 
-| Temporal Concept | Definition | Where Stored |
-|---|---|---|
-| observation_date | The "as of" date for the research. Only information knowable as of this date is eligible. | ResearchRun.observation_date, ResearchFinding.observation_date |
-| source_publication_date | The date the source document was published or filed. | ResearchFinding.source_publication_date, ResearchDocument.document_date |
-| document_date | The date associated with the document content (e.g., the financial year-end for an annual report). | ResearchDocument.document_date |
-| financial_period_end | The end date of the financial period (e.g., 2025-03-31 for FY2025). | Implicit in document_date for financial documents |
-| financial_information_available_date | The date when financial information became publicly available (filing date). | FinancialStatement.filing_date (from provider types) |
-| execution_timestamps | When the research steps actually executed. | AgentExecution.started_at, completed_at |
+| Temporal Concept | Definition | Where Stored | Example |
+|---|---|---|---|
+| `observation_date` | The "as of" date for the research. Only information with `information_available_date <= observation_date` is eligible. | ResearchRun.observation_date, ResearchFinding.observation_date | 2025-09-30 |
+| `information_available_date` | The date information became publicly accessible. This is the filing date for filings, the publication date for news, the filing date for financial statements. NOT the period end. | Derived from Filing.filing_date, NewsArticle.published_at, FinancialStatement.filing_date | 2025-05-30 (filing date of FY2025 annual report) |
+| `source_publication_date` | The date the source document was published or filed. Equivalent to `information_available_date` for most sources. Stored on findings for provenance. | ResearchFinding.source_publication_date | 2025-05-30 |
+| `document_date` | The date associated with the document content (e.g., the financial year-end, the report cover date). May precede `information_available_date`. | ResearchDocument.document_date | 2025-03-31 (FY2025 year-end) |
+| `financial_period_end` | The end date of the financial period covered by a financial statement. This is NOT the availability date. | Implicit in the `period` field of FinancialStatement | 2025-03-31 for FY2025 |
+| `filing_date` | The date a financial statement or corporate filing was submitted to the exchange/regulator, making it publicly available. This IS the `information_available_date` for filings. | FinancialStatement.filing_date, Filing.filing_date | 2025-05-30 |
+| `execution_timestamps` | When the research steps actually executed. Not used for eligibility. | AgentExecution.started_at, completed_at | 2025-10-01T14:30:00Z |
 
 ### Temporal Rules
 
-1. **Source eligibility.** A source document is eligible for the research run only if `document.document_date <= run.observation_date`. Documents published after the observation date are excluded from source discovery (Step 2).
+1. **Source eligibility (canonical rule).** A source is eligible for the research run only if its `information_available_date <= run.observation_date`. For corporate filings, this is `Filing.filing_date <= observation_date`. For news, this is `NewsArticle.published_at <= observation_date`. For transcripts, this is `Transcript.date <= observation_date`. Documents whose `information_available_date` is after the observation date are excluded from source discovery (Step 2). Note: `document_date` (content date) may be before `information_available_date` and is NOT the eligibility criterion.
 
-2. **Document eligibility.** During document retrieval (Step 3), the agent records `ResearchRunSource.accessed_at` as the actual retrieval timestamp but uses `document_date` for temporal eligibility.
+2. **Document eligibility.** During document retrieval (Step 3), the agent records `ResearchRunSource.accessed_at` as the actual retrieval timestamp. Eligibility is determined by `information_available_date` (checked in Step 2), not by `document_date`.
 
-3. **Financial data eligibility.** Financial data is eligible if the financial period end precedes the observation date AND the data was publicly available (filed) before the observation date. This reuses the point-in-time validation from the Historical Valuation Bands engine (Phase 6e.4).
+3. **Financial data eligibility.** Financial data is eligible if `FinancialStatement.filing_date <= observation_date`. The `financial_period_end` is NOT the availability date — a financial statement for the period ending 2025-03-31 is NOT eligible until its `filing_date`. If `filing_date` is null, the statement is treated as ineligible (conservative default). This reuses the point-in-time validation from the Historical Valuation Bands engine (Phase 6e.4).
 
-4. **Look-ahead prevention.** No finding may reference evidence from a document with `document_date > observation_date`. This is enforced by the Phase 7 temporal validation.
+4. **Look-ahead prevention.** No finding may reference evidence from a document whose `information_available_date > observation_date`. This is enforced by the Phase 7 temporal validation via `source_publication_date` (which the agent sets to the source's `information_available_date`).
 
-5. **Restatement handling.** If a company files restated financials, the agent retrieves the version that was available as of the observation date. The DocumentVersion model tracks revisions; the agent uses the version with `retrieved_at <= observation_date`.
+5. **Restatement handling.** If a company files restated financials, the agent uses the version whose filing/retrieval date satisfies `information_available_date <= observation_date`. The DocumentVersion model tracks revisions; the agent uses the latest version with `retrieved_at <= observation_date`.
 
 6. **Revised document handling.** If multiple DocumentVersions exist for the same ResearchDocument, the agent uses the latest version with `retrieved_at <= observation_date`.
 
-7. **The fundamental rule**: "What was knowable as of observation_date?" — NOT "What is known today?"
+7. **Phase 7 temporal validation (reused without modification).** `ResearchRunService._validate_temporal_consistency()` enforces:
+   - `finding.observation_date` must not be after `run.observation_date`.
+   - `finding.source_publication_date` must not be after `finding.observation_date`.
+   - `finding.source_publication_date` must not be after `finding.created_at` (post-persist check).
 
 ---
 
@@ -529,16 +577,36 @@ The agent is granted access to exactly these tools. No other tools are available
 | Attribute | Value |
 |---|---|
 | **Name** | `discover_sources` |
-| **Purpose** | Find available source documents for a company |
+| **Purpose** | Find available source documents for a company across all source types (filings, transcripts, news) |
 | **Input schema** | `{company_id: UUID, observation_date: date, document_types: list[DocumentType]?, limit: int?}` |
-| **Output schema** | `{sources: list[{filing_id: str, title: str, filing_type: str, filing_date: date, source_tier: SourceTier, url: str?}]}` |
+| **Output schema** | `{candidates: list[SourceCandidate]}` |
 | **Authorization** | Provider API keys (via ProviderFactory) |
-| **Temporal restrictions** | Only returns documents with `filing_date <= observation_date` |
+| **Temporal restrictions** | Only returns sources with `information_available_date <= observation_date` (filing_date for filings, published_at for news, date for transcripts) |
 | **Provenance** | DataProvenance from provider response |
 | **Error behavior** | ProviderError variants (Auth, RateLimit, Timeout, Unavailable) |
 | **Timeout** | 30s |
-| **Retry** | 2 retries with exponential backoff |
+| **Retry** | 2 retries with exponential backoff (via ProviderBase) |
 | **Security** | Rate-limited via ProviderBase. No write access to external systems. |
+
+**SourceCandidate contract** — a generic representation for any source type:
+
+```python
+class SourceCandidate(BaseModel):
+    source_id: str                  # Unique identifier from the provider (filing_id, transcript key, article URL)
+    source_type: DocumentType       # FILING, TRANSCRIPT, NEWS, ANNUAL_REPORT, etc. (existing DocumentType enum)
+    provider: str                   # Which provider returned this candidate (e.g., "bse", "nse", "yahoo")
+    title: str                      # Human-readable title
+    publication_date: date          # The information_available_date: filing_date for filings, published_at for news, date for transcripts
+    document_date: date | None      # The content date (period end, report date) — may differ from publication_date
+    source_tier: SourceTier         # TIER_1, TIER_2, TIER_3
+    url: str | None                 # URL if available
+    provider_metadata: dict | None  # Provider-specific fields (quarter/year for transcripts, exchange for filings, etc.)
+```
+
+This contract is derived from the existing provider return types:
+- `Filing` → `source_id=filing_id`, `publication_date=filing_date`, `source_type` from filing_type mapping
+- `TranscriptSummary` → `source_id=f"{symbol}:{quarter}:{year}"`, `publication_date=date`, `source_type=TRANSCRIPT`
+- `NewsArticle` → `source_id=url`, `publication_date=published_at.date()`, `source_type=NEWS`
 
 #### Tool 3: retrieve_document
 
@@ -563,7 +631,7 @@ The agent is granted access to exactly these tools. No other tools are available
 | **Name** | `get_company_profile` |
 | **Purpose** | Retrieve detailed company profile data |
 | **Input schema** | `{company_id: UUID}` |
-| **Output schema** | `{name: str, nse_symbol: str?, bse_code: str?, isin: str, sector: str?, industry: str?, market_cap: Decimal?, incorporation_date: date?, listing_date: date?, website: str?, description: str?, business_segments: dict?, major_products: dict?, geographies: dict?}` |
+| **Output schema** | `{name: str, nse_symbol: str?, bse_code: str?, isin: str, sector_id: UUID?, sector_name: str?, industry_id: UUID?, industry_name: str?, market_cap: Decimal?, incorporation_date: date?, listing_date: date?, website: str?, description: str?, registered_address: str?, business_segments: dict?, major_products: dict?, geographies: dict?, is_active: bool}` |
 | **Authorization** | Database read |
 | **Temporal restrictions** | None (profile is current snapshot) |
 | **Provenance** | Source: platform database |
@@ -571,6 +639,8 @@ The agent is granted access to exactly these tools. No other tools are available
 | **Timeout** | 5s |
 | **Retry** | 0 |
 | **Security** | Read-only. |
+
+**Implementation note:** The Company model stores `sector_id` and `industry_id` as foreign keys to `company.classification`. The tool resolves these to human-readable `sector_name` and `industry_name` via a join to the Classification table. The `business_segments`, `major_products`, and `geographies` fields are JSONB columns on the Company model and may be null if not yet populated. All fields in this output exist on the Company model (`backend/app/models/company.py`).
 
 #### Tool 5: search_company_news
 
@@ -581,7 +651,7 @@ The agent is granted access to exactly these tools. No other tools are available
 | **Input schema** | `{symbol: str, exchange: str, observation_date: date, limit: int?}` |
 | **Output schema** | `{articles: list[{title: str, url: str, source: str, published_at: datetime, summary: str?}]}` |
 | **Authorization** | Provider API keys (via NewsProvider) |
-| **Temporal restrictions** | Only returns articles with `published_at <= observation_date` |
+| **Temporal restrictions** | Only returns articles with `published_at <= observation_date` (publication_date is the information_available_date for news) |
 | **Provenance** | DataProvenance from provider response |
 | **Error behavior** | ProviderError variants |
 | **Timeout** | 15s |
@@ -594,10 +664,10 @@ The agent is granted access to exactly these tools. No other tools are available
 |---|---|
 | **Name** | `get_financial_summary` |
 | **Purpose** | Retrieve recent financial headlines (revenue, profit) for context, NOT for computation |
-| **Input schema** | `{symbol: str, exchange: str, periods: int?}` |
+| **Input schema** | `{symbol: str, exchange: str, observation_date: date, periods: int?}` |
 | **Output schema** | `{statements: list[FinancialStatement]}` |
 | **Authorization** | Provider API keys (via FinancialDataProvider) |
-| **Temporal restrictions** | Only statements with `filing_date <= observation_date` |
+| **Temporal restrictions** | Only statements with `filing_date <= observation_date` (filing_date is the information_available_date; statements with null filing_date are excluded). The tool accepts observation_date as an explicit input for auditability — it is not injected implicitly. |
 | **Provenance** | DataProvenance from provider response |
 | **Error behavior** | ProviderError variants |
 | **Timeout** | 15s |
@@ -617,8 +687,10 @@ The agent is granted access to exactly these tools. No other tools are available
 | **Provenance** | `extracted_by` set to "company_research_agent" |
 | **Error behavior** | ValidationError (invalid document_id, schema violation) |
 | **Timeout** | 10s |
-| **Retry** | 0 (database write — idempotency handled via content_hash) |
+| **Retry** | 0 |
 | **Security** | Write-only to research schema. Cannot modify company or financial data. |
+
+**Idempotency note:** The Evidence model (`research.evidence`) does NOT have a unique constraint on any content field. Each call to `EvidenceService.create_evidence()` creates a new Evidence record, even if the claim text is identical to an existing record. Document-level deduplication is handled via `ResearchDocument.content_hash` (unique constraint `uq_research_document_content_hash`), which prevents duplicate documents but not duplicate evidence extractions from the same document. Within a single research run, the agent must not call `persist_evidence` more than once per document to avoid duplicate evidence records. Across runs, duplicate evidence records are acceptable — each run produces its own evidence extraction for temporal correctness.
 
 #### Tool 8: persist_findings
 
@@ -663,21 +735,36 @@ Phase 8 uses the following existing Protocol interfaces from `backend/app/provid
 | `MacroDataProvider` | Macro analysis belongs to Macro Economics Agent (#8) |
 | `SearchProvider` | Web search is deferred — Phase 8 uses structured provider queries, not open web search |
 
-### Missing Provider Capabilities
+### Document Ingestion Boundary
 
-Phase 8 identifies one gap:
+**Phase 8 boundary rule:** All existing provider interfaces return clean text. Phase 8 treats provider output as already-extracted text content and does not perform PDF-to-text extraction, HTML sanitization, or binary document processing.
 
-**Document content retrieval.** The existing `CorporateFilingsProvider.get_filing_document()` returns a `FilingDocument` with `content: str` and `content_type: str`. This is sufficient for text-based filings but does not handle PDF-to-text extraction or HTML sanitization. Phase 8 assumes document content arrives as clean text.
+**What Phase 8 consumes:**
 
-**Proposed extension (architecture only, not implemented in Phase 8):**
+| Provider Method | Returns | Phase 8 Assumption |
+|---|---|---|
+| `CorporateFilingsProvider.get_filing_document()` | `FilingDocument(content: str, content_type: str)` | `content` is clean text |
+| `TranscriptProvider.get_transcript()` | `Transcript(raw_text: str, segments: list)` | `raw_text` is clean text |
+| `NewsProvider.get_company_news()` | `list[NewsArticle(summary: str)]` | `summary` is clean text |
 
-A `DocumentIngestionProvider` Protocol for Phase 9+ that handles:
-- PDF text extraction
-- HTML sanitization
-- Content deduplication via content_hash
-- S3 storage path management
+**What Phase 8 does NOT do:**
+- PDF-to-text extraction
+- HTML sanitization beyond what the provider already performs
+- Binary document processing (images, spreadsheets)
+- OCR or scanned document handling
+- S3 upload of raw document files
 
-This is noted as TD-9 in progress.md. Phase 8 works with the existing `CorporateFilingsProvider.get_filing_document()` for text-based filings and treats the absence of PDF ingestion as a documented limitation.
+This is a documented limitation. If a provider returns a `content_type` indicating a non-text format (e.g., `application/pdf`), Phase 8 skips that document and records a `ResearchRunStep` note indicating the document was unavailable in text form.
+
+**Future extension point (TD-9, not Phase 8):**
+
+A `DocumentIngestionProvider` Protocol should be introduced when the platform needs to process raw document formats. This provider would sit between the filing/transcript providers and the agent, converting binary formats to clean text. The agent's code would not change — it would continue to receive `str` content from its tools. The ingestion provider would handle:
+- PDF text extraction (e.g., via `pdfplumber` or `pymupdf`)
+- HTML sanitization to plain text or safe Markdown
+- Content deduplication via `content_hash` (leveraging `ResearchDocument`'s existing unique constraint)
+- S3 storage path management for raw documents
+
+This extension point is noted as TD-9 in progress.md.
 
 ---
 
@@ -731,11 +818,11 @@ The `LLMProvider.generate()` method accepts a `response_schema` parameter for JS
 - Evidence extraction (list of Evidence-shaped objects)
 - Finding generation (list of ResearchFinding-shaped objects)
 
-When the LLM returns output that does not conform to the schema, the agent retries once. If the retry also fails, the step is marked FAILED with `error_type = "MALFORMED_OUTPUT"`.
+When the LLM returns output that does not conform to the schema, the agent retries once (1 retry = maximum 2 total attempts for any individual LLM step). If the second attempt also fails, the step is marked FAILED with `error_type = "MALFORMED_OUTPUT"`. See §17 for the complete retry semantics.
 
 ### Context Management
 
-Each LLM call operates within the per-agent token budget (ADR-008: 20,000 tokens for Business Model Agent). If a document exceeds the context window:
+Each LLM call operates within the per-agent token budget (ADR-008; Phase 8 hard budget: 30,000 tokens — see §21). If a document exceeds the context window:
 
 1. The document is chunked at section boundaries.
 2. Each chunk is processed independently for evidence extraction.
@@ -745,13 +832,15 @@ Token usage is tracked per `AgentExecution` (`input_tokens`, `output_tokens`, `c
 
 ### Malformed Output Handling
 
+All LLM malformed-output retries follow the Phase 8 rule: **1 retry, maximum 2 total attempts per LLM step.**
+
 | Malformed Output Type | Handling |
 |---|---|
-| Invalid JSON | Retry with explicit JSON instruction. On second failure → FAILED. |
-| Valid JSON, wrong schema | Retry with schema reminder. On second failure → FAILED. |
-| Truncated output | Record as TRUNCATED status in AgentExecution. Partial findings preserved. |
+| Invalid JSON | Retry once with explicit JSON instruction. On second failure → FAILED. |
+| Valid JSON, wrong schema | Retry once with schema reminder. On second failure → FAILED. |
+| Truncated output | Record as TRUNCATED status in AgentExecution. Partial findings preserved. No retry (partial output is usable). |
 | Empty output | Retry once. On second failure → FAILED. |
-| Hallucinated citations | Detected during Finding Validation (Step 6). Evidence IDs that don't exist are rejected. |
+| Hallucinated citations | Detected during Finding Validation (Step 6). Evidence IDs that don't exist are rejected. Not a retry scenario. |
 
 ### Cost Tracking
 
@@ -829,7 +918,7 @@ Each ResearchFinding persisted by the Company Research Agent carries:
 
 ### Principle
 
-The Company Research Agent does NOT collapse contradictory evidence into a single conclusion. Both contradicting findings are preserved with their respective evidence.
+The Company Research Agent does NOT collapse contradictory evidence into a single conclusion, a single confidence score, or a weighted average. Both contradicting findings are preserved independently with their respective evidence linkages and source provenance intact. The agent does not determine which side is correct.
 
 ### Mechanism
 
@@ -883,17 +972,19 @@ An explicit `contradicts_finding_id` foreign key is NOT proposed for Phase 8. If
 
 ### Reuse of Phase 7 Infrastructure
 
-Phase 8 creates the following logical steps, mapped to the Phase 7 `ResearchRunStep` model:
+Phase 8 creates the following logical steps, mapped to the Phase 7 `ResearchRunStep` model.
+
+**step_type convention:** `ResearchRunStep.step_type` is `VARCHAR(50)` (not a database enum), so any string value up to 50 characters is valid without a migration. Phase 8 establishes the following conventional string values for consistency across future agents:
 
 | step_order | step_name | step_type | Description |
 |---|---|---|---|
-| 1 | `company_validation` | `DETERMINISTIC` | Resolve company identifier |
-| 2 | `source_discovery` | `PROVIDER_CALL` | Find available source documents |
-| 3 | `document_retrieval` | `PROVIDER_CALL` | Retrieve and register documents |
-| 4 | `evidence_extraction` | `LLM_REASONING` | Extract structured evidence from documents |
-| 5 | `finding_generation` | `LLM_REASONING` | Synthesize evidence into research findings |
-| 6 | `finding_validation` | `DETERMINISTIC` | Validate evidence linkage and temporal constraints |
-| 7 | `gap_contradiction_analysis` | `LLM_REASONING` | Identify contradictions and research gaps |
+| 1 | `company_validation` | `deterministic` | Resolve company identifier |
+| 2 | `source_discovery` | `provider_call` | Find available source documents |
+| 3 | `document_retrieval` | `provider_call` | Retrieve and register documents |
+| 4 | `evidence_extraction` | `llm_reasoning` | Extract structured evidence from documents |
+| 5 | `finding_generation` | `llm_reasoning` | Synthesize evidence into research findings |
+| 6 | `finding_validation` | `deterministic` | Validate evidence linkage and temporal constraints |
+| 7 | `gap_contradiction_analysis` | `llm_reasoning` | Identify contradictions and research gaps |
 
 ### Step Lifecycle
 
@@ -910,10 +1001,13 @@ PENDING → RUNNING → COMPLETED
 Steps 4, 5, and 7 (LLM reasoning steps) produce one or more `AgentExecution` records:
 
 - `attempt_number = 1` for the initial execution
-- `attempt_number = 2` for a retry (max 3 attempts per ADR-007 / `MAX_AGENT_RETRIES = 3`)
+- `attempt_number = 2` for a retry after malformed output or LLM failure
+- **Phase 8 LLM retry limit: 1 retry, maximum 2 total attempts per LLM step.** The Phase 7 infrastructure constant `MAX_AGENT_RETRIES = 3` remains available as infrastructure capability, but Phase 8 explicitly limits LLM steps to 2 attempts. This avoids excessive token consumption on steps that repeatedly produce malformed output.
 - Each execution has independent `input_tokens`, `output_tokens`, `cost_usd`, `model_provider`, `model_name`
 
 Steps 1, 2, 3, and 6 (deterministic / provider steps) still create `AgentExecution` records for audit trail, but with `model_provider = "deterministic"` and `model_name = "n/a"`.
+
+Provider-level retries (network errors, rate limits) are handled by `ProviderBase` internally and are transparent to the step — they do not increment `attempt_number`. A step-level retry (incrementing `attempt_number`) occurs only on LLM malformed output, LLM timeout, or LLM empty output.
 
 ### Artifacts per Step
 
@@ -929,29 +1023,35 @@ Steps 1, 2, 3, and 6 (deterministic / provider steps) still create `AgentExecuti
 
 ### Reuse of Phase 7 and ADR-007
 
-Phase 8 reuses the failure mode architecture from ADR-007 and the Phase 7 state machine without modification.
+Phase 8 reuses the failure mode architecture from ADR-007 and the Phase 7 state machine without modification. Phase 8 establishes the following explicit retry semantics:
+
+**Phase 8 retry rules:**
+
+1. **LLM step-level retry:** 1 retry, maximum 2 total attempts (`attempt_number` 1 and 2). Applies to malformed output, LLM timeout, and empty output. The Phase 7 constant `MAX_AGENT_RETRIES = 3` remains as infrastructure but Phase 8 does not use the third attempt for LLM steps.
+2. **Provider-level retry:** Governed entirely by `ProviderBase` (exponential backoff, up to the provider's configured retry count). These retries are transparent to the step and do not increment `attempt_number`.
+3. **Deterministic steps:** No retry (local operations, no external dependency).
 
 ### Failure Mapping
 
 | Failure Type | Step(s) | AgentExecution Status | Step Status | Run Status | Retry? |
 |---|---|---|---|---|---|
 | Company not found | 1 | FAILED | FAILED | FAILED | No |
-| Provider auth failure | 2, 3, 5¹ | FAILED | FAILED | FAILED | Yes (3 retries via ProviderBase) |
-| Provider rate limit | 2, 3 | FAILED | FAILED² | PARTIAL | Yes (backoff via ProviderBase) |
-| Provider timeout | 2, 3 | TIMEOUT | FAILED | PARTIAL | Yes (2 retries) |
+| Provider auth failure | 2, 3 | FAILED | FAILED | FAILED | Yes (via ProviderBase, transparent to step) |
+| Provider rate limit | 2, 3 | FAILED | FAILED¹ | PARTIAL | Yes (backoff via ProviderBase, transparent to step) |
+| Provider timeout | 2, 3 | TIMEOUT | FAILED | PARTIAL | Yes (via ProviderBase, transparent to step) |
 | Provider unavailable | 2, 3 | FAILED | FAILED | PARTIAL | No (fallback provider if configured) |
-| Document retrieval failure (some) | 3 | FAILED per doc | COMPLETED³ | Continues | Per-document |
+| Document retrieval failure (some) | 3 | FAILED per doc | COMPLETED² | Continues | Per-document (via ProviderBase) |
 | Document retrieval failure (all) | 3 | FAILED | FAILED | FAILED or PARTIAL | No |
-| LLM timeout | 4, 5, 7 | TIMEOUT | FAILED | PARTIAL | Yes (1 retry) |
-| LLM malformed output | 4, 5, 7 | FAILED | FAILED | PARTIAL | Yes (1 retry) |
-| LLM truncation | 4, 5, 7 | TRUNCATED | COMPLETED⁴ | Continues | Partial results used |
+| LLM timeout | 4, 5, 7 | TIMEOUT | FAILED | PARTIAL | Yes (1 retry, max 2 total attempts) |
+| LLM malformed output | 4, 5, 7 | FAILED | FAILED | PARTIAL | Yes (1 retry, max 2 total attempts) |
+| LLM empty output | 4, 5, 7 | FAILED | FAILED | PARTIAL | Yes (1 retry, max 2 total attempts) |
+| LLM truncation | 4, 5, 7 | TRUNCATED | COMPLETED³ | Continues | No retry (partial results are usable) |
 | Temporal validation failure | 5 | N/A | N/A | Continues | Finding rejected, not step failure |
 | Citation validation failure | 6 | N/A | COMPLETED | Continues | Finding rejected, not step failure |
 
-¹ Step 5 (finding generation) does not directly call providers, but uses LLM which is a provider.
-² Step marked FAILED only if all retries exhausted.
-³ Step 3 succeeds if at least one document is retrieved.
-⁴ Truncated output is usable; findings from partial output are preserved.
+¹ Step marked FAILED only if all ProviderBase retries exhausted.
+² Step 3 succeeds if at least one document is retrieved.
+³ Truncated output is usable; findings from partial output are preserved.
 
 ### Resume Capability
 
@@ -1159,16 +1259,62 @@ Phase 8 follows the cost control architecture from ADR-008 without modification.
 
 ### Token Budget
 
-Per `architecture/agent-architecture.md`, the Business Model Agent has a budget of 20,000 tokens (input + output). The Company Research Agent, which extends the Business Model Agent's scope, has an estimated budget of:
+#### Hard Budget
 
-| Step | Estimated Input Tokens | Estimated Output Tokens |
-|---|---|---|
-| 4. Evidence Extraction | 8,000–15,000 (document content) | 2,000–5,000 (structured evidence) |
-| 5. Finding Generation | 5,000–10,000 (evidence + company context) | 3,000–8,000 (structured findings) |
-| 7. Gap & Contradiction | 3,000–5,000 (finding summary) | 1,000–3,000 (gap/contradiction findings) |
-| **Total LLM** | **16,000–30,000** | **6,000–16,000** |
+The Company Research Agent has a **hard LLM token budget of 30,000 tokens** (cumulative input + output tokens across all LLM executions in the run). This is defined as the Phase 8 agent budget. Per `architecture/agent-architecture.md`, the Business Model Agent has a budget of 20,000 tokens; the Company Research Agent's broader scope (company validation, source discovery, and gap analysis in addition to business model research) justifies the increase to 30,000.
 
-Budget: 30,000 tokens (input + output). This is between the Business Model Agent (20K) and Financial Analysis Agent (30K) budgets. If exceeded, the agent produces what it has and records the truncation.
+#### Estimated Consumption
+
+| Step | Estimated Input Tokens | Estimated Output Tokens | Estimated Total |
+|---|---|---|---|
+| 4. Evidence Extraction | 8,000–12,000 (document content) | 2,000–4,000 (structured evidence) | 10,000–16,000 |
+| 5. Finding Generation | 5,000–8,000 (evidence + company context) | 3,000–5,000 (structured findings) | 8,000–13,000 |
+| 7. Gap & Contradiction | 2,000–3,000 (finding summary) | 500–1,500 (gap/contradiction findings) | 2,500–4,500 |
+| **Total LLM** | **15,000–23,000** | **5,500–10,500** | **20,500–33,500** |
+
+The upper estimate (33,500) can exceed the 30,000 budget when processing many large documents. The budget enforcement mechanism below handles this.
+
+#### Cumulative Token Accounting
+
+Token usage is tracked cumulatively across all `AgentExecution` records in the run:
+
+```
+cumulative_tokens = SUM(execution.input_tokens + execution.output_tokens)
+                    for all AgentExecution records in this ResearchRun
+```
+
+This includes retry attempts — a failed first attempt's tokens count against the budget.
+
+#### Warning Threshold
+
+At **80% budget consumption** (24,000 tokens), the agent logs a structured warning (`agent.budget.warning`) and reduces the remaining LLM context by:
+- Summarizing evidence instead of passing full text to Step 5
+- Limiting Step 7 to deterministic gap detection only (no LLM contradiction analysis)
+
+#### Hard Budget Enforcement
+
+At **100% budget consumption** (30,000 tokens), the agent:
+1. Does NOT start any new LLM execution.
+2. Marks the current `AgentExecution` as `TRUNCATED` if it is mid-execution.
+3. Marks any remaining LLM steps (that have not yet started) as `SKIPPED`.
+4. Transitions the `ResearchRun` to `PARTIAL` (not `FAILED` — partial results are valuable).
+5. Records `error_summary = "Token budget exhausted (30000 tokens)"` on the ResearchRun.
+
+#### TRUNCATED Execution Semantics
+
+An `AgentExecution` with status `TRUNCATED` means:
+- The LLM was invoked and produced partial output before the budget was exhausted or the output was cut off.
+- Any findings or evidence already extracted from the partial output are **preserved** — they are valid and persisted.
+- The step that contains the TRUNCATED execution transitions to `COMPLETED` (partial results count as completion).
+- Findings and evidence persisted by prior completed steps are **never rolled back** due to a later budget exhaustion.
+
+#### Preservation of Already-Valid Findings
+
+Budget exhaustion does NOT affect previously persisted data:
+- Evidence records created in Step 4 remain in the database.
+- Findings persisted in Step 5 remain in the database.
+- ResearchDocument and ResearchRunSource records remain.
+- Only future LLM steps are prevented from starting.
 
 ### Caching
 
@@ -1317,6 +1463,26 @@ At that point:
 - `AgentExecution` records are created within each node function.
 - The database-backed ResearchRun remains the system of record. LangGraph checkpointing is supplementary, not authoritative.
 
+### Phase 8 State Model: No Separate ResearchState
+
+Phase 8 does **not** introduce a separate in-memory `ResearchState` model (TypedDict, dataclass, or otherwise). The `ResearchState` TypedDict described in `architecture/agent-architecture.md` is a future LangGraph construct for multi-agent state passing — it does not exist in code today and is not needed for a single agent.
+
+**Phase 8 system of record:** The persistent Phase 7 database records are authoritative:
+
+| State Concern | Phase 7 Record | How Phase 8 Uses It |
+|---|---|---|
+| Run lifecycle | `ResearchRun` (7-state machine) | `ResearchRunService` manages transitions |
+| Step progress | `ResearchRunStep` (status, step_type, started/completed timestamps) | One record per workflow step |
+| Execution tracking | `AgentExecution` (attempt_number, tokens, cost, status) | One record per LLM call or step attempt |
+| Findings | `ResearchFinding` (finding_type, category, content, observation_date) | Created via `ResearchRunService.record_findings()` |
+| Evidence | `Evidence`, `ResearchDocument`, `Source` | Created via `EvidenceService` |
+| Artifacts | `ResearchArtifact` | Intermediate state snapshots |
+| Source access | `ResearchRunSource` | Per-document access log |
+
+Within a single run, the agent passes data between steps using plain Python function arguments and return values. This intermediate data is ephemeral — only the persisted records above survive the run. If the agent crashes mid-run, it does not resume from in-memory state; it fails the run and the partial records are preserved.
+
+When LangGraph is introduced (Phase 9+), the `ResearchState` TypedDict becomes the LangGraph graph state, and these persistent records remain authoritative alongside it.
+
 ### How AgentExecution Maps to LangGraph Execution (Future)
 
 When LangGraph is introduced:
@@ -1350,9 +1516,11 @@ Phase 8 ensures the service layer produces all data needed for these eventual en
 
 ## 26. Data Model Changes
 
-### Preferred Approach: Zero Schema Changes
+### Mandatory Constraint: Zero Schema Changes
 
-Phase 8 is designed to require **zero database schema changes**. All Phase 8 functionality operates within the existing Phase 7 schema.
+Phase 8 requires **zero database schema changes**. No Alembic migrations, no new tables, no column additions, no enum additions, no constraint modifications. All Phase 8 functionality operates within the existing Phase 7 schema.
+
+**This is a hard constraint, not a preference.** If any Phase 8 requirement appears to need a schema change, the requirement must be re-examined and solved within the existing schema, or the requirement must be deferred to a future phase. The only acceptable exception is if an existing Phase 7 schema contract genuinely makes Phase 8 implementation impossible (not merely inconvenient) — in which case the specific contract, the reason it is blocking, and the minimal change required must be documented in an ADR before any migration is created.
 
 ### Schema Sufficiency Analysis
 
@@ -1516,7 +1684,7 @@ Test the agent against 3–5 reference companies with pre-defined:
 ### Temporal Integrity
 
 - **AC-13**: `observation_date` is set on the ResearchRun and enforced on all findings.
-- **AC-14**: Source discovery excludes documents with `document_date > observation_date`.
+- **AC-14**: Source discovery excludes documents with `information_available_date > observation_date` (i.e., filing_date for filings, published_at for news, date for transcripts — not document_date).
 - **AC-15**: Finding validation rejects findings where `source_publication_date > observation_date`.
 - **AC-16**: `source_publication_date` is preserved on every finding that originates from a dated source.
 
