@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-09-30 (Phase 9.2 Industry Research Contracts & ResearchRun Integration complete)
+**Last Updated:** 2026-09-30 (Phase 9.2 Post-Audit Remediation complete)
 
 ---
 
@@ -498,17 +498,27 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 - [x] **TD-13 resolved**: `ResearchRunRepositoryProtocol` + concrete impl: `get_by_industry()`, `get_active_industry_run()`
 - [x] **TD-13 resolved**: `ResearchRunService.initiate_run()` branches on `target_type` (company vs industry active-run check)
 - [x] **TD-13 resolved**: `ResearchRunService.get_runs_for_industry()` method added
-- [x] `IndustryResearchConfig` (frozen Pydantic v2): 20K token budget, 16K warning, source_limit, concurrent_retrievals, model selection
+- [x] `IndustryResearchConfig` (frozen Pydantic v2): 20K token budget, 16K warning, document_types, source_limit=30, concurrent_retrievals, model selection
 - [x] `IndustryResearchRequest` (frozen): industry_id, observation_date, initiated_by, company_context_id, configuration
-- [x] `INDUSTRY_FINDING_CATEGORIES` frozenset: 14 categories (market_size, growth_drivers, entry_barriers, supplier_power, buyer_power, substitution_risk, competitive_rivalry, regulatory_environment, technology_trends, industry_structure, value_chain, cyclicality, research_gap, contradiction)
-- [x] `INDUSTRY_RESEARCH_STEPS` tuple: 7 steps (industry_validation, source_discovery, document_retrieval, evidence_extraction, finding_generation, finding_validation, gap_contradiction_analysis)
+- [x] `INDUSTRY_FINDING_CATEGORIES` frozenset: 14 categories (market_size, growth_drivers, entry_barriers, supplier_power, buyer_power, substitution_risk, competitive_rivalry, regulatory_environment, india_global_position, industry_structure, industry_risk, cyclicality, research_gap, contradiction)
+- [x] `INDUSTRY_RESEARCH_STEPS` tuple: 7 steps (industry_validation, industry_source_discovery, document_retrieval, evidence_extraction, industry_analysis, finding_validation, gap_contradiction_analysis)
 - [x] Industry agent constants: INDUSTRY_AGENT_TOKEN_BUDGET=20K, INDUSTRY_AGENT_TOKEN_WARNING=16K, INDUSTRY_AGENT_NAME
 - [x] Zero new database migrations (uses Phase 9.1 migration 006)
 - [x] Zero new ORM model changes
 - [x] No IndustryFinding model (reuses ResearchFinding)
 - [x] No IndustryResearchAgent, IndustryResearchTools, or workflow execution
-- [x] 59 new tests across 15 test classes (XOR validation, request/config, categories, steps, constants, repository, service, backward compat, state machine, temporal, findings)
-- [x] All 1765 backend tests passing (excluding pre-existing TD-6), zero regressions
+- [x] 66 tests across 16 test classes (XOR validation, request/config, categories, steps, constants, repository, service, observation_date scoping, backward compat, state machine, temporal, findings)
+- [x] All 1773 backend tests passing (excluding pre-existing TD-6), zero regressions
+- [x] ruff clean, mypy strict clean, ruff format clean
+
+**Post-Audit Remediation (6 findings resolved):**
+- [x] **Finding 8A (BLOCKING)**: `get_active_industry_run` now takes `(industry_id, observation_date)` — protocol, implementation, service call site updated; query also filters `target_type='industry'`; 5 new tests
+- [x] **Finding 2A**: `INDUSTRY_FINDING_CATEGORIES` corrected: `technology_trends` → `india_global_position`, `value_chain` → `industry_risk` (canonical per architecture §14)
+- [x] **Finding 2B**: `IndustryResearchConfig.source_limit` default changed from 20 → 30 (canonical per architecture §12)
+- [x] **Finding 2C**: `INDUSTRY_RESEARCH_STEPS` corrected: `source_discovery` → `industry_source_discovery`, `finding_generation` → `industry_analysis` (canonical per architecture §21)
+- [x] **Finding 2D**: `IndustryResearchConfig.document_types: list[DocumentType] | None = None` added (reuses Phase 8 `DocumentType` enum); 2 new tests
+- [x] **Finding 7-NOTE**: Architecture doc §14 corrected "disjoint sets" → "mostly disjoint with 3-category overlap (growth_drivers, research_gap, contradiction)"
+- [x] All 1773 backend tests passing (66 in industry contracts file, up from 59), zero regressions
 - [x] ruff clean, mypy strict clean, ruff format clean
 
 **Next Sub-Phase:** Phase 9.3 — Industry Research Agent implementation (agent, tools, prompts, workflow)

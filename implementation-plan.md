@@ -479,13 +479,15 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - 17 migration tests passing
 - Technical debt recorded: TD-12 (API schemas), TD-13 (service/repo queries)
 
-**Phase 9.2 Deliverables (complete):**
+**Phase 9.2 Deliverables (complete, post-audit remediation applied):**
 - Pydantic schemas updated: `ResearchRunCreate` XOR validation, `ResearchRunRead`/`RunSummary` with target_type/industry_id (TD-12 resolved)
-- `IndustryResearchRequest` and `IndustryResearchConfig` frozen contracts
-- `INDUSTRY_FINDING_CATEGORIES` (14), `INDUSTRY_RESEARCH_STEPS` (7), agent constants (20K budget)
-- Repository protocol + impl: `get_by_industry()`, `get_active_industry_run()` (TD-13 resolved)
+- `IndustryResearchRequest` and `IndustryResearchConfig` frozen contracts (document_types field, source_limit=30)
+- `INDUSTRY_FINDING_CATEGORIES` (14): canonical names (india_global_position, industry_risk); 3-category overlap with Phase 8 (growth_drivers, research_gap, contradiction)
+- `INDUSTRY_RESEARCH_STEPS` (7): canonical names (industry_source_discovery, industry_analysis)
+- Repository protocol + impl: `get_by_industry()`, `get_active_industry_run(industry_id, observation_date)` with target_type filter (TD-13 resolved)
 - Service layer: `initiate_run()` branching on target_type, `get_runs_for_industry()`
-- 59 new tests, all passing; zero regressions on 1765 existing tests
+- 66 tests across 16 test classes, all passing; zero regressions on 1773 total backend tests
+- Architecture doc §14 corrected (3-category overlap, not "disjoint sets")
 - No new migrations, no ORM changes, no agent/tool/prompt/workflow implementation
 
 ---

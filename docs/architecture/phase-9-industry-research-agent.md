@@ -801,7 +801,7 @@ INDUSTRY_FINDING_CATEGORIES: frozenset[str] = frozenset({
 
 ### Relationship to Phase 8 Categories
 
-Phase 8 `FINDING_CATEGORIES` (14 categories) and Phase 9 `INDUSTRY_FINDING_CATEGORIES` (14 categories) are **disjoint sets**. No category name appears in both. This is by design — it enables unambiguous attribution of findings to their originating agent via `category` alone, even without checking `agent_name`.
+Phase 8 `FINDING_CATEGORIES` (14 categories) and Phase 9 `INDUSTRY_FINDING_CATEGORIES` (14 categories) are **mostly disjoint** with a deliberate 3-category overlap: `growth_drivers`, `research_gap`, and `contradiction`. The overlap is intentional — `growth_drivers` captures a genuine semantic parallel at different analysis levels, while `research_gap` and `contradiction` are meta-categories that apply to any research domain. Downstream consumers MUST filter by `agent_name` alongside `category` when querying these shared categories.
 
 | Phase 8 (Company) | Phase 9 (Industry) | Overlap Risk |
 |---|---|---|
@@ -809,7 +809,7 @@ Phase 8 `FINDING_CATEGORIES` (14 categories) and Phase 9 `INDUSTRY_FINDING_CATEG
 | `growth_drivers` | `growth_drivers` | **NAME COLLISION** — resolved by querying `agent_name` alongside `category` |
 | `risk` | `industry_risk` | Distinct: company-specific vs industry-level |
 
-**Important:** `growth_drivers` appears in both Phase 8 and Phase 9 category sets. This is the ONE intentional exception to the disjoint-sets rule. The semantic overlap is genuine — both agents produce growth driver findings, but at different levels of analysis (company vs industry). Downstream consumers MUST filter by `agent_name` when querying `growth_drivers` findings. The alternative (renaming to `industry_growth_drivers`) was rejected because it creates an artificial naming convention that doesn't generalize to agents 5-17.
+**Important:** Three categories appear in both Phase 8 and Phase 9 sets: `growth_drivers`, `research_gap`, and `contradiction`. For `growth_drivers`, the semantic overlap is genuine — both agents produce growth driver findings, but at different levels of analysis (company vs industry). For `research_gap` and `contradiction`, these are meta-categories that apply universally across research domains. Downstream consumers MUST filter by `agent_name` when querying any of these shared categories. The alternative (renaming to `industry_growth_drivers`) was rejected because it creates an artificial naming convention that doesn't generalize to agents 5-17.
 
 ### Queryability Contract
 

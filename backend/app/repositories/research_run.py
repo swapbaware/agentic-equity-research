@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Protocol
 
@@ -61,6 +61,7 @@ class ResearchRunRepositoryProtocol(Protocol):
     async def get_active_industry_run(
         self,
         industry_id: uuid.UUID,
+        observation_date: date,
     ) -> ResearchRun | None: ...
 
 
@@ -263,6 +264,7 @@ class ResearchRunRepository(BaseRepository[ResearchRun]):
     async def get_active_industry_run(
         self,
         industry_id: uuid.UUID,
+        observation_date: date,
     ) -> ResearchRun | None:
         active_statuses = [
             ResearchRunStatus.CREATED,
@@ -272,7 +274,9 @@ class ResearchRunRepository(BaseRepository[ResearchRun]):
         stmt = (
             sa.select(ResearchRun)
             .where(
+                ResearchRun.target_type == "industry",
                 ResearchRun.industry_id == industry_id,
+                ResearchRun.observation_date == observation_date,
                 ResearchRun.status.in_(active_statuses),
             )
             .limit(1)

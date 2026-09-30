@@ -24,6 +24,7 @@ import pytest
 from pydantic import ValidationError as PydanticValidationError
 
 from app.agents.contracts import (
+    FINDING_CATEGORIES,
     INDUSTRY_AGENT_NAME,
     INDUSTRY_AGENT_TOKEN_BUDGET,
     INDUSTRY_AGENT_TOKEN_WARNING,
@@ -376,7 +377,8 @@ class TestIndustryResearchConfig:
         assert config.token_warning_threshold == INDUSTRY_AGENT_TOKEN_WARNING
         assert config.token_warning_threshold == 16_000
         assert config.max_llm_attempts == MAX_LLM_ATTEMPTS
-        assert config.source_limit == 20
+        assert config.document_types is None
+        assert config.source_limit == 30
         assert config.concurrent_retrievals == 5
         assert config.extraction_model is None
         assert config.generation_model is None
@@ -400,6 +402,20 @@ class TestIndustryResearchConfig:
     def test_budget_must_be_positive(self) -> None:
         with pytest.raises(PydanticValidationError):
             IndustryResearchConfig(token_budget=0)
+
+    def test_document_types_accepts_list(self) -> None:
+        from app.models.enums import DocumentType
+
+        config = IndustryResearchConfig(
+            document_types=[DocumentType.ANNUAL_REPORT, DocumentType.RESEARCH_REPORT],
+        )
+        assert config.document_types is not None
+        assert len(config.document_types) == 2
+        assert DocumentType.ANNUAL_REPORT in config.document_types
+
+    def test_document_types_none_by_default(self) -> None:
+        config = IndustryResearchConfig()
+        assert config.document_types is None
 
 
 # ===========================================================================
@@ -426,9 +442,9 @@ class TestIndustryFindingCategories:
             "market_size",
             "growth_drivers",
             "regulatory_environment",
-            "technology_trends",
+            "india_global_position",
             "industry_structure",
-            "value_chain",
+            "industry_risk",
             "cyclicality",
         }
         assert expected.issubset(INDUSTRY_FINDING_CATEGORIES)
@@ -437,9 +453,7 @@ class TestIndustryFindingCategories:
         assert "research_gap" in INDUSTRY_FINDING_CATEGORIES
         assert "contradiction" in INDUSTRY_FINDING_CATEGORIES
 
-    def test_disjoint_from_company_except_growth_drivers(self) -> None:
-        from app.agents.contracts import FINDING_CATEGORIES
-
+    def test_overlap_with_company_categories(self) -> None:
         overlap = INDUSTRY_FINDING_CATEGORIES & FINDING_CATEGORIES
         assert overlap == {"growth_drivers", "research_gap", "contradiction"}
 
@@ -461,10 +475,10 @@ class TestIndustryResearchSteps:
         names = [s.step_name for s in INDUSTRY_RESEARCH_STEPS]
         assert names == [
             "industry_validation",
-            "source_discovery",
+            "industry_source_discovery",
             "document_retrieval",
             "evidence_extraction",
-            "finding_generation",
+            "industry_analysis",
             "finding_validation",
             "gap_contradiction_analysis",
         ]
@@ -486,7 +500,7 @@ class TestIndustryResearchSteps:
         assert len(llm_steps) == 3
         assert {s.step_name for s in llm_steps} == {
             "evidence_extraction",
-            "finding_generation",
+            "industry_analysis",
             "gap_contradiction_analysis",
         }
 
@@ -567,10 +581,12 @@ class TestResearchRunRepositoryIndustry:
     async def test_get_active_industry_run_found(self) -> None:
         session = _mock_session()
         industry_id = uuid.uuid4()
+        obs_date = date(2026, 9, 30)
         run = _make_run(
             target_type="industry",
             industry_id=industry_id,
             status=ResearchRunStatus.RUNNING,
+            observation_date=obs_date,
         )
 
         mock_result = MagicMock()
@@ -578,7 +594,7 @@ class TestResearchRunRepositoryIndustry:
         session.execute.return_value = mock_result
 
         repo = ResearchRunRepository(session)
-        result = await repo.get_active_industry_run(industry_id)
+        result = await repo.get_active_industry_run(industry_id, obs_date)
         assert result == run
 
     @pytest.mark.asyncio
@@ -590,7 +606,7 @@ class TestResearchRunRepositoryIndustry:
         session.execute.return_value = mock_result
 
         repo = ResearchRunRepository(session)
-        result = await repo.get_active_industry_run(uuid.uuid4())
+        result = await repo.get_active_industry_run(uuid.uuid4(), date(2026, 9, 30))
         assert result is None
 
     def test_protocol_has_industry_methods(self) -> None:
@@ -598,6 +614,106 @@ class TestResearchRunRepositoryIndustry:
         repo = ResearchRunRepository(session)
         assert hasattr(repo, "get_by_industry")
         assert hasattr(repo, "get_active_industry_run")
+
+
+# ===========================================================================
+# PART 4b: Finding 8A — observation_date scoping for industry concurrency
+# ===========================================================================
+
+
+class TestIndustryRunObservationDateScoping:
+    """Finding 8A: get_active_industry_run must scope by (industry_id, observation_date)."""
+
+    @pytest.mark.asyncio
+    async def test_same_industry_same_date_finds_active(self) -> None:
+        """Same industry + same observation_date → active run found."""
+        session = _mock_session()
+        industry_id = uuid.uuid4()
+        obs_date = date(2026, 9, 30)
+        run = _make_run(
+            target_type="industry",
+            industry_id=industry_id,
+            status=ResearchRunStatus.RUNNING,
+            observation_date=obs_date,
+        )
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = run
+        session.execute.return_value = mock_result
+
+        repo = ResearchRunRepository(session)
+        result = await repo.get_active_industry_run(industry_id, obs_date)
+        assert result is not None
+        assert result == run
+
+    @pytest.mark.asyncio
+    async def test_same_industry_different_date_no_collision(self) -> None:
+        """Same industry + different observation_date → no collision."""
+        session = _mock_session()
+        industry_id = uuid.uuid4()
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        session.execute.return_value = mock_result
+
+        repo = ResearchRunRepository(session)
+        result = await repo.get_active_industry_run(industry_id, date(2026, 10, 15))
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_company_active_check_unchanged(self) -> None:
+        """Company get_active_run signature unchanged — no observation_date param."""
+        session = _mock_session()
+        company_id = uuid.uuid4()
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        session.execute.return_value = mock_result
+
+        repo = ResearchRunRepository(session)
+        result = await repo.get_active_run(company_id)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_target_type_in_query(self) -> None:
+        """The query includes target_type='industry' filter."""
+        session = _mock_session()
+        industry_id = uuid.uuid4()
+        obs_date = date(2026, 9, 30)
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        session.execute.return_value = mock_result
+
+        repo = ResearchRunRepository(session)
+        await repo.get_active_industry_run(industry_id, obs_date)
+
+        call_args = session.execute.call_args
+        stmt = call_args[0][0]
+        compiled = stmt.compile(compile_kwargs={"literal_binds": False})
+        sql_text = str(compiled)
+        assert "target_type" in sql_text
+
+    @pytest.mark.asyncio
+    async def test_terminal_statuses_excluded(self) -> None:
+        """Terminal statuses (COMPLETED, FAILED, etc.) are not returned."""
+        session = _mock_session()
+        industry_id = uuid.uuid4()
+        obs_date = date(2026, 9, 30)
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        session.execute.return_value = mock_result
+
+        repo = ResearchRunRepository(session)
+        result = await repo.get_active_industry_run(industry_id, obs_date)
+        assert result is None
+
+        call_args = session.execute.call_args
+        stmt = call_args[0][0]
+        compiled = stmt.compile(compile_kwargs={"literal_binds": False})
+        sql_text = str(compiled)
+        assert "IN" in sql_text.upper()
 
 
 # ===========================================================================
@@ -641,10 +757,12 @@ class TestServiceIndustryRunInitiation:
     async def test_initiate_industry_run_blocked_by_active(self) -> None:
         service, _ = _make_service()
         industry_id = uuid.uuid4()
+        obs_date = date(2026, 9, 30)
         existing = _make_run(
             target_type="industry",
             industry_id=industry_id,
             status=ResearchRunStatus.RUNNING,
+            observation_date=obs_date,
         )
         data = ResearchRunCreate(
             target_type="industry",
@@ -652,6 +770,7 @@ class TestServiceIndustryRunInitiation:
             initiated_by="test",
             run_type="FULL",
             trigger_type="USER_INITIATED",
+            observation_date=obs_date,
         )
 
         with (

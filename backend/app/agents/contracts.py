@@ -89,9 +89,9 @@ INDUSTRY_FINDING_CATEGORIES: frozenset[str] = frozenset(
         "substitution_risk",
         "competitive_rivalry",
         "regulatory_environment",
-        "technology_trends",
+        "india_global_position",
         "industry_structure",
-        "value_chain",
+        "industry_risk",
         "cyclicality",
         "research_gap",
         "contradiction",
@@ -594,7 +594,8 @@ class IndustryResearchConfig(BaseModel):
     token_budget: int = Field(default=INDUSTRY_AGENT_TOKEN_BUDGET, gt=0)
     token_warning_threshold: int = Field(default=INDUSTRY_AGENT_TOKEN_WARNING, gt=0)
     max_llm_attempts: int = Field(default=MAX_LLM_ATTEMPTS, ge=1, le=3)
-    source_limit: int = Field(default=20, ge=1, le=100)
+    document_types: list[DocumentType] | None = None
+    source_limit: int = Field(default=30, ge=1, le=100)
     concurrent_retrievals: int = Field(default=5, ge=1, le=20)
     extraction_model: str | None = None
     generation_model: str | None = None
@@ -622,7 +623,7 @@ INDUSTRY_RESEARCH_STEPS: tuple[StepDefinition, ...] = (
     ),
     StepDefinition(
         step_order=2,
-        step_name="source_discovery",
+        step_name="industry_source_discovery",
         step_type=STEP_TYPE_PROVIDER_CALL,
         timeout_seconds=30,
     ),
@@ -641,7 +642,7 @@ INDUSTRY_RESEARCH_STEPS: tuple[StepDefinition, ...] = (
     ),
     StepDefinition(
         step_order=5,
-        step_name="finding_generation",
+        step_name="industry_analysis",
         step_type=STEP_TYPE_LLM_REASONING,
         timeout_seconds=120,
         uses_llm=True,

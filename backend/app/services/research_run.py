@@ -76,7 +76,11 @@ class ResearchRunService:
                 )
         else:
             assert data.industry_id is not None
-            active = await self._runs.get_active_industry_run(data.industry_id)
+            assert data.observation_date is not None
+            active = await self._runs.get_active_industry_run(
+                data.industry_id,
+                data.observation_date,
+            )
             if active is not None:
                 raise ValidationError(
                     message="A research run is already active for this industry",
