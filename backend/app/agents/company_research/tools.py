@@ -4,12 +4,13 @@ Each public method corresponds to one of the 8 tool contracts defined in
 ``app.agents.contracts``.  Tools depend on provider Protocol interfaces
 and the database session — never on concrete provider implementations.
 """
+
 from __future__ import annotations
 
 import hashlib
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
@@ -92,7 +93,8 @@ class CompanyResearchTools:
     # -- Tool 1: validate_company -----------------------------------------------
 
     async def validate_company(
-        self, inp: ValidateCompanyInput,
+        self,
+        inp: ValidateCompanyInput,
     ) -> ValidateCompanyOutput:
         stmt = sa.select(Company)
         if inp.identifier_type.value == "NSE_SYMBOL":
@@ -128,7 +130,8 @@ class CompanyResearchTools:
     # -- Tool 2: discover_sources -----------------------------------------------
 
     async def discover_sources(
-        self, inp: DiscoverSourcesInput,
+        self,
+        inp: DiscoverSourcesInput,
     ) -> DiscoverSourcesOutput:
         company = await self._session.get(Company, inp.company_id)
         if company is None:
@@ -140,22 +143,26 @@ class CompanyResearchTools:
 
         try:
             filings = await self._corporate_filings.get_filings(
-                symbol, exchange, end=inp.observation_date,
+                symbol,
+                exchange,
+                end=inp.observation_date,
             )
             for f in filings:
                 if f.filing_date <= inp.observation_date:
                     doc_type = _map_filing_type(f.filing_type)
                     if inp.document_types and doc_type not in inp.document_types:
                         continue
-                    candidates.append(SourceCandidate(
-                        source_id=f.filing_id,
-                        source_type=doc_type,
-                        provider="corporate_filings",
-                        title=f.title,
-                        publication_date=f.filing_date,
-                        source_tier=SourceTier.TIER_1,
-                        url=f.url,
-                    ))
+                    candidates.append(
+                        SourceCandidate(
+                            source_id=f.filing_id,
+                            source_type=doc_type,
+                            provider="corporate_filings",
+                            title=f.title,
+                            publication_date=f.filing_date,
+                            source_tier=SourceTier.TIER_1,
+                            url=f.url,
+                        )
+                    )
         except ProviderError:
             logger.warning("corporate_filings provider failed for %s", symbol)
 
@@ -165,45 +172,52 @@ class CompanyResearchTools:
                 if t.date <= inp.observation_date:
                     if inp.document_types and DocumentType.TRANSCRIPT not in inp.document_types:
                         continue
-                    candidates.append(SourceCandidate(
-                        source_id=f"{t.symbol}_{t.quarter}_{t.year}",
-                        source_type=DocumentType.TRANSCRIPT,
-                        provider="transcript",
-                        title=t.title,
-                        publication_date=t.date,
-                        source_tier=SourceTier.TIER_1,
-                    ))
+                    candidates.append(
+                        SourceCandidate(
+                            source_id=f"{t.symbol}_{t.quarter}_{t.year}",
+                            source_type=DocumentType.TRANSCRIPT,
+                            provider="transcript",
+                            title=t.title,
+                            publication_date=t.date,
+                            source_tier=SourceTier.TIER_1,
+                        )
+                    )
         except ProviderError:
             logger.warning("transcript provider failed for %s", symbol)
 
         try:
             articles = await self._news.get_company_news(
-                symbol, exchange, limit=inp.limit,
+                symbol,
+                exchange,
+                limit=inp.limit,
             )
             for a in articles:
                 pub_date = a.published_at.date()
                 if pub_date <= inp.observation_date:
                     if inp.document_types and DocumentType.NEWS not in inp.document_types:
                         continue
-                    candidates.append(SourceCandidate(
-                        source_id=a.url,
-                        source_type=DocumentType.NEWS,
-                        provider="news",
-                        title=a.title,
-                        publication_date=pub_date,
-                        source_tier=SourceTier.TIER_3,
-                        url=a.url,
-                    ))
+                    candidates.append(
+                        SourceCandidate(
+                            source_id=a.url,
+                            source_type=DocumentType.NEWS,
+                            provider="news",
+                            title=a.title,
+                            publication_date=pub_date,
+                            source_tier=SourceTier.TIER_3,
+                            url=a.url,
+                        )
+                    )
         except ProviderError:
             logger.warning("news provider failed for %s", symbol)
 
-        candidates.sort(key=lambda c: c.publication_date, reverse=True)
+        candidates.sort(key=lambda c: c.publication_date or date.min, reverse=True)
         return DiscoverSourcesOutput(candidates=candidates[: inp.limit])
 
     # -- Tool 3: retrieve_document -----------------------------------------------
 
     async def retrieve_document(
-        self, inp: RetrieveDocumentInput,
+        self,
+        inp: RetrieveDocumentInput,
     ) -> RetrieveDocumentOutput:
         doc = await self._corporate_filings.get_filing_document(inp.filing_id)
         content_hash = hashlib.sha256(doc.content.encode()).hexdigest()
@@ -217,7 +231,8 @@ class CompanyResearchTools:
     # -- Tool 4: get_company_profile --------------------------------------------
 
     async def get_company_profile(
-        self, inp: GetCompanyProfileInput,
+        self,
+        inp: GetCompanyProfileInput,
     ) -> GetCompanyProfileOutput:
         company = await self._session.get(Company, inp.company_id)
         if company is None:
@@ -258,49 +273,61 @@ class CompanyResearchTools:
     # -- Tool 5: search_company_news --------------------------------------------
 
     async def search_company_news(
-        self, inp: SearchCompanyNewsInput,
+        self,
+        inp: SearchCompanyNewsInput,
     ) -> SearchCompanyNewsOutput:
         articles = await self._news.get_company_news(
-            inp.symbol, inp.exchange, limit=inp.limit,
+            inp.symbol,
+            inp.exchange,
+            limit=inp.limit,
         )
         results: list[NewsArticleResult] = []
         for a in articles:
             if a.published_at.date() <= inp.observation_date:
-                results.append(NewsArticleResult(
-                    title=a.title,
-                    url=a.url,
-                    source=a.source,
-                    published_at=a.published_at,
-                    summary=a.summary,
-                ))
+                results.append(
+                    NewsArticleResult(
+                        title=a.title,
+                        url=a.url,
+                        source=a.source,
+                        published_at=a.published_at,
+                        summary=a.summary,
+                    )
+                )
         return SearchCompanyNewsOutput(articles=results)
 
     # -- Tool 6: get_financial_summary ------------------------------------------
 
     async def get_financial_summary(
-        self, inp: GetFinancialSummaryInput,
+        self,
+        inp: GetFinancialSummaryInput,
     ) -> GetFinancialSummaryOutput:
         statements_out: list[FinancialStatementResult] = []
         for stmt_type in ("INCOME_STATEMENT", "BALANCE_SHEET", "CASH_FLOW"):
             try:
                 stmts = await self._financial_data.get_financial_statements(
-                    inp.symbol, inp.exchange, stmt_type, "ANNUAL",
+                    inp.symbol,
+                    inp.exchange,
+                    stmt_type,
+                    "ANNUAL",
                 )
                 for s in stmts[: inp.periods]:
-                    statements_out.append(FinancialStatementResult(
-                        symbol=s.symbol,
-                        exchange=s.exchange,
-                        statement_type=s.statement_type,
-                        period_type=s.period_type,
-                        period=s.period,
-                        filing_date=s.filing_date,
-                        currency=s.currency,
-                        line_items=s.line_items,
-                    ))
+                    statements_out.append(
+                        FinancialStatementResult(
+                            symbol=s.symbol,
+                            exchange=s.exchange,
+                            statement_type=s.statement_type,
+                            period_type=s.period_type,
+                            period=s.period,
+                            filing_date=s.filing_date,
+                            currency=s.currency,
+                            line_items=s.line_items,
+                        )
+                    )
             except ProviderError:
                 logger.warning(
                     "financial_data provider failed for %s/%s",
-                    inp.symbol, stmt_type,
+                    inp.symbol,
+                    stmt_type,
                 )
         return GetFinancialSummaryOutput(statements=statements_out)
 
@@ -338,25 +365,31 @@ class CompanyResearchTools:
 
         for i, f in enumerate(inp.findings):
             if f.category not in FINDING_CATEGORIES:
-                rejected.append(RejectedFinding(
-                    index=i,
-                    reason=f"Invalid category: {f.category}",
-                ))
+                rejected.append(
+                    RejectedFinding(
+                        index=i,
+                        reason=f"Invalid category: {f.category}",
+                    )
+                )
                 continue
-            finding_defs.append(ResearchFindingCreate(
-                agent_name=f.agent_name,
-                finding_type=f.finding_type,
-                category=f.category,
-                content=f.content,
-                confidence=f.confidence,
-                observation_date=f.observation_date,
-                source_publication_date=f.source_publication_date,
-            ))
+            finding_defs.append(
+                ResearchFindingCreate(
+                    agent_name=f.agent_name,
+                    finding_type=f.finding_type,
+                    category=f.category,
+                    content=f.content,
+                    confidence=f.confidence,
+                    observation_date=f.observation_date,
+                    source_publication_date=f.source_publication_date,
+                )
+            )
 
         finding_ids: list[uuid.UUID] = []
         if finding_defs:
             persisted = await self._run_service.record_findings(
-                inp.run_id, inp.execution_id, finding_defs,
+                inp.run_id,
+                inp.execution_id,
+                finding_defs,
             )
             finding_ids = [f.id for f in persisted]
 

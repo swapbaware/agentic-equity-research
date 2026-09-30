@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-09-30 (Phase 9.3a Industry Research Tools complete)
+**Last Updated:** 2026-09-30 (Phase 9.3a remediation complete)
 
 ---
 
@@ -536,10 +536,17 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
   - [x] `persist_findings` (adapted) — validates against `INDUSTRY_FINDING_CATEGORIES` instead of `FINDING_CATEGORIES`
   - [x] `create_research_document` (adapted) — `company_id=None` for industry-level documents
 - [x] Helper functions: `_classify_industry_source()` (title/URL-based DocumentType classification), `_tier_from_url()` (domain-based SourceTier assignment: SEBI/RBI/NSE/BSE=T1, IBEF/FICCI/NASSCOM/CII=T2, others=T3)
-- [x] Provider Protocol dependencies: SearchProvider, NewsProvider, MacroDataProvider, LLMProvider — all injected via constructor
-- [x] 55 new unit tests across 12 test classes
-- [x] All 1828 backend tests passing, zero regressions
+- [x] Provider Protocol dependencies: SearchProvider, NewsProvider (MacroDataProvider/LLMProvider removed — belong at Agent level per §17)
+- [x] 64 unit tests across 15 test classes (9 new remediation tests)
+- [x] All 1837 backend tests passing, zero regressions
 - [x] ruff check clean, ruff format clean, mypy --strict clean
+
+**Phase 9.3a Remediation — COMPLETE:**
+- [x] TD-15 (temporal integrity): `SourceCandidate.publication_date` made optional (`date | None = None`); search results use `None` instead of fabricated `observation_date`; sort handles `None` with `date.min` sentinel
+- [x] TD-14 (document retrieval provenance): `retrieve_industry_document` returns `content_type="text/snippet"` to make search-snippet provenance explicit
+- [x] Tool inventory: `create_research_document` documented as internal helper, not agent-facing tool; 8 canonical agent-facing tools verified
+- [x] Provider boundaries: removed unused `MacroDataProvider` and `LLMProvider` from `IndustryResearchTools` constructor per architecture §17
+- [x] Defensive sort fix applied to `company_research/tools.py` for consistency
 
 **Next Sub-Phase:** Phase 9.3b — Industry Research Agent implementation (agent workflow, prompts, LangGraph)
 
@@ -654,6 +661,8 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 | TD-11 | `pytest.mark.integration` not registered — produces PytestUnknownMarkWarning | Phase 3 | Register mark in `pyproject.toml` `[tool.pytest.ini_options]` markers list |
 | TD-12 | ~~API schemas (`ResearchRunCreate`, `ResearchRunRead`, `RunSummary`) have `company_id: uuid.UUID` as required~~ | Phase 9.1 | **RESOLVED** — Phase 9.2: `company_id` optional, `target_type` + `industry_id` added, XOR model_validator |
 | TD-13 | ~~Service layer and repositories assume `company_id` is always non-null~~ | Phase 9.1 | **RESOLVED** — Phase 9.2: `get_by_industry()`, `get_active_industry_run()`, `initiate_run()` branches on target_type |
+| TD-14 | ~~`retrieve_industry_document` returns `content_type="text/plain"` for search snippets — provenance unclear~~ | Phase 9.3a | **RESOLVED** — Phase 9.3a remediation: returns `"text/snippet"` |
+| TD-15 | ~~`discover_industry_sources` fabricates `observation_date` as `publication_date` for search results~~ | Phase 9.3a | **RESOLVED** — Phase 9.3a remediation: `SourceCandidate.publication_date` now `date | None = None`, search results use `None` |
 
 ---
 

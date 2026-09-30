@@ -149,7 +149,7 @@ class SourceCandidate(BaseModel):
     source_type: DocumentType
     provider: str = Field(min_length=1, max_length=50)
     title: str = Field(min_length=1, max_length=1000)
-    publication_date: date
+    publication_date: date | None = None
     document_date: date | None = None
     source_tier: SourceTier
     url: str | None = Field(default=None, max_length=2000)

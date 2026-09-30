@@ -1,6 +1,6 @@
 """Unit tests for IndustryResearchTools (Phase 9.3a).
 
-Tests cover all 8 tool methods:
+Tests cover the 8 agent-facing tool methods:
   1. validate_industry
   2. discover_industry_sources
   3. retrieve_industry_document
@@ -8,9 +8,10 @@ Tests cover all 8 tool methods:
   5. search_industry_news
   6. persist_evidence (industry-aware)
   7. persist_findings (industry-aware)
-  8. create_research_document (industry-aware, company_id=None)
+  8. retrieve_document (via retrieve_industry_document)
 
-Plus helper functions _classify_industry_source and _tier_from_url.
+Plus the internal helper ``create_research_document`` (NOT agent-facing),
+and helper functions _classify_industry_source and _tier_from_url.
 """
 
 from __future__ import annotations
@@ -132,16 +133,12 @@ def _build_tools(
     run_service: MockRunService | None = None,
     search: AsyncMock | None = None,
     news: AsyncMock | None = None,
-    macro_data: AsyncMock | None = None,
-    llm: AsyncMock | None = None,
 ) -> IndustryResearchTools:
     return IndustryResearchTools(
         session=session or AsyncMock(),
         run_service=run_service or MockRunService(),
         search=search or AsyncMock(),
         news=news or AsyncMock(),
-        macro_data=macro_data or AsyncMock(),
-        llm=llm or AsyncMock(),
     )
 
 
@@ -465,7 +462,7 @@ class TestRetrieveIndustryDocument:
         assert result.source_id == "src-001"
         expected_hash = hashlib.sha256(b"Document content from search").hexdigest()
         assert result.content_hash == expected_hash
-        assert result.content_type == "text/plain"
+        assert result.content_type == "text/snippet"
 
     @pytest.mark.asyncio
     async def test_no_results_returns_empty(self) -> None:
@@ -855,7 +852,7 @@ class TestPersistFindings:
 
 
 # ---------------------------------------------------------------------------
-# Adapted: create_research_document (industry-aware)
+# Internal helper: create_research_document (NOT agent-facing)
 # ---------------------------------------------------------------------------
 
 
@@ -1166,5 +1163,209 @@ class TestToolsConstructor:
         assert tools._run_service is not None
         assert tools._search is not None
         assert tools._news is not None
-        assert tools._macro_data is not None
-        assert tools._llm is not None
+
+    def test_no_macro_data_or_llm_dependency(self) -> None:
+        """Per architecture §17, MacroDataProvider and LLMProvider belong at
+        the Agent level, not in the tools layer."""
+        tools = _build_tools()
+        assert not hasattr(tools, "_macro_data")
+        assert not hasattr(tools, "_llm")
+
+
+# ---------------------------------------------------------------------------
+# Remediation: TD-15 temporal integrity
+# ---------------------------------------------------------------------------
+
+
+class TestTemporalIntegrity:
+    """Search results have unknown publication dates; they must NOT be
+    fabricated from observation_date."""
+
+    @pytest.mark.asyncio
+    async def test_search_results_have_null_publication_date(self) -> None:
+        search = AsyncMock()
+        search.search = AsyncMock(
+            return_value=[
+                SearchResult(
+                    title="IT Industry Report India 2024",
+                    url="https://example.com/it-report",
+                    snippet="A comprehensive report",
+                ),
+            ]
+        )
+        news = AsyncMock()
+        news.search_news = AsyncMock(return_value=[])
+        tools = _build_tools(search=search, news=news)
+
+        inp = DiscoverIndustrySourcesInput(
+            industry_id=uuid.uuid4(),
+            industry_name="Information Technology",
+            observation_date=date(2024, 12, 31),
+        )
+        result = await tools.discover_industry_sources(inp)
+
+        assert len(result.candidates) >= 1
+        for c in result.candidates:
+            if c.provider == "search":
+                assert c.publication_date is None
+
+    @pytest.mark.asyncio
+    async def test_news_results_retain_real_publication_date(self) -> None:
+        search = AsyncMock()
+        search.search = AsyncMock(return_value=[])
+        news = AsyncMock()
+        news.search_news = AsyncMock(
+            return_value=[
+                NewsArticle(
+                    title="IT sector grows",
+                    url="https://news.example.com/it",
+                    source="ET",
+                    published_at=datetime(2024, 6, 15, tzinfo=UTC),
+                    summary="Growth",
+                    symbols=[],
+                ),
+            ]
+        )
+        tools = _build_tools(search=search, news=news)
+
+        inp = DiscoverIndustrySourcesInput(
+            industry_id=uuid.uuid4(),
+            industry_name="IT",
+            observation_date=date(2024, 12, 31),
+        )
+        result = await tools.discover_industry_sources(inp)
+
+        news_candidates = [c for c in result.candidates if c.provider == "news"]
+        assert len(news_candidates) == 1
+        assert news_candidates[0].publication_date == date(2024, 6, 15)
+
+    @pytest.mark.asyncio
+    async def test_sort_with_mixed_known_and_unknown_dates(self) -> None:
+        """Candidates with known dates sort before unknowns (descending)."""
+        search = AsyncMock()
+        search.search = AsyncMock(
+            return_value=[
+                SearchResult(
+                    title="Unknown date report",
+                    url="https://example.com/unknown",
+                    snippet="No date",
+                ),
+            ]
+        )
+        news = AsyncMock()
+        news.search_news = AsyncMock(
+            return_value=[
+                NewsArticle(
+                    title="Known date article",
+                    url="https://news.example.com/known",
+                    source="ET",
+                    published_at=datetime(2024, 3, 1, tzinfo=UTC),
+                    summary="Known",
+                    symbols=[],
+                ),
+            ]
+        )
+        tools = _build_tools(search=search, news=news)
+
+        inp = DiscoverIndustrySourcesInput(
+            industry_id=uuid.uuid4(),
+            industry_name="IT",
+            observation_date=date(2024, 12, 31),
+        )
+        result = await tools.discover_industry_sources(inp)
+
+        assert len(result.candidates) == 2
+        assert result.candidates[0].publication_date == date(2024, 3, 1)
+        assert result.candidates[1].publication_date is None
+
+    def test_source_candidate_accepts_none_publication_date(self) -> None:
+        from app.agents.contracts import SourceCandidate
+
+        candidate = SourceCandidate(
+            source_id="https://example.com/report",
+            source_type=DocumentType.RESEARCH_REPORT,
+            provider="search",
+            title="Industry Report",
+            source_tier=SourceTier.TIER_3,
+            url="https://example.com/report",
+        )
+        assert candidate.publication_date is None
+
+
+# ---------------------------------------------------------------------------
+# Remediation: TD-14 document retrieval provenance
+# ---------------------------------------------------------------------------
+
+
+class TestDocumentRetrievalProvenance:
+    """retrieve_industry_document uses SearchProvider as a proxy and returns
+    snippets, not full documents.  content_type must reflect this."""
+
+    @pytest.mark.asyncio
+    async def test_content_type_is_snippet(self) -> None:
+        search = AsyncMock()
+        search.search = AsyncMock(
+            return_value=[
+                SearchResult(
+                    title="Result",
+                    url="https://example.com/doc",
+                    snippet="Search snippet text",
+                ),
+            ]
+        )
+        tools = _build_tools(search=search)
+
+        inp = RetrieveIndustryDocumentInput(
+            url="https://example.com/doc",
+            source_id="src-provenance",
+        )
+        result = await tools.retrieve_industry_document(inp)
+
+        assert result.content_type == "text/snippet"
+        assert result.content == "Search snippet text"
+
+    @pytest.mark.asyncio
+    async def test_empty_result_still_snippet_type(self) -> None:
+        search = AsyncMock()
+        search.search = AsyncMock(return_value=[])
+        tools = _build_tools(search=search)
+
+        inp = RetrieveIndustryDocumentInput(
+            url="https://example.com/missing",
+            source_id="src-empty",
+        )
+        result = await tools.retrieve_industry_document(inp)
+
+        assert result.content_type == "text/snippet"
+        assert result.content == ""
+
+
+# ---------------------------------------------------------------------------
+# Remediation: tool inventory verification
+# ---------------------------------------------------------------------------
+
+
+class TestToolInventory:
+    """Verify the canonical 8 agent-facing tool methods exist and that
+    create_research_document is an internal helper, not tool #8."""
+
+    AGENT_FACING_TOOLS = [
+        "validate_industry",
+        "discover_industry_sources",
+        "retrieve_industry_document",
+        "get_industry_profile",
+        "search_industry_news",
+        "persist_evidence",
+        "persist_findings",
+    ]
+
+    def test_all_agent_facing_tools_exist(self) -> None:
+        tools = _build_tools()
+        for name in self.AGENT_FACING_TOOLS:
+            assert hasattr(tools, name), f"Missing agent-facing tool: {name}"
+            assert callable(getattr(tools, name))
+
+    def test_create_research_document_is_internal_helper(self) -> None:
+        tools = _build_tools()
+        assert hasattr(tools, "create_research_document")
+        assert callable(tools.create_research_document)

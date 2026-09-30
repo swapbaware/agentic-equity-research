@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
@@ -45,8 +45,6 @@ from app.models.enums import DocumentType, SourceTier
 from app.models.research import Evidence, ResearchDocument
 from app.providers.errors import ProviderError
 from app.providers.interfaces import (
-    LLMProvider,
-    MacroDataProvider,
     NewsProvider,
     SearchProvider,
 )
@@ -60,13 +58,16 @@ logger = logging.getLogger(__name__)
 
 
 class IndustryResearchTools:
-    """Implements the 8 tool contracts for the Industry Research Agent.
+    """Implements the 8 agent-facing tool contracts for the Industry Research Agent.
 
-    5 new industry-specific tools plus 3 adapted tools (retrieve_document,
-    persist_evidence, persist_findings) using industry-specific constants.
+    5 new industry-specific tools plus 3 adapted tools (persist_evidence,
+    persist_findings, retrieve_industry_document) using industry-specific
+    constants.  Also provides the ``create_research_document`` internal
+    helper (not agent-facing).
 
-    All provider access goes through Protocol interfaces injected at
-    construction time.
+    Provider dependencies are limited to SearchProvider and NewsProvider
+    per architecture §17.  MacroDataProvider and LLMProvider belong at the
+    IndustryResearchAgent level, not here.
     """
 
     def __init__(
@@ -75,15 +76,11 @@ class IndustryResearchTools:
         run_service: ResearchRunService,
         search: SearchProvider,
         news: NewsProvider,
-        macro_data: MacroDataProvider,
-        llm: LLMProvider,
     ) -> None:
         self._session = session
         self._run_service = run_service
         self._search = search
         self._news = news
-        self._macro_data = macro_data
-        self._llm = llm
 
     # -- Tool 1: validate_industry ---------------------------------------------
 
@@ -141,7 +138,7 @@ class IndustryResearchTools:
                             source_type=doc_type,
                             provider="search",
                             title=r.title,
-                            publication_date=inp.observation_date,
+                            publication_date=None,
                             source_tier=_tier_from_url(r.url),
                             url=r.url,
                         )
@@ -189,7 +186,7 @@ class IndustryResearchTools:
                 seen_urls.add(key)
                 unique.append(c)
 
-        unique.sort(key=lambda c: c.publication_date, reverse=True)
+        unique.sort(key=lambda c: c.publication_date or date.min, reverse=True)
         return DiscoverIndustrySourcesOutput(candidates=unique[: inp.limit])
 
     # -- Tool 3: retrieve_industry_document ------------------------------------
@@ -204,7 +201,7 @@ class IndustryResearchTools:
         content_hash = hashlib.sha256(content.encode()).hexdigest()
         return RetrieveIndustryDocumentOutput(
             content=content,
-            content_type="text/plain",
+            content_type="text/snippet",
             content_hash=content_hash,
             source_id=inp.source_id,
         )
@@ -350,13 +347,17 @@ class IndustryResearchTools:
             rejected=rejected,
         )
 
-    # -- Adapted: create_research_document (industry-aware, company_id=None) ---
+    # -- Internal helper (NOT an agent-facing tool) ----------------------------
 
     async def create_research_document(
         self,
         candidate: SourceCandidate,
         content_hash: str,
     ) -> uuid.UUID:
+        """Persist a ResearchDocument with company_id=None for industry-level sources.
+
+        Internal helper — not one of the 8 agent-facing tool contracts.
+        """
         doc = ResearchDocument(
             company_id=None,
             document_type=candidate.source_type,
