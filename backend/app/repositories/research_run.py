@@ -33,9 +33,15 @@ class ResearchRunRepositoryProtocol(Protocol):
         self, company_id: uuid.UUID, *, limit: int = 10,
     ) -> list[ResearchRun]: ...
     async def update_status(
-        self, run_id: uuid.UUID, status: str,
+        self,
+        run_id: uuid.UUID,
+        status: str,
+        *,
         error_summary: str | None = None,
-    ) -> ResearchRun: ...
+        completed_at: datetime | None = None,
+        started_at: datetime | None = None,
+        quality_gate_results: dict[str, object] | None = None,
+    ) -> ResearchRun | None: ...
     async def get_active_run(self, company_id: uuid.UUID) -> ResearchRun | None: ...
 
 
@@ -53,8 +59,14 @@ class ResearchRunStepRepositoryProtocol(Protocol):
     ) -> list[ResearchRunStep]: ...
     async def get_by_run(self, run_id: uuid.UUID) -> list[ResearchRunStep]: ...
     async def update_status(
-        self, step_id: uuid.UUID, status: str,
-    ) -> ResearchRunStep: ...
+        self,
+        step_id: uuid.UUID,
+        status: str,
+        *,
+        started_at: datetime | None = None,
+        completed_at: datetime | None = None,
+        error_message: str | None = None,
+    ) -> ResearchRunStep | None: ...
 
 
 class ResearchFindingRepositoryProtocol(Protocol):
@@ -78,6 +90,11 @@ class ResearchArtifactRepositoryProtocol(Protocol):
     async def get_by_run(
         self, run_id: uuid.UUID, *, artifact_type: str | None = None,
     ) -> list[ResearchArtifact]: ...
+
+
+class ResearchRunSourceRepositoryProtocol(Protocol):
+    async def create(self, source: ResearchRunSource) -> ResearchRunSource: ...
+    async def get_by_run(self, run_id: uuid.UUID) -> list[ResearchRunSource]: ...
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +139,8 @@ class ResearchRunRepository(BaseRepository[ResearchRun]):
         *,
         error_summary: str | None = None,
         completed_at: datetime | None = None,
+        started_at: datetime | None = None,
+        quality_gate_results: dict[str, object] | None = None,
     ) -> ResearchRun | None:
         run = await self.get_by_id(run_id)
         if run is None:
@@ -131,6 +150,10 @@ class ResearchRunRepository(BaseRepository[ResearchRun]):
             run.error_summary = error_summary
         if completed_at is not None:
             run.completed_at = completed_at
+        if started_at is not None:
+            run.started_at = started_at
+        if quality_gate_results is not None:
+            run.quality_gate_results = quality_gate_results
         await self._session.flush()
         await self._session.refresh(run)
         return run

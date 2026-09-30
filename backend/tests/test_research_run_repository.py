@@ -386,3 +386,9 @@ class TestProtocolInterfaces:
         repo = ResearchArtifactRepository(session)
         assert hasattr(repo, "create")
         assert hasattr(repo, "get_by_run")
+
+    def test_source_repo_has_protocol_methods(self) -> None:
+        session = _mock_session()
+        repo = ResearchRunSourceRepository(session)
+        assert hasattr(repo, "create")
+        assert hasattr(repo, "get_by_run")

@@ -405,17 +405,17 @@ InvestmentThesis
     ─────────────►  └────┬─────┘
                          │ enqueue()
                     ┌────▼─────┐
-                    │ QUEUED   │
-                    └────┬─────┘
-                         │ start()
-                    ┌────▼─────┐
-                    │ RUNNING  │
-                    └──┬──┬──┬──┬──┘
-                       │  │  │  │
-          complete()   │  │  │  │ cancel()
-                       │  │  │  │
-              ┌────────▼┐ │  │ ┌▼──────────┐
-              │COMPLETED│ │  │ │ CANCELLED  │
+                    │ QUEUED   ├──────── cancel() ──┐
+                    └────┬─────┘                    │
+                         │ start()                  │
+                    ┌────▼─────┐                    │
+                    │ RUNNING  │                    │
+                    └──┬──┬──┬──┬──┘                │
+                       │  │  │  │                   │
+          complete()   │  │  │  │ cancel()          │
+                       │  │  │  │                   │
+              ┌────────▼┐ │  │ ┌▼──────────┐        │
+              │COMPLETED│ │  │ │ CANCELLED  │◄──────┘
               └─────────┘ │  │ └────────────┘
                           │  │
                   fail()  │  │ partial()
@@ -428,6 +428,7 @@ InvestmentThesis
 **Transition rules**:
 - CREATED → QUEUED: Only via `enqueue()`. Validates company exists, no concurrent run (Redis advisory lock).
 - QUEUED → RUNNING: Only via `start()`. Acquires execution slot.
+- QUEUED → CANCELLED: User-initiated cancellation before execution begins.
 - RUNNING → COMPLETED: All quality gates pass. Full research result produced.
 - RUNNING → FAILED: The run terminated unsuccessfully without producing a complete usable research result (unrecoverable error, db failure, configuration error).
 - RUNNING → PARTIAL: The run contains usable completed work/findings but did not complete all required research steps. This includes: quality gates failing after max 2 iterations (ADR-007), timeout at 15 minutes, some agents completing while others failed, or explicit partial save.

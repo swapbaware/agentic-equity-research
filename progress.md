@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-09-30 (Phase 7 complete)
+**Last Updated:** 2026-09-30 (Phase 7 audit hardening complete)
 
 ---
 
@@ -344,6 +344,23 @@
 - [x] mypy strict: zero new errors (1 preexisting in yahoo_finance.py)
 - [x] ruff: zero errors
 - [x] 138 new Phase 7 tests total
+
+### Phase 7 Audit Hardening — COMPLETE
+
+Post-audit remediation of 6 findings from Phase 7 implementation audit:
+
+- [x] Issue #1: Service lifecycle methods (start_run, complete_run, fail_run, partial_run, cancel_run, complete_step) refactored to delegate to repository `update_status()` instead of direct session mutation
+- [x] Issue #2: Added `ResearchRunSourceRepositoryProtocol` with `create()` and `get_by_run()` methods
+- [x] Issue #3: Added post-INSERT temporal validation enforcing `source_publication_date ≤ finding.created_at` (architecture §12.2.2)
+- [x] Issue #4: Updated architecture document to include QUEUED→CANCELLED transition in state diagram and transition rules
+- [x] Issue #5: Added `TimestampMixin` to `ResearchRunStep` (provides `updated_at` alongside existing `created_at`); migration 005 adds `updated_at` column
+- [x] Issue #6: Aligned `ResearchRunRepositoryProtocol.update_status()` signature with concrete implementation (added `started_at`, `quality_gate_results`, return type `ResearchRun | None`); same for `ResearchRunStepRepositoryProtocol`
+- [x] `alembic/versions/005_add_updated_at_to_research_run_step.py` — adds `updated_at` column with server_default and downgrade
+- [x] 13 new tests: 7 service/repository boundary, 5 temporal validation (§12.2.2), 1 protocol compliance
+- [x] Full backend: 1485 passed, 7 skipped, 1 known failure (TD-6)
+- [x] mypy strict: zero new errors (1 preexisting in yahoo_finance.py)
+- [x] ruff: zero errors
+- [x] Frontend: 5 passed, tsc clean
 
 ---
 

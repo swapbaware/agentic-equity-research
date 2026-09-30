@@ -110,11 +110,12 @@ class ResearchRunService:
     async def start_run(self, run_id: uuid.UUID) -> ResearchRun:
         run = await self._get_run(run_id)
         validate_run_transition(run.status, ResearchRunStatus.RUNNING)
-        run.status = ResearchRunStatus.RUNNING
-        run.started_at = datetime.now(UTC)
-        await self._session.flush()
-        await self._session.refresh(run)
-        return run
+        result = await self._runs.update_status(
+            run_id, ResearchRunStatus.RUNNING,
+            started_at=datetime.now(UTC),
+        )
+        assert result is not None
+        return result
 
     async def complete_run(
         self,
@@ -123,25 +124,26 @@ class ResearchRunService:
     ) -> ResearchRun:
         run = await self._get_run(run_id)
         validate_run_transition(run.status, ResearchRunStatus.COMPLETED)
-        run.status = ResearchRunStatus.COMPLETED
-        run.completed_at = datetime.now(UTC)
-        if quality_gates is not None:
-            run.quality_gate_results = quality_gates
-        await self._session.flush()
-        await self._session.refresh(run)
-        return run
+        result = await self._runs.update_status(
+            run_id, ResearchRunStatus.COMPLETED,
+            completed_at=datetime.now(UTC),
+            quality_gate_results=quality_gates,
+        )
+        assert result is not None
+        return result
 
     async def fail_run(
         self, run_id: uuid.UUID, error_summary: str,
     ) -> ResearchRun:
         run = await self._get_run(run_id)
         validate_run_transition(run.status, ResearchRunStatus.FAILED)
-        run.status = ResearchRunStatus.FAILED
-        run.completed_at = datetime.now(UTC)
-        run.error_summary = error_summary
-        await self._session.flush()
-        await self._session.refresh(run)
-        return run
+        result = await self._runs.update_status(
+            run_id, ResearchRunStatus.FAILED,
+            completed_at=datetime.now(UTC),
+            error_summary=error_summary,
+        )
+        assert result is not None
+        return result
 
     async def partial_run(
         self,
@@ -151,23 +153,24 @@ class ResearchRunService:
     ) -> ResearchRun:
         run = await self._get_run(run_id)
         validate_run_transition(run.status, ResearchRunStatus.PARTIAL)
-        run.status = ResearchRunStatus.PARTIAL
-        run.completed_at = datetime.now(UTC)
-        run.error_summary = error_summary
-        if quality_gates is not None:
-            run.quality_gate_results = quality_gates
-        await self._session.flush()
-        await self._session.refresh(run)
-        return run
+        result = await self._runs.update_status(
+            run_id, ResearchRunStatus.PARTIAL,
+            completed_at=datetime.now(UTC),
+            error_summary=error_summary,
+            quality_gate_results=quality_gates,
+        )
+        assert result is not None
+        return result
 
     async def cancel_run(self, run_id: uuid.UUID) -> ResearchRun:
         run = await self._get_run(run_id)
         validate_run_transition(run.status, ResearchRunStatus.CANCELLED)
-        run.status = ResearchRunStatus.CANCELLED
-        run.completed_at = datetime.now(UTC)
-        await self._session.flush()
-        await self._session.refresh(run)
-        return run
+        result = await self._runs.update_status(
+            run_id, ResearchRunStatus.CANCELLED,
+            completed_at=datetime.now(UTC),
+        )
+        assert result is not None
+        return result
 
     async def get_run(self, run_id: uuid.UUID) -> ResearchRun:
         return await self._get_run(run_id)
@@ -258,13 +261,17 @@ class ResearchRunService:
     ) -> ResearchRunStep:
         step = await self._get_step(step_id)
         validate_step_transition(step.status, StepStatus.COMPLETED)
-        step.status = StepStatus.COMPLETED
-        step.completed_at = datetime.now(UTC)
+        result = await self._steps.update_status(
+            step_id,
+            StepStatus.COMPLETED,
+            completed_at=datetime.now(UTC),
+        )
+        assert result is not None
         if output_state_hash is not None:
-            step.output_state_hash = output_state_hash
-        await self._session.flush()
-        await self._session.refresh(step)
-        return step
+            result.output_state_hash = output_state_hash
+            await self._session.flush()
+            await self._session.refresh(result)
+        return result
 
     async def fail_step(
         self, step_id: uuid.UUID, error_message: str,
@@ -424,7 +431,9 @@ class ResearchRunService:
             )
             findings.append(finding)
 
-        return await self._findings.create_batch(findings)
+        persisted = await self._findings.create_batch(findings)
+        self._validate_publication_date_against_created_at(persisted)
+        return persisted
 
     async def get_findings(
         self,
@@ -568,3 +577,22 @@ class ResearchRunService:
                     "observation_date": str(finding.observation_date),
                 },
             )
+
+    @staticmethod
+    def _validate_publication_date_against_created_at(
+        findings: list[ResearchFinding],
+    ) -> None:
+        for finding in findings:
+            if (
+                finding.source_publication_date is not None
+                and finding.created_at is not None
+                and finding.source_publication_date > finding.created_at.date()
+            ):
+                raise ValidationError(
+                    message="source_publication_date cannot be after finding created_at",
+                    details={
+                        "finding_id": str(finding.id),
+                        "source_publication_date": str(finding.source_publication_date),
+                        "created_at": str(finding.created_at),
+                    },
+                )

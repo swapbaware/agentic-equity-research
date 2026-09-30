@@ -376,6 +376,15 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - No LangGraph, Celery/Temporal, Redis locks, REST/WebSocket endpoints
 - 138 new tests, 1471 total passing
 
+**Phase 7 Audit Hardening:**
+- Service lifecycle methods refactored to delegate to repository update_status()
+- ResearchRunSourceRepositoryProtocol added
+- Post-INSERT temporal validation: source_publication_date ≤ finding.created_at (§12.2.2)
+- Architecture document updated: QUEUED→CANCELLED transition documented
+- ResearchRunStep uses TimestampMixin (migration 005 adds updated_at)
+- Protocol signatures aligned with concrete implementations
+- 151 Phase 7 tests total, 1485 total passing
+
 ---
 
 ## Phase 8 — Company Research Agent

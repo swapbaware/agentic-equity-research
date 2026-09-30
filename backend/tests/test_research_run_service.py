@@ -22,6 +22,7 @@ from app.models.enums import (
 )
 from app.models.research import (
     AgentExecution,
+    ResearchFinding,
     ResearchRun,
     ResearchRunStep,
 )
@@ -77,6 +78,7 @@ def _make_step(
         status=status,
     )
     step.created_at = datetime.now(UTC)
+    step.updated_at = datetime.now(UTC)
     return step
 
 
@@ -102,6 +104,13 @@ def _make_execution(
     execution.cost_usd = Decimal("0")
     execution.findings_produced = 0
     return execution
+
+
+def _simulate_create_batch(findings: list[ResearchFinding]) -> list[ResearchFinding]:
+    for f in findings:
+        if f.created_at is None:
+            f.created_at = datetime.now(UTC)
+    return findings
 
 
 def _make_service() -> tuple[ResearchRunService, MagicMock]:
@@ -171,12 +180,25 @@ class TestRunLifecycle:
             await service.enqueue_run(run.id)
 
         run.status = ResearchRunStatus.QUEUED
-        with patch.object(service._runs, "get_by_id", new_callable=AsyncMock, return_value=run):
+        with (
+            patch.object(service._runs, "get_by_id", new_callable=AsyncMock, return_value=run),
+            patch.object(service._runs, "update_status", new_callable=AsyncMock) as mock_update,
+        ):
+            started_run = _make_run(status=ResearchRunStatus.RUNNING)
+            mock_update.return_value = started_run
             result = await service.start_run(run.id)
+            mock_update.assert_called_once()
 
         run.status = ResearchRunStatus.RUNNING
-        with patch.object(service._runs, "get_by_id", new_callable=AsyncMock, return_value=run):
+        with (
+            patch.object(service._runs, "get_by_id", new_callable=AsyncMock, return_value=run),
+            patch.object(service._runs, "update_status", new_callable=AsyncMock) as mock_update,
+        ):
+            completed_run = _make_run(status=ResearchRunStatus.COMPLETED)
+            completed_run.completed_at = datetime.now(UTC)
+            mock_update.return_value = completed_run
             result = await service.complete_run(run.id, quality_gates={"gate_1": True})
+            mock_update.assert_called_once()
 
         assert result.status == ResearchRunStatus.COMPLETED
         assert result.completed_at is not None
@@ -185,13 +207,20 @@ class TestRunLifecycle:
     async def test_running_to_partial(self) -> None:
         service, session = _make_service()
         run = _make_run(status=ResearchRunStatus.RUNNING)
+        partial = _make_run(status=ResearchRunStatus.PARTIAL)
+        partial.completed_at = datetime.now(UTC)
+        partial.error_summary = "Quality gates failed after 2 iterations"
 
-        with patch.object(service._runs, "get_by_id", new_callable=AsyncMock, return_value=run):
+        with (
+            patch.object(service._runs, "get_by_id", new_callable=AsyncMock, return_value=run),
+            patch.object(service._runs, "update_status", new_callable=AsyncMock, return_value=partial) as mock_update,
+        ):
             result = await service.partial_run(
                 run.id,
                 error_summary="Quality gates failed after 2 iterations",
                 quality_gates={"citation_completeness": False},
             )
+            mock_update.assert_called_once()
 
         assert result.status == ResearchRunStatus.PARTIAL
         assert result.error_summary == "Quality gates failed after 2 iterations"
@@ -200,9 +229,16 @@ class TestRunLifecycle:
     async def test_running_to_failed(self) -> None:
         service, session = _make_service()
         run = _make_run(status=ResearchRunStatus.RUNNING)
+        failed = _make_run(status=ResearchRunStatus.FAILED)
+        failed.completed_at = datetime.now(UTC)
+        failed.error_summary = "Database connection failed"
 
-        with patch.object(service._runs, "get_by_id", new_callable=AsyncMock, return_value=run):
+        with (
+            patch.object(service._runs, "get_by_id", new_callable=AsyncMock, return_value=run),
+            patch.object(service._runs, "update_status", new_callable=AsyncMock, return_value=failed) as mock_update,
+        ):
             result = await service.fail_run(run.id, "Database connection failed")
+            mock_update.assert_called_once()
 
         assert result.status == ResearchRunStatus.FAILED
         assert result.error_summary == "Database connection failed"
@@ -211,9 +247,15 @@ class TestRunLifecycle:
     async def test_running_to_cancelled(self) -> None:
         service, session = _make_service()
         run = _make_run(status=ResearchRunStatus.RUNNING)
+        cancelled = _make_run(status=ResearchRunStatus.CANCELLED)
+        cancelled.completed_at = datetime.now(UTC)
 
-        with patch.object(service._runs, "get_by_id", new_callable=AsyncMock, return_value=run):
+        with (
+            patch.object(service._runs, "get_by_id", new_callable=AsyncMock, return_value=run),
+            patch.object(service._runs, "update_status", new_callable=AsyncMock, return_value=cancelled) as mock_update,
+        ):
             result = await service.cancel_run(run.id)
+            mock_update.assert_called_once()
 
         assert result.status == ResearchRunStatus.CANCELLED
 
@@ -224,6 +266,7 @@ class TestRunLifecycle:
 
         with (
             patch.object(service._runs, "get_by_id", new_callable=AsyncMock, return_value=run),
+            patch.object(service._runs, "update_status", new_callable=AsyncMock),
             pytest.raises(ValidationError, match="Invalid run transition"),
         ):
             await service.complete_run(run.id)
@@ -478,7 +521,7 @@ class TestFindings:
             patch.object(service._runs, "get_by_id", new_callable=AsyncMock, return_value=run),
             patch.object(service._findings, "create_batch", new_callable=AsyncMock) as mock_batch,
         ):
-            mock_batch.side_effect = lambda findings: findings
+            mock_batch.side_effect = _simulate_create_batch
             results = await service.record_findings(run.id, None, [finding_data])
 
         assert len(results) == 1
@@ -549,10 +592,126 @@ class TestFindings:
             patch.object(service._runs, "get_by_id", new_callable=AsyncMock, return_value=run),
             patch.object(service._findings, "create_batch", new_callable=AsyncMock) as mock_batch,
         ):
-            mock_batch.side_effect = lambda findings: findings
+            mock_batch.side_effect = _simulate_create_batch
             results = await service.record_findings(run.id, None, [finding_data])
 
         assert results[0].supersedes_finding_id == old_finding_id
+
+    @pytest.mark.asyncio
+    async def test_publication_date_before_created_at_accepted(self) -> None:
+        """§12.2.2: source_publication_date before created_at is valid."""
+        service, _ = _make_service()
+        run = _make_run(status=ResearchRunStatus.RUNNING)
+        finding_data = ResearchFindingCreate(
+            agent_name="test_agent",
+            finding_type=FindingType.FACT,
+            category="test",
+            content="test",
+            confidence="HIGH",
+            source_publication_date=date(2026, 9, 1),
+        )
+
+        with (
+            patch.object(service._runs, "get_by_id", new_callable=AsyncMock, return_value=run),
+            patch.object(service._findings, "create_batch", new_callable=AsyncMock) as mock_batch,
+        ):
+            mock_batch.side_effect = _simulate_create_batch
+            results = await service.record_findings(run.id, None, [finding_data])
+
+        assert len(results) == 1
+
+    @pytest.mark.asyncio
+    async def test_publication_date_equal_to_created_at_accepted(self) -> None:
+        """§12.2.2: source_publication_date equal to created_at date is valid."""
+        service, _ = _make_service()
+        run = _make_run(status=ResearchRunStatus.RUNNING)
+        today = date.today()
+        finding_data = ResearchFindingCreate(
+            agent_name="test_agent",
+            finding_type=FindingType.FACT,
+            category="test",
+            content="test",
+            confidence="HIGH",
+            source_publication_date=today,
+        )
+
+        with (
+            patch.object(service._runs, "get_by_id", new_callable=AsyncMock, return_value=run),
+            patch.object(service._findings, "create_batch", new_callable=AsyncMock) as mock_batch,
+        ):
+            mock_batch.side_effect = _simulate_create_batch
+            results = await service.record_findings(run.id, None, [finding_data])
+
+        assert len(results) == 1
+
+    @pytest.mark.asyncio
+    async def test_publication_date_after_created_at_rejected(self) -> None:
+        """§12.2.2: source_publication_date after created_at must raise."""
+        service, _ = _make_service()
+        run = _make_run(status=ResearchRunStatus.RUNNING)
+        future_date = date(2099, 12, 31)
+        finding_data = ResearchFindingCreate(
+            agent_name="test_agent",
+            finding_type=FindingType.FACT,
+            category="test",
+            content="test",
+            confidence="HIGH",
+            source_publication_date=future_date,
+        )
+
+        with (
+            patch.object(service._runs, "get_by_id", new_callable=AsyncMock, return_value=run),
+            patch.object(service._findings, "create_batch", new_callable=AsyncMock) as mock_batch,
+            pytest.raises(ValidationError, match="source_publication_date cannot be after finding created_at"),
+        ):
+            mock_batch.side_effect = _simulate_create_batch
+            await service.record_findings(run.id, None, [finding_data])
+
+    @pytest.mark.asyncio
+    async def test_observation_date_validation_still_works_with_new_rule(self) -> None:
+        """Existing observation_date rules still apply alongside §12.2.2."""
+        service, _ = _make_service()
+        run = _make_run(
+            status=ResearchRunStatus.RUNNING,
+            observation_date=date(2026, 9, 30),
+        )
+        finding_data = ResearchFindingCreate(
+            agent_name="test_agent",
+            finding_type=FindingType.FACT,
+            category="test",
+            content="test",
+            confidence="HIGH",
+            observation_date=date(2026, 10, 15),
+        )
+
+        with (
+            patch.object(service._runs, "get_by_id", new_callable=AsyncMock, return_value=run),
+            pytest.raises(ValidationError, match="cannot be after run observation_date"),
+        ):
+            await service.record_findings(run.id, None, [finding_data])
+
+    @pytest.mark.asyncio
+    async def test_invalid_finding_not_persisted_after_post_insert_check(self) -> None:
+        """Invalid findings raise before transaction commits."""
+        service, _ = _make_service()
+        run = _make_run(status=ResearchRunStatus.RUNNING)
+        future_date = date(2099, 12, 31)
+        finding_data = ResearchFindingCreate(
+            agent_name="test_agent",
+            finding_type=FindingType.FACT,
+            category="test",
+            content="test",
+            confidence="HIGH",
+            source_publication_date=future_date,
+        )
+
+        with (
+            patch.object(service._runs, "get_by_id", new_callable=AsyncMock, return_value=run),
+            patch.object(service._findings, "create_batch", new_callable=AsyncMock) as mock_batch,
+            pytest.raises(ValidationError),
+        ):
+            mock_batch.side_effect = _simulate_create_batch
+            await service.record_findings(run.id, None, [finding_data])
 
 
 # ---------------------------------------------------------------------------
@@ -659,10 +818,18 @@ class TestStepManagement:
             await service.start_step(step.id)
 
         step.status = StepStatus.RUNNING
-        with patch.object(service._steps, "get_by_id", new_callable=AsyncMock, return_value=step):
+        completed_step = _make_step(status=StepStatus.COMPLETED)
+        with (
+            patch.object(service._steps, "get_by_id", new_callable=AsyncMock, return_value=step),
+            patch.object(
+                service._steps, "update_status",
+                new_callable=AsyncMock, return_value=completed_step,
+            ) as mock_complete,
+        ):
             result = await service.complete_step(step.id, output_state_hash="abc123")
+            mock_complete.assert_called_once()
 
-        assert result.status == StepStatus.COMPLETED
+        assert result.output_state_hash == "abc123"
 
     @pytest.mark.asyncio
     async def test_step_retry(self) -> None:
@@ -728,3 +895,137 @@ class TestNotFound:
                 cost_usd=Decimal("0"),
                 findings_count=0,
             )
+
+
+# ---------------------------------------------------------------------------
+# Service/repository boundary (Issue #1 audit fix)
+# ---------------------------------------------------------------------------
+
+
+class TestServiceUsesRepository:
+    """Verify that lifecycle methods delegate to repository.update_status()."""
+
+    @pytest.mark.asyncio
+    async def test_start_run_delegates_to_repo(self) -> None:
+        service, _ = _make_service()
+        run = _make_run(status=ResearchRunStatus.QUEUED)
+        result_run = _make_run(status=ResearchRunStatus.RUNNING)
+
+        with (
+            patch.object(
+                service._runs, "get_by_id",
+                new_callable=AsyncMock, return_value=run,
+            ),
+            patch.object(
+                service._runs, "update_status",
+                new_callable=AsyncMock, return_value=result_run,
+            ) as mock_update,
+        ):
+            await service.start_run(run.id)
+            mock_update.assert_called_once()
+            call_kwargs = mock_update.call_args
+            assert call_kwargs[0][1] == ResearchRunStatus.RUNNING
+            assert "started_at" in call_kwargs[1]
+
+    @pytest.mark.asyncio
+    async def test_complete_run_delegates_to_repo(self) -> None:
+        service, _ = _make_service()
+        run = _make_run(status=ResearchRunStatus.RUNNING)
+        result_run = _make_run(status=ResearchRunStatus.COMPLETED)
+
+        with (
+            patch.object(
+                service._runs, "get_by_id",
+                new_callable=AsyncMock, return_value=run,
+            ),
+            patch.object(
+                service._runs, "update_status",
+                new_callable=AsyncMock, return_value=result_run,
+            ) as mock_update,
+        ):
+            await service.complete_run(run.id, quality_gates={"g1": True})
+            mock_update.assert_called_once()
+            call_kwargs = mock_update.call_args
+            assert call_kwargs[0][1] == ResearchRunStatus.COMPLETED
+            assert call_kwargs[1]["quality_gate_results"] == {"g1": True}
+            assert "completed_at" in call_kwargs[1]
+
+    @pytest.mark.asyncio
+    async def test_fail_run_delegates_to_repo(self) -> None:
+        service, _ = _make_service()
+        run = _make_run(status=ResearchRunStatus.RUNNING)
+        result_run = _make_run(status=ResearchRunStatus.FAILED)
+
+        with (
+            patch.object(
+                service._runs, "get_by_id",
+                new_callable=AsyncMock, return_value=run,
+            ),
+            patch.object(
+                service._runs, "update_status",
+                new_callable=AsyncMock, return_value=result_run,
+            ) as mock_update,
+        ):
+            await service.fail_run(run.id, "error")
+            mock_update.assert_called_once()
+            assert mock_update.call_args[1]["error_summary"] == "error"
+
+    @pytest.mark.asyncio
+    async def test_partial_run_delegates_to_repo(self) -> None:
+        service, _ = _make_service()
+        run = _make_run(status=ResearchRunStatus.RUNNING)
+        result_run = _make_run(status=ResearchRunStatus.PARTIAL)
+
+        with (
+            patch.object(
+                service._runs, "get_by_id",
+                new_callable=AsyncMock, return_value=run,
+            ),
+            patch.object(
+                service._runs, "update_status",
+                new_callable=AsyncMock, return_value=result_run,
+            ) as mock_update,
+        ):
+            await service.partial_run(run.id, "partial error")
+            mock_update.assert_called_once()
+            assert mock_update.call_args[1]["error_summary"] == "partial error"
+
+    @pytest.mark.asyncio
+    async def test_cancel_run_delegates_to_repo(self) -> None:
+        service, _ = _make_service()
+        run = _make_run(status=ResearchRunStatus.RUNNING)
+        result_run = _make_run(status=ResearchRunStatus.CANCELLED)
+
+        with (
+            patch.object(
+                service._runs, "get_by_id",
+                new_callable=AsyncMock, return_value=run,
+            ),
+            patch.object(
+                service._runs, "update_status",
+                new_callable=AsyncMock, return_value=result_run,
+            ) as mock_update,
+        ):
+            await service.cancel_run(run.id)
+            mock_update.assert_called_once()
+            assert mock_update.call_args[0][1] == ResearchRunStatus.CANCELLED
+
+    @pytest.mark.asyncio
+    async def test_complete_step_delegates_to_repo(self) -> None:
+        service, _ = _make_service()
+        step = _make_step(status=StepStatus.RUNNING)
+        result_step = _make_step(status=StepStatus.COMPLETED)
+
+        with (
+            patch.object(
+                service._steps, "get_by_id",
+                new_callable=AsyncMock, return_value=step,
+            ),
+            patch.object(
+                service._steps, "update_status",
+                new_callable=AsyncMock, return_value=result_step,
+            ) as mock_update,
+        ):
+            await service.complete_step(step.id)
+            mock_update.assert_called_once()
+            assert mock_update.call_args[0][1] == StepStatus.COMPLETED

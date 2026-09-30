@@ -311,7 +311,7 @@ class ResearchFinding(Base):
     )
 
 
-class ResearchRunStep(Base):
+class ResearchRunStep(Base, TimestampMixin):
     __tablename__ = "research_run_step"
     __table_args__ = (
         sa.CheckConstraint(
@@ -347,11 +347,6 @@ class ResearchRunStep(Base):
     error_message: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     input_state_hash: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
     output_state_hash: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        sa.DateTime(timezone=True),
-        server_default=sa.func.now(),
-        nullable=False,
-    )
 
     research_run: Mapped[ResearchRun] = relationship(back_populates="steps")
     agent_executions: Mapped[list[AgentExecution]] = relationship(

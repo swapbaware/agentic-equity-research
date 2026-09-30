@@ -151,6 +151,10 @@ class TestResearchRunStepModel:
     def test_tablename(self) -> None:
         assert ResearchRunStep.__tablename__ == "research_run_step"
 
+    def test_has_timestamp_mixin_fields(self) -> None:
+        assert hasattr(ResearchRunStep, "created_at")
+        assert hasattr(ResearchRunStep, "updated_at")
+
 
 class TestAgentExecutionModel:
     def test_create_with_required_fields(self) -> None:
