@@ -194,6 +194,7 @@ class ResearchRun(Base, TimestampMixin):
         sa.Index(
             "ix_research_run_industry",
             "industry_id",
+            sa.text("started_at DESC"),
             postgresql_where=sa.text("industry_id IS NOT NULL"),
         ),
         sa.Index("ix_research_run_target_type", "target_type", sa.text("started_at DESC")),

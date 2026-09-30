@@ -75,11 +75,11 @@ def upgrade() -> None:
         """
     )
 
-    # Step 5: Partial index for industry lookups.
+    # Step 5: Partial composite index for industry lookups.
     op.create_index(
         "ix_research_run_industry",
         TABLE,
-        ["industry_id"],
+        ["industry_id", sa.text("started_at DESC")],
         schema=SCHEMA,
         postgresql_where=sa.text("industry_id IS NOT NULL"),
     )
