@@ -148,8 +148,14 @@ class ThesisVersion(Base):
         sa.ForeignKey("thesis.investment_thesis.id"),
         nullable=True,
     )
+    research_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        sa.ForeignKey("research.research_run.id"),
+        nullable=True,
+    )
     change_summary: Mapped[str] = mapped_column(sa.Text, nullable=False)
     change_trigger: Mapped[str] = mapped_column(sa.String(500), nullable=False)
+    snapshot_data: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    key_changes: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True),
         server_default=sa.func.now(),

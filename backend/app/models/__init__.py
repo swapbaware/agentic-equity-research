@@ -11,6 +11,8 @@ from app.models.analysis import (
 from app.models.base import Base, TimestampMixin
 from app.models.company import Classification, Company, Exchange, Security
 from app.models.enums import (
+    AgentExecutionStatus,
+    ArtifactType,
     CatalystImpact,
     ClaimType,
     ClassificationLevel,
@@ -38,6 +40,7 @@ from app.models.enums import (
     SourceTier,
     SourceType,
     StatementType,
+    StepStatus,
     ValuationModelType,
 )
 from app.models.evidence import (
@@ -55,11 +58,15 @@ from app.models.governance import (
     Shareholding,
 )
 from app.models.research import (
+    AgentExecution,
     Evidence,
     ManagementStatement,
+    ResearchArtifact,
     ResearchDocument,
     ResearchFinding,
     ResearchRun,
+    ResearchRunSource,
+    ResearchRunStep,
     research_finding_evidence,
 )
 from app.models.screening import CompanyScreeningData, SavedScreen
@@ -79,6 +86,8 @@ __all__ = [
     "Base",
     "TimestampMixin",
     # Enums
+    "AgentExecutionStatus",
+    "ArtifactType",
     "CatalystImpact",
     "ClaimType",
     "ClassificationLevel",
@@ -106,6 +115,7 @@ __all__ = [
     "SourceTier",
     "SourceType",
     "StatementType",
+    "StepStatus",
     "ValuationModelType",
     # Company
     "Exchange",
@@ -126,7 +136,11 @@ __all__ = [
     "Evidence",
     "ManagementStatement",
     "ResearchRun",
+    "ResearchRunStep",
+    "AgentExecution",
     "ResearchFinding",
+    "ResearchArtifact",
+    "ResearchRunSource",
     "research_finding_evidence",
     # Evidence subsystem
     "Source",

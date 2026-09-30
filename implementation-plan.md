@@ -359,7 +359,22 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - Finding persistence: finding with evidence reference round-trip
 - ResearchState typed access: correct fields, type safety
 
-**Status:** NOT STARTED
+**Status:** COMPLETE — Commit: (pending)
+
+**Phase 7 Implementation Notes:**
+- ResearchRunStatus uses VARCHAR(20) + CHECK constraint (not PG native enum)
+- 7-state machine: CREATED → QUEUED → RUNNING → {COMPLETED, FAILED, PARTIAL, CANCELLED}
+- No INCOMPLETE state; INCOMPLETE mapped to PARTIAL in migration
+- AgentExecution tracks reproducibility: model_provider, model_name, model_config, prompt_version, tool_versions
+- Temporal integrity enforced: finding.observation_date ≤ run.observation_date, source_publication_date ≤ observation_date
+- Finding immutability via supersedes_finding_id chains
+- Concurrent run prevention via database query (not Redis locks)
+- MAX_AGENT_RETRIES = 3 (per ADR-007)
+- Pydantic v2 schema uses `llm_config` field name (ORM column is `model_config`) to avoid Pydantic reserved name conflict
+- Existing Claim/ClaimEvidence models preserved untouched
+- Deprecated JSONB fields retained (agent_execution_log, data_sources_used, cost_by_agent)
+- No LangGraph, Celery/Temporal, Redis locks, REST/WebSocket endpoints
+- 138 new tests, 1471 total passing
 
 ---
 

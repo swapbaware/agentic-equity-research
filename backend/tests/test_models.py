@@ -8,6 +8,7 @@ import pytest
 import sqlalchemy as sa
 
 from app.models import (
+    AgentExecution,
     Base,
     Catalyst,
     Claim,
@@ -31,9 +32,12 @@ from app.models import (
     MoatAssessment,
     PromoterPledge,
     QuarterlyResult,
+    ResearchArtifact,
     ResearchDocument,
     ResearchFinding,
     ResearchRun,
+    ResearchRunSource,
+    ResearchRunStep,
     Risk,
     SavedScreen,
     Scenario,
@@ -52,6 +56,8 @@ from app.models import (
 )
 from app.models.company import Exchange
 from app.models.enums import (
+    AgentExecutionStatus,
+    ArtifactType,
     CatalystImpact,
     ClaimType,
     ClassificationLevel,
@@ -79,6 +85,7 @@ from app.models.enums import (
     SourceTier,
     SourceType,
     StatementType,
+    StepStatus,
     ValuationModelType,
 )
 
@@ -122,6 +129,10 @@ ALL_MODELS: list[type] = [
     CompanyScore,
     SavedScreen,
     CompanyScreeningData,
+    ResearchRunStep,
+    AgentExecution,
+    ResearchArtifact,
+    ResearchRunSource,
 ]
 
 JUNCTION_TABLES: list[sa.Table] = [
@@ -407,7 +418,9 @@ class TestEnumValues:
         assert {e.value for e in ScenarioType} == {"BEAR", "BASE", "BULL"}
 
     def test_research_run_status_values(self) -> None:
-        assert {e.value for e in ResearchRunStatus} == {"RUNNING", "COMPLETED", "FAILED", "INCOMPLETE"}
+        assert {e.value for e in ResearchRunStatus} == {
+            "CREATED", "QUEUED", "RUNNING", "COMPLETED", "FAILED", "PARTIAL", "CANCELLED",
+        }
 
     def test_all_enums_are_str_enums(self) -> None:
         all_enums = [
@@ -417,6 +430,7 @@ class TestEnumValues:
             FindingType, ClaimType, SourceType, MoatType, MoatStrength, GrowthCategory,
             GrowthMaturity, CompetitorRelevance, ValuationModelType, ScenarioType,
             RiskType, Severity, Likelihood, CatalystImpact, ScoreDimension,
+            StepStatus, AgentExecutionStatus, ArtifactType,
         ]
         for enum_cls in all_enums:
             assert issubclass(enum_cls, str), f"{enum_cls.__name__} must be a str enum"

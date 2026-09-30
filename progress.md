@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-09-29 (Phase 6e.7 complete)
+**Last Updated:** 2026-09-30 (Phase 7 complete)
 
 ---
 
@@ -322,11 +322,34 @@
 - [x] CalculationResult audit trail on every check
 - [x] FindingType.CALCULATION reused from app.models.enums
 
+### Phase 7: Research Run Infrastructure — COMPLETE
+
+- [x] `app/models/enums.py` — Evolved ResearchRunStatus from 4 to 7 values (CREATED, QUEUED, RUNNING, COMPLETED, FAILED, PARTIAL, CANCELLED); added StepStatus (5 values), AgentExecutionStatus (5 values), ArtifactType (5 values)
+- [x] `app/models/research.py` — Evolved ResearchRun (VARCHAR+CHECK, parent_run_id, observation_date, configuration, error_summary, TimestampMixin); evolved ResearchFinding (observation_date, source_publication_date, calculation_version, supersedes_finding_id, agent_execution_id); added ResearchRunStep, AgentExecution (reproducibility fields), ResearchArtifact, ResearchRunSource
+- [x] `app/models/thesis.py` — Added research_run_id FK, snapshot_data JSONB, key_changes JSONB to ThesisVersion
+- [x] `app/models/state_machines.py` — State transition tables and validators for run, step, execution state machines; ValidationError on invalid transitions
+- [x] `alembic/versions/004_research_run_infrastructure.py` — Migration: PG enum → VARCHAR+CHECK (INCOMPLETE→PARTIAL), 4 new tables, new columns/indexes, full downgrade
+- [x] `app/schemas/research_run.py` — Pydantic v2 DTOs: Run, Step, Execution, Finding, Artifact, Source, EvidenceChain (ConfigDict from_attributes=True); `llm_config` field name to avoid Pydantic v2 `model_config` conflict
+- [x] `app/repositories/research_run.py` — 6 Protocol interfaces + 6 SQLAlchemy implementations (ResearchRun, Step, Execution, Finding, Artifact, Source); concurrent run prevention via DB query
+- [x] `app/services/research_run.py` — Full lifecycle service: initiate/enqueue/start/complete/fail/partial/cancel run; step management; agent execution with MAX_AGENT_RETRIES=3; findings with temporal validation; artifacts; aggregates
+- [x] Existing Claim/ClaimEvidence models preserved untouched
+- [x] Deprecated JSONB fields (agent_execution_log, data_sources_used, cost_by_agent) retained
+- [x] No LangGraph, no Celery/Temporal, no Redis locks, no REST/WebSocket endpoints
+- [x] `tests/test_research_run_state_machine.py` — Tier 1: 13 state machine tests
+- [x] `tests/test_research_run_models.py` — Tier 2: 30 model/enum/constraint tests
+- [x] `tests/test_research_run_repository.py` — Tier 3: 20 repository tests with mocked AsyncSession
+- [x] `tests/test_research_run_service.py` — Tier 4: 75 service tests (lifecycle, resume, execution, findings, artifacts, aggregates, steps, not-found)
+- [x] `tests/test_models.py` — Updated: ALL_MODELS +4, enum assertions updated for 7-value ResearchRunStatus + 3 new enums
+- [x] Full backend: 1471 passed, 7 skipped, 1 known failure (TD-6)
+- [x] mypy strict: zero new errors (1 preexisting in yahoo_finance.py)
+- [x] ruff: zero errors
+- [x] 138 new Phase 7 tests total
+
 ---
 
 ## Current Phase
 
-**Next Phase:** Phase 7 — Research Run Infrastructure
+**Next Phase:** Phase 8 — Company Research Agent (first agent using Phase 7 infrastructure)
 
 ---
 
@@ -337,7 +360,7 @@
 - Frontend health page (`/health`) — static system status display
 - Structured JSON logging with request ID correlation
 - Request ID middleware with unhandled exception safety net
-- Complete domain model: 28 ORM models, 6 junction tables, 27 enums across 7 schemas
+- Complete domain model: 32 ORM models, 6 junction tables, 30 enums across 7 schemas
 - Evidence subsystem: full CRUD API for evidence, claims, citations
 - Provider framework: 11 Protocol interfaces, factory, rate limiter, error hierarchy
 - Indian data providers: Yahoo Finance, Alpha Vantage, BSE, NSE (metadata)
@@ -352,12 +375,13 @@
 - Peer Comparison Engine: 6 methods, explicit peer set input, rank_if_inserted positioning, cross-sectional statistics, peer-specific data sufficiency, target-as-peer exclusion, duplicate detection, mixed currencies, shared helper extraction (_valuation_calc.py), 89 tests with golden datasets and cross-engine consistency
 - Scenario Engine (Bear/Base/Bull): thin orchestration over DCF + multiples engines, exactly 3 scenarios required, explicit failure modeling (ScenarioExecutionStatus), probability-weighted value, 6 diagnostics, AssumptionProvenance with FindingType, deterministic calculated_at passthrough, 99 tests with golden datasets
 - Financial Forensics / Red Flag Screening Engine: 22 checks across 5 categories, 8-status model, Beneish/Altman components (composites NOT_COMPUTABLE due to missing fields), point-in-time validation, financial company support (3 applicable checks), language safety, no aggregate score, 118 tests with golden datasets
+- Research Run Infrastructure: ResearchRun lifecycle (7-state machine), ResearchRunStep, AgentExecution (with reproducibility metadata), ResearchFinding (with temporal integrity and supersession), ResearchArtifact, ResearchRunSource; state machines, repository layer (6 Protocol interfaces + SQLAlchemy implementations), service layer with concurrent run prevention, MAX_AGENT_RETRIES=3, temporal validation; 138 tests
 
 ---
 
 ## Failing Tests
 
-- `test_health.py::TestReadinessEndpoint::test_ready_returns_200` — pre-existing, requires running PostgreSQL with migrations applied. This is an integration test that validates the readiness endpoint checks Alembic migration state against a live database. Cannot pass without PostgreSQL. 723 other backend tests pass. 5 frontend tests pass. 7 tests skipped (6 integration tests requiring PostgreSQL, 1 provider test requiring API key).
+- `test_health.py::TestReadinessEndpoint::test_ready_returns_200` — pre-existing, requires running PostgreSQL with migrations applied. This is an integration test that validates the readiness endpoint checks Alembic migration state against a live database. Cannot pass without PostgreSQL. 1471 other backend tests pass. 5 frontend tests pass. 7 tests skipped (6 integration tests requiring PostgreSQL, 1 provider test requiring API key).
 
 ---
 
@@ -440,12 +464,6 @@
 
 ## Next Actions
 
-1. **Phase 7: Research Run Infrastructure**
-   - Research execution domain models (ResearchRun, ResearchRunStep, ResearchFinding, ResearchArtifact, ResearchSource, ResearchExecution, AgentExecution, ThesisVersion)
-   - Alembic migrations for research execution tables
-   - Agent base protocol (typed input/output, tool interface, timeout/token budget contracts)
-   - Typed ResearchState (shared state for agents)
-   - Research run lifecycle management and agent execution tracking
-2. **Phase 8: Company Research Agent** — first agent implementation using Phase 7 infrastructure
-3. **SEBI XBRL integration** for authoritative financial data
-4. **Evaluate Celery vs Temporal** (ADR-002) for background tasks
+1. **Phase 8: Company Research Agent** — first agent implementation using Phase 7 infrastructure
+2. **SEBI XBRL integration** for authoritative financial data
+3. **Evaluate Celery vs Temporal** (ADR-002) for background tasks

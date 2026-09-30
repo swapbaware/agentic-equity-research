@@ -104,10 +104,37 @@ class ManagementStatementStatus(enum.StrEnum):
 
 
 class ResearchRunStatus(enum.StrEnum):
+    CREATED = "CREATED"
+    QUEUED = "QUEUED"
     RUNNING = "RUNNING"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
-    INCOMPLETE = "INCOMPLETE"
+    PARTIAL = "PARTIAL"
+    CANCELLED = "CANCELLED"
+
+
+class StepStatus(enum.StrEnum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    SKIPPED = "SKIPPED"
+
+
+class AgentExecutionStatus(enum.StrEnum):
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    TIMEOUT = "TIMEOUT"
+    TRUNCATED = "TRUNCATED"
+
+
+class ArtifactType(enum.StrEnum):
+    REPORT = "REPORT"
+    ANALYSIS = "ANALYSIS"
+    CHART_DATA = "CHART_DATA"
+    CALCULATION_RESULT = "CALCULATION_RESULT"
+    INTERMEDIATE_STATE = "INTERMEDIATE_STATE"
 
 
 class FindingType(enum.StrEnum):
