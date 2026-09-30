@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-09-30 (Phase 7 audit hardening complete)
+**Last Updated:** 2026-09-30 (Phase 8.2 Company Research Agent implementation complete)
 
 ---
 
@@ -393,11 +393,60 @@ Post-audit remediation of 6 findings from Phase 7 implementation audit:
 - [x] Zero new dependencies
 - [x] Full backend: 1612 passed, 7 skipped, 1 known failure (TD-6)
 
+### Phase 8.2: Company Research Agent Implementation — COMPLETE
+
+- [x] `app/agents/company_research/agent.py` — CompanyResearchAgent orchestrator (~721 lines):
+  - CompanyResearchResult (frozen Pydantic v2): run_id, status, company_id, company_name, findings_count, evidence_count, steps_completed, steps_total, token_budget, validation_result, error
+  - 7-step sequential workflow: company_validation → source_discovery → document_retrieval → evidence_extraction → finding_generation → finding_validation → gap_contradiction_analysis
+  - `_run_step_deterministic()` and `_run_step_llm()` generic step runners (TypeVar `_T`)
+  - LLM retry: MAX_LLM_ATTEMPTS=2 (1 initial + 1 retry) per ADR-007
+  - TokenBudget enforcement: 30K hard limit, 24K warning threshold
+  - Concurrent document retrieval via asyncio.gather
+  - Evidence extraction with structured LLM output parsing
+  - Finding generation with evidence linking (evidence_indices)
+  - Finding validation (deterministic): category check, content length, FACT-requires-evidence
+  - Gap/contradiction detection via LLM
+  - Error handling: early failure → FAILED, late failure → PARTIAL
+- [x] `app/agents/company_research/tools.py` — 8 tool implementations + create_research_document helper (~400 lines):
+  - validate_company: DB lookup by NSE_SYMBOL/BSE_CODE/ISIN
+  - discover_sources: aggregates filings + transcripts + news, sorted by date
+  - retrieve_document: fetches filing content with SHA-256 hash
+  - get_company_profile: full company profile from DB
+  - search_company_news: filtered by observation_date
+  - get_financial_summary: INCOME_STATEMENT + BALANCE_SHEET + CASH_FLOW
+  - persist_evidence: batch evidence creation
+  - persist_findings: validated finding creation via ResearchRunService
+- [x] `app/agents/company_research/prompts.py` — LLM prompt templates (~95 lines):
+  - SYSTEM_PREAMBLE with `<retrieved_document>` prompt injection defense
+  - evidence_extraction_prompt: extracts FACT/FINANCIAL_DATA/MANAGEMENT_STATEMENT/ANALYST_OPINION/REGULATORY_FILING
+  - finding_generation_prompt: generates findings with 7-type classification and 14 categories
+  - gap_contradiction_prompt: identifies research_gap and contradiction findings
+- [x] `app/agents/company_research/exceptions.py` — Agent-specific exception hierarchy (~53 lines):
+  - AgentError(AppError) base, CompanyNotFoundError, TokenBudgetExhaustedError, LLMParsingError, StepFailedError
+- [x] `app/agents/company_research/__init__.py` — Package exports
+- [x] **Bug fix**: Added `if findings:` guard before `persist_findings` call in `_step_finding_generation` (PersistFindingsInput requires min_length=1)
+- [x] `tests/agents/test_company_research_agent.py` — 64 tests across 15 test classes (~1100 lines):
+  - TestAgentConstruction (4), TestHappyPath (2), TestDeterministicStepRunner (2)
+  - TestLLMStepRunner (7): success, retry on parsing/provider error, max attempts, budget exhaustion
+  - TestTokenBudgetEnforcement (6), TestFindingValidation (7), TestEvidenceExtraction (3)
+  - TestFindingGeneration (3), TestGapContradiction (3), TestErrorHandling (4)
+  - TestResponseParsing (6), TestPromptTemplates (4), TestExceptions (4)
+  - TestGoldenScenarios (5): RELIANCE, TCS, INFY, HDFCBANK, BSE code
+  - TestCompanyResearchResultModel (4)
+- [x] Zero database schema changes
+- [x] Zero new dependencies
+- [x] No LangGraph
+- [x] Agent depends on Protocol interfaces only (no concrete provider imports)
+- [x] Prompt injection defense: document content in `<retrieved_document>` XML tags
+- [x] ruff: zero errors on all agent module files
+- [x] mypy strict: zero new errors (1 preexisting in yahoo_finance.py)
+- [x] Full backend: 1675 passed, 7 skipped, 1 known failure (TD-6) — zero regressions
+
 ---
 
 ## Current Phase
 
-**Next Phase:** Phase 8.2 — Company Research Agent Implementation (orchestrator, tool implementations, LLM integration)
+**Next Phase:** Phase 9 — Industry Research Agent
 
 ---
 
@@ -424,6 +473,7 @@ Post-audit remediation of 6 findings from Phase 7 implementation audit:
 - Scenario Engine (Bear/Base/Bull): thin orchestration over DCF + multiples engines, exactly 3 scenarios required, explicit failure modeling (ScenarioExecutionStatus), probability-weighted value, 6 diagnostics, AssumptionProvenance with FindingType, deterministic calculated_at passthrough, 99 tests with golden datasets
 - Financial Forensics / Red Flag Screening Engine: 22 checks across 5 categories, 8-status model, Beneish/Altman components (composites NOT_COMPUTABLE due to missing fields), point-in-time validation, financial company support (3 applicable checks), language safety, no aggregate score, 118 tests with golden datasets
 - Research Run Infrastructure: ResearchRun lifecycle (7-state machine), ResearchRunStep, AgentExecution (with reproducibility metadata), ResearchFinding (with temporal integrity and supersession), ResearchArtifact, ResearchRunSource; state machines, repository layer (6 Protocol interfaces + SQLAlchemy implementations), service layer with concurrent run prevention, MAX_AGENT_RETRIES=3, temporal validation; 138 tests
+- Company Research Agent: 7-step sequential orchestrator (validate → discover → retrieve → extract → generate → validate → gap/contradiction), 8 tool implementations, LLM integration with structured output parsing, evidence extraction and persistence, finding generation with evidence linking, deterministic finding validation, gap/contradiction detection, token budget enforcement (30K hard/24K warning), retry handling (MAX_LLM_ATTEMPTS=2), prompt injection defense; 64 tests with 5 golden scenarios
 
 ---
 
@@ -512,6 +562,6 @@ Post-audit remediation of 6 findings from Phase 7 implementation audit:
 
 ## Next Actions
 
-1. **Phase 8: Company Research Agent** — first agent implementation using Phase 7 infrastructure
+1. **Phase 9: Industry Research Agent** — second agent implementation (industry structure, competitive dynamics, sector trends)
 2. **SEBI XBRL integration** for authoritative financial data
 3. **Evaluate Celery vs Temporal** (ADR-002) for background tasks

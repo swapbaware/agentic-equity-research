@@ -417,7 +417,23 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - Token budget enforcement
 - Reproducibility (same inputs → structurally consistent output)
 
-**Status:** Phase 8.1 (Contracts & Schemas) COMPLETE — Phase 8.2 (Agent Implementation) NOT STARTED
+**Status:** COMPLETE — Phase 8.1 commit `38f7939`, Phase 8.2 commit pending
+
+**Phase 8.1 (Contracts & Schemas) — COMPLETE:**
+- `app/agents/contracts.py` — 8 tool I/O contracts, LLM output schemas, TokenBudget, StepDefinition, CompanyResearchRequest/Config, constants (AGENT_TOKEN_BUDGET=30K, MAX_LLM_ATTEMPTS=2)
+- `tests/agents/test_contracts.py` — 126 contract validation tests
+- Zero database schema changes, zero new dependencies
+
+**Phase 8.2 (Agent Implementation) — COMPLETE:**
+- `app/agents/company_research/agent.py` — CompanyResearchAgent orchestrator: 7-step sequential workflow, generic step runners (_run_step_deterministic, _run_step_llm), LLM retry (MAX_LLM_ATTEMPTS=2), TokenBudget enforcement (30K hard/24K warning), concurrent document retrieval, evidence extraction/persistence, finding generation with evidence linking, deterministic validation, gap/contradiction detection
+- `app/agents/company_research/tools.py` — 8 tool implementations (validate_company, discover_sources, retrieve_document, get_company_profile, search_company_news, get_financial_summary, persist_evidence, persist_findings) + create_research_document helper
+- `app/agents/company_research/prompts.py` — LLM prompt templates with `<retrieved_document>` prompt injection defense
+- `app/agents/company_research/exceptions.py` — AgentError hierarchy (CompanyNotFoundError, TokenBudgetExhaustedError, LLMParsingError, StepFailedError)
+- `tests/agents/test_company_research_agent.py` — 64 tests across 15 test classes (construction, happy path, step runners, LLM retry, token budget, finding validation, evidence extraction, finding generation, gap/contradiction, error handling, response parsing, prompts, exceptions, golden scenarios, result model)
+- Bug fix: `if findings:` guard before persist_findings (PersistFindingsInput min_length=1)
+- No LangGraph, no later-phase agents, no investment recommendations
+- Agent depends on Protocol interfaces only
+- Total backend: 1675 passed, 7 skipped, 1 known failure (TD-6)
 
 ---
 
