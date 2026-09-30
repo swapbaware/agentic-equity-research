@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-09-30 (Phase 8.2 Post-Audit Remediation complete — 4 material issues fixed)
+**Last Updated:** 2026-09-30 (Phase 9.1 ResearchRun Schema Migration complete)
 
 ---
 
@@ -473,7 +473,24 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Current Phase
 
-**Next Phase:** Phase 9 — Industry Research Agent
+**Current Phase:** Phase 9 — Industry Research Agent (9.1 Schema Migration COMPLETE)
+
+### Phase 9.1: ResearchRun Schema Migration — COMPLETE
+
+- [x] Alembic migration 006: `target_type` VARCHAR(50) NOT NULL DEFAULT 'company'
+- [x] Alembic migration 006: `company_id` made nullable
+- [x] Alembic migration 006: `industry_id` UUID nullable FK to `company.classification(id)`
+- [x] Alembic migration 006: XOR CHECK constraint `chk_research_run_target`
+- [x] Alembic migration 006: Partial index `ix_research_run_industry` WHERE industry_id IS NOT NULL
+- [x] Alembic migration 006: Composite index `ix_research_run_target_type` (target_type, started_at DESC)
+- [x] Safe downgrade guard: RuntimeError if industry runs exist
+- [x] ORM model updated: `ResearchRun.target_type`, `ResearchRun.industry_id`, `company_id` nullable
+- [x] `run_type` field UNTOUCHED (remains str|None, nullable, no semantic change)
+- [x] 17 new tests (migration metadata, ORM alignment, model construction)
+- [x] Full test suite: 1706 passed, 7 skipped, 1 known failure (TD-6)
+- [x] ruff clean, mypy clean, ruff format clean
+
+**Next Sub-Phase:** Phase 9.2 — Industry Research Agent implementation
 
 ---
 
@@ -506,7 +523,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Failing Tests
 
-- `test_health.py::TestReadinessEndpoint::test_ready_returns_200` — pre-existing, requires running PostgreSQL with migrations applied. This is an integration test that validates the readiness endpoint checks Alembic migration state against a live database. Cannot pass without PostgreSQL. 1471 other backend tests pass. 5 frontend tests pass. 7 tests skipped (6 integration tests requiring PostgreSQL, 1 provider test requiring API key).
+- `test_health.py::TestReadinessEndpoint::test_ready_returns_200` — pre-existing, requires running PostgreSQL with migrations applied. This is an integration test that validates the readiness endpoint checks Alembic migration state against a live database. Cannot pass without PostgreSQL. 1706 other backend tests pass (including 17 Phase 9.1 migration tests). 5 frontend tests pass. 7 tests skipped (6 integration tests requiring PostgreSQL, 1 provider test requiring API key).
 
 ---
 
@@ -584,6 +601,8 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 | TD-9 | Document ingestion pipeline, S3 storage, embedding/pgvector semantic search not implemented (partial evidence subsystem) | Phase 4 | Required for full citation chain; implement before or during agent layer |
 | TD-10 | Repository layer exists only for evidence and screener — not all 28 domain entities | Phase 3 | Build repositories as needed when agents/API endpoints require them |
 | TD-11 | `pytest.mark.integration` not registered — produces PytestUnknownMarkWarning | Phase 3 | Register mark in `pyproject.toml` `[tool.pytest.ini_options]` markers list |
+| TD-12 | API schemas (`ResearchRunCreate`, `ResearchRunRead`, `RunSummary`) have `company_id: uuid.UUID` as required — incompatible with industry runs where `company_id` is NULL | Phase 9.1 | Update schemas in Phase 9.2 to make `company_id` optional and add `industry_id` / `target_type` fields |
+| TD-13 | Service layer (`ResearchRunService`) and repositories (`get_by_company`, `get_active_run`, `get_current_for_company`) assume `company_id` is always non-null | Phase 9.1 | Add industry-aware query methods in Phase 9.2 |
 
 ---
 

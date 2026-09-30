@@ -1,4 +1,5 @@
 """Research schema models: runs, findings, steps, executions, artifacts, sources."""
+
 from __future__ import annotations
 
 import uuid
@@ -181,16 +182,37 @@ class ResearchRun(Base, TimestampMixin):
             "status IN ('CREATED', 'QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'PARTIAL', 'CANCELLED')",
             name="status_valid",
         ),
+        sa.CheckConstraint(
+            "(target_type = 'company'  AND company_id IS NOT NULL AND industry_id IS NULL) "
+            "OR "
+            "(target_type = 'industry' AND company_id IS NULL     AND industry_id IS NOT NULL)",
+            name="chk_research_run_target",
+        ),
         sa.Index("ix_research_run_company_started", "company_id", sa.text("started_at DESC")),
         sa.Index("ix_research_run_parent", "parent_run_id"),
         sa.Index("ix_research_run_observation", "company_id", sa.text("observation_date DESC")),
+        sa.Index(
+            "ix_research_run_industry",
+            "industry_id",
+            postgresql_where=sa.text("industry_id IS NOT NULL"),
+        ),
+        sa.Index("ix_research_run_target_type", "target_type", sa.text("started_at DESC")),
         {"schema": "research"},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    company_id: Mapped[uuid.UUID] = mapped_column(
-        sa.ForeignKey("company.company.id"),
+    target_type: Mapped[str] = mapped_column(
+        sa.String(50),
         nullable=False,
+        server_default="company",
+    )
+    company_id: Mapped[uuid.UUID | None] = mapped_column(
+        sa.ForeignKey("company.company.id"),
+        nullable=True,
+    )
+    industry_id: Mapped[uuid.UUID | None] = mapped_column(
+        sa.ForeignKey("company.classification.id"),
+        nullable=True,
     )
     initiated_by: Mapped[str] = mapped_column(sa.String(200), nullable=False)
     run_type: Mapped[str | None] = mapped_column(sa.String(50), nullable=True)
