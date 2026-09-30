@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-09-30 (Phase 9.2 Post-Audit Remediation complete)
+**Last Updated:** 2026-09-30 (Phase 9.3a Industry Research Tools complete)
 
 ---
 
@@ -473,7 +473,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Current Phase
 
-**Current Phase:** Phase 9 — Industry Research Agent (9.1 Schema Migration COMPLETE, 9.2 Contracts COMPLETE)
+**Current Phase:** Phase 9 — Industry Research Agent (9.1 Schema Migration COMPLETE, 9.2 Contracts COMPLETE, 9.3a Tools COMPLETE)
 
 ### Phase 9.1: ResearchRun Schema Migration — COMPLETE
 
@@ -521,7 +521,27 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 - [x] All 1773 backend tests passing (66 in industry contracts file, up from 59), zero regressions
 - [x] ruff clean, mypy strict clean, ruff format clean
 
-**Next Sub-Phase:** Phase 9.3 — Industry Research Agent implementation (agent, tools, prompts, workflow)
+### Phase 9.3a: Industry Research Tools — COMPLETE
+
+- [x] 5 industry tool I/O contract schemas added to `contracts.py` (ValidateIndustryInput/Output, DiscoverIndustrySourcesInput/Output, RetrieveIndustryDocumentInput/Output, GetIndustryProfileInput/Output + IndustryCompanySummary, SearchIndustryNewsInput/Output)
+- [x] `backend/app/agents/industry_research/` package created
+- [x] `exceptions.py`: `IndustryNotFoundError(AgentError)` paralleling `CompanyNotFoundError`
+- [x] `tools.py`: `IndustryResearchTools` class — 8 tool methods:
+  - [x] `validate_industry` — DB lookup of Classification by UUID
+  - [x] `discover_industry_sources` — SearchProvider + NewsProvider, URL deduplication, temporal filtering, source tier classification
+  - [x] `retrieve_industry_document` — SearchProvider-based content retrieval with SHA-256 hash
+  - [x] `get_industry_profile` — Classification + Company query with market-cap-ordered company list
+  - [x] `search_industry_news` — NewsProvider.search_news with observation_date filtering
+  - [x] `persist_evidence` (adapted) — uses `INDUSTRY_AGENT_NAME` instead of `AGENT_NAME`
+  - [x] `persist_findings` (adapted) — validates against `INDUSTRY_FINDING_CATEGORIES` instead of `FINDING_CATEGORIES`
+  - [x] `create_research_document` (adapted) — `company_id=None` for industry-level documents
+- [x] Helper functions: `_classify_industry_source()` (title/URL-based DocumentType classification), `_tier_from_url()` (domain-based SourceTier assignment: SEBI/RBI/NSE/BSE=T1, IBEF/FICCI/NASSCOM/CII=T2, others=T3)
+- [x] Provider Protocol dependencies: SearchProvider, NewsProvider, MacroDataProvider, LLMProvider — all injected via constructor
+- [x] 55 new unit tests across 12 test classes
+- [x] All 1828 backend tests passing, zero regressions
+- [x] ruff check clean, ruff format clean, mypy --strict clean
+
+**Next Sub-Phase:** Phase 9.3b — Industry Research Agent implementation (agent workflow, prompts, LangGraph)
 
 ---
 

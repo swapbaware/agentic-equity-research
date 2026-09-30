@@ -614,6 +614,125 @@ class IndustryResearchRequest(BaseModel):
     configuration: IndustryResearchConfig | None = None
 
 
+# ---------------------------------------------------------------------------
+# Industry Tool 1: validate_industry
+# ---------------------------------------------------------------------------
+
+
+class ValidateIndustryInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    industry_id: uuid.UUID
+
+
+class ValidateIndustryOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    industry_id: uuid.UUID
+    name: str
+    code: str
+    level: str
+    parent_sector_id: uuid.UUID | None = None
+    parent_sector_name: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Industry Tool 2: discover_industry_sources
+# ---------------------------------------------------------------------------
+
+
+class DiscoverIndustrySourcesInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    industry_id: uuid.UUID
+    industry_name: str = Field(min_length=1, max_length=200)
+    observation_date: date
+    document_types: list[DocumentType] | None = None
+    limit: int = Field(default=30, ge=1, le=100)
+
+
+class DiscoverIndustrySourcesOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    candidates: list[SourceCandidate]
+
+
+# ---------------------------------------------------------------------------
+# Industry Tool 3: retrieve_industry_document
+# ---------------------------------------------------------------------------
+
+
+class RetrieveIndustryDocumentInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    url: str = Field(min_length=1, max_length=2000)
+    source_id: str = Field(min_length=1, max_length=500)
+    provider: str = Field(default="search", max_length=50)
+
+
+class RetrieveIndustryDocumentOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    content: str
+    content_type: str = Field(default="text/plain", max_length=100)
+    content_hash: str = Field(min_length=1, max_length=64)
+    source_id: str
+
+
+# ---------------------------------------------------------------------------
+# Industry Tool 4: get_industry_profile
+# ---------------------------------------------------------------------------
+
+
+class GetIndustryProfileInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    industry_id: uuid.UUID
+
+
+class GetIndustryProfileOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    industry_id: uuid.UUID
+    name: str
+    code: str
+    level: str
+    parent_sector_id: uuid.UUID | None = None
+    parent_sector_name: str | None = None
+    company_count: int = Field(ge=0)
+    companies: list[IndustryCompanySummary]
+
+
+class IndustryCompanySummary(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    name: str
+    nse_symbol: str | None = None
+    bse_code: str | None = None
+    market_cap: Decimal | None = None
+    is_active: bool
+
+
+# ---------------------------------------------------------------------------
+# Industry Tool 5: search_industry_news
+# ---------------------------------------------------------------------------
+
+
+class SearchIndustryNewsInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    industry_name: str = Field(min_length=1, max_length=200)
+    observation_date: date
+    limit: int = Field(default=10, ge=1, le=50)
+
+
+class SearchIndustryNewsOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    articles: list[NewsArticleResult]
+
+
 INDUSTRY_RESEARCH_STEPS: tuple[StepDefinition, ...] = (
     StepDefinition(
         step_order=1,

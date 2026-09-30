@@ -470,7 +470,7 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - Provider error handling
 - Source attribution completeness
 
-**Status:** Phase 9.1 (Schema Migration) COMPLETE — Phase 9.2 (Contracts & Integration) COMPLETE — Phase 9.3 (Agent Implementation) NOT STARTED
+**Status:** Phase 9.1 (Schema Migration) COMPLETE — Phase 9.2 (Contracts & Integration) COMPLETE — Phase 9.3a (Tools) COMPLETE — Phase 9.3b (Agent Workflow) NOT STARTED
 
 **Phase 9.1 Deliverables (complete):**
 - Alembic migration 006: `target_type` discriminator, nullable `company_id`, `industry_id` FK, XOR CHECK, indexes
