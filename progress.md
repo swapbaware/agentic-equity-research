@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-09-30 (Phase 9.1 ResearchRun Schema Migration complete)
+**Last Updated:** 2026-09-30 (Phase 9.2 Industry Research Contracts & ResearchRun Integration complete)
 
 ---
 
@@ -473,7 +473,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Current Phase
 
-**Current Phase:** Phase 9 — Industry Research Agent (9.1 Schema Migration COMPLETE)
+**Current Phase:** Phase 9 — Industry Research Agent (9.1 Schema Migration COMPLETE, 9.2 Contracts COMPLETE)
 
 ### Phase 9.1: ResearchRun Schema Migration — COMPLETE
 
@@ -490,7 +490,28 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 - [x] Full test suite: 1706 passed, 7 skipped, 1 known failure (TD-6)
 - [x] ruff clean, mypy clean, ruff format clean
 
-**Next Sub-Phase:** Phase 9.2 — Industry Research Agent implementation
+### Phase 9.2: Industry Research Contracts & ResearchRun Integration — COMPLETE
+
+- [x] **TD-12 resolved**: `ResearchRunCreate.company_id` now `uuid.UUID | None = None`, `target_type` + `industry_id` added, `@model_validator` XOR enforcement
+- [x] **TD-12 resolved**: `ResearchRunRead.target_type`, `company_id` optional, `industry_id` added
+- [x] **TD-12 resolved**: `RunSummary.target_type`, `company_id` optional, `industry_id` added
+- [x] **TD-13 resolved**: `ResearchRunRepositoryProtocol` + concrete impl: `get_by_industry()`, `get_active_industry_run()`
+- [x] **TD-13 resolved**: `ResearchRunService.initiate_run()` branches on `target_type` (company vs industry active-run check)
+- [x] **TD-13 resolved**: `ResearchRunService.get_runs_for_industry()` method added
+- [x] `IndustryResearchConfig` (frozen Pydantic v2): 20K token budget, 16K warning, source_limit, concurrent_retrievals, model selection
+- [x] `IndustryResearchRequest` (frozen): industry_id, observation_date, initiated_by, company_context_id, configuration
+- [x] `INDUSTRY_FINDING_CATEGORIES` frozenset: 14 categories (market_size, growth_drivers, entry_barriers, supplier_power, buyer_power, substitution_risk, competitive_rivalry, regulatory_environment, technology_trends, industry_structure, value_chain, cyclicality, research_gap, contradiction)
+- [x] `INDUSTRY_RESEARCH_STEPS` tuple: 7 steps (industry_validation, source_discovery, document_retrieval, evidence_extraction, finding_generation, finding_validation, gap_contradiction_analysis)
+- [x] Industry agent constants: INDUSTRY_AGENT_TOKEN_BUDGET=20K, INDUSTRY_AGENT_TOKEN_WARNING=16K, INDUSTRY_AGENT_NAME
+- [x] Zero new database migrations (uses Phase 9.1 migration 006)
+- [x] Zero new ORM model changes
+- [x] No IndustryFinding model (reuses ResearchFinding)
+- [x] No IndustryResearchAgent, IndustryResearchTools, or workflow execution
+- [x] 59 new tests across 15 test classes (XOR validation, request/config, categories, steps, constants, repository, service, backward compat, state machine, temporal, findings)
+- [x] All 1765 backend tests passing (excluding pre-existing TD-6), zero regressions
+- [x] ruff clean, mypy strict clean, ruff format clean
+
+**Next Sub-Phase:** Phase 9.3 — Industry Research Agent implementation (agent, tools, prompts, workflow)
 
 ---
 
@@ -601,8 +622,8 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 | TD-9 | Document ingestion pipeline, S3 storage, embedding/pgvector semantic search not implemented (partial evidence subsystem) | Phase 4 | Required for full citation chain; implement before or during agent layer |
 | TD-10 | Repository layer exists only for evidence and screener — not all 28 domain entities | Phase 3 | Build repositories as needed when agents/API endpoints require them |
 | TD-11 | `pytest.mark.integration` not registered — produces PytestUnknownMarkWarning | Phase 3 | Register mark in `pyproject.toml` `[tool.pytest.ini_options]` markers list |
-| TD-12 | API schemas (`ResearchRunCreate`, `ResearchRunRead`, `RunSummary`) have `company_id: uuid.UUID` as required — incompatible with industry runs where `company_id` is NULL | Phase 9.1 | Update schemas in Phase 9.2 to make `company_id` optional and add `industry_id` / `target_type` fields |
-| TD-13 | Service layer (`ResearchRunService`) and repositories (`get_by_company`, `get_active_run`, `get_current_for_company`) assume `company_id` is always non-null | Phase 9.1 | Add industry-aware query methods in Phase 9.2 |
+| TD-12 | ~~API schemas (`ResearchRunCreate`, `ResearchRunRead`, `RunSummary`) have `company_id: uuid.UUID` as required~~ | Phase 9.1 | **RESOLVED** — Phase 9.2: `company_id` optional, `target_type` + `industry_id` added, XOR model_validator |
+| TD-13 | ~~Service layer and repositories assume `company_id` is always non-null~~ | Phase 9.1 | **RESOLVED** — Phase 9.2: `get_by_industry()`, `get_active_industry_run()`, `initiate_run()` branches on target_type |
 
 ---
 

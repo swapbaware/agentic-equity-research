@@ -72,6 +72,33 @@ AGENT_NAME: str = "company_research_agent"
 MAX_LLM_ATTEMPTS: int = 2
 
 # ---------------------------------------------------------------------------
+# Industry Research Agent constants
+# ---------------------------------------------------------------------------
+
+INDUSTRY_AGENT_TOKEN_BUDGET: int = 20_000
+INDUSTRY_AGENT_TOKEN_WARNING: int = 16_000
+INDUSTRY_AGENT_NAME: str = "industry_research_agent"
+
+INDUSTRY_FINDING_CATEGORIES: frozenset[str] = frozenset(
+    {
+        "market_size",
+        "growth_drivers",
+        "entry_barriers",
+        "supplier_power",
+        "buyer_power",
+        "substitution_risk",
+        "competitive_rivalry",
+        "regulatory_environment",
+        "technology_trends",
+        "industry_structure",
+        "value_chain",
+        "cyclicality",
+        "research_gap",
+        "contradiction",
+    }
+)
+
+# ---------------------------------------------------------------------------
 # Research request and configuration
 # ---------------------------------------------------------------------------
 
@@ -509,6 +536,87 @@ COMPANY_RESEARCH_STEPS: tuple[StepDefinition, ...] = (
     StepDefinition(
         step_order=1,
         step_name="company_validation",
+        step_type=STEP_TYPE_DETERMINISTIC,
+        timeout_seconds=5,
+    ),
+    StepDefinition(
+        step_order=2,
+        step_name="source_discovery",
+        step_type=STEP_TYPE_PROVIDER_CALL,
+        timeout_seconds=30,
+    ),
+    StepDefinition(
+        step_order=3,
+        step_name="document_retrieval",
+        step_type=STEP_TYPE_PROVIDER_CALL,
+        timeout_seconds=60,
+    ),
+    StepDefinition(
+        step_order=4,
+        step_name="evidence_extraction",
+        step_type=STEP_TYPE_LLM_REASONING,
+        timeout_seconds=120,
+        uses_llm=True,
+    ),
+    StepDefinition(
+        step_order=5,
+        step_name="finding_generation",
+        step_type=STEP_TYPE_LLM_REASONING,
+        timeout_seconds=120,
+        uses_llm=True,
+    ),
+    StepDefinition(
+        step_order=6,
+        step_name="finding_validation",
+        step_type=STEP_TYPE_DETERMINISTIC,
+        timeout_seconds=10,
+    ),
+    StepDefinition(
+        step_order=7,
+        step_name="gap_contradiction_analysis",
+        step_type=STEP_TYPE_LLM_REASONING,
+        timeout_seconds=60,
+        uses_llm=True,
+    ),
+)
+
+
+# ---------------------------------------------------------------------------
+# Industry Research Agent — request and configuration contracts
+# ---------------------------------------------------------------------------
+
+
+class IndustryResearchConfig(BaseModel):
+    """Agent-level configuration for an Industry Research Agent run."""
+
+    model_config = ConfigDict(frozen=True)
+
+    token_budget: int = Field(default=INDUSTRY_AGENT_TOKEN_BUDGET, gt=0)
+    token_warning_threshold: int = Field(default=INDUSTRY_AGENT_TOKEN_WARNING, gt=0)
+    max_llm_attempts: int = Field(default=MAX_LLM_ATTEMPTS, ge=1, le=3)
+    source_limit: int = Field(default=20, ge=1, le=100)
+    concurrent_retrievals: int = Field(default=5, ge=1, le=20)
+    extraction_model: str | None = None
+    generation_model: str | None = None
+    analysis_model: str | None = None
+
+
+class IndustryResearchRequest(BaseModel):
+    """Input contract for initiating an Industry Research Agent run."""
+
+    model_config = ConfigDict(frozen=True)
+
+    industry_id: uuid.UUID
+    observation_date: date
+    initiated_by: str = Field(min_length=1, max_length=200)
+    company_context_id: uuid.UUID | None = None
+    configuration: IndustryResearchConfig | None = None
+
+
+INDUSTRY_RESEARCH_STEPS: tuple[StepDefinition, ...] = (
+    StepDefinition(
+        step_order=1,
+        step_name="industry_validation",
         step_type=STEP_TYPE_DETERMINISTIC,
         timeout_seconds=5,
     ),

@@ -1,4 +1,5 @@
 """Repositories for Research Run infrastructure entities."""
+
 from __future__ import annotations
 
 import uuid
@@ -30,7 +31,16 @@ class ResearchRunRepositoryProtocol(Protocol):
     async def create(self, run: ResearchRun) -> ResearchRun: ...
     async def get_by_id(self, run_id: uuid.UUID) -> ResearchRun | None: ...
     async def get_by_company(
-        self, company_id: uuid.UUID, *, limit: int = 10,
+        self,
+        company_id: uuid.UUID,
+        *,
+        limit: int = 10,
+    ) -> list[ResearchRun]: ...
+    async def get_by_industry(
+        self,
+        industry_id: uuid.UUID,
+        *,
+        limit: int = 10,
     ) -> list[ResearchRun]: ...
     async def update_status(
         self,
@@ -43,9 +53,15 @@ class ResearchRunRepositoryProtocol(Protocol):
         quality_gate_results: dict[str, object] | None = None,
     ) -> ResearchRun | None: ...
     async def update_company_id(
-        self, run_id: uuid.UUID, company_id: uuid.UUID,
+        self,
+        run_id: uuid.UUID,
+        company_id: uuid.UUID,
     ) -> ResearchRun | None: ...
     async def get_active_run(self, company_id: uuid.UUID) -> ResearchRun | None: ...
+    async def get_active_industry_run(
+        self,
+        industry_id: uuid.UUID,
+    ) -> ResearchRun | None: ...
 
 
 class AgentExecutionRepositoryProtocol(Protocol):
@@ -58,7 +74,8 @@ class AgentExecutionRepositoryProtocol(Protocol):
 class ResearchRunStepRepositoryProtocol(Protocol):
     async def create(self, step: ResearchRunStep) -> ResearchRunStep: ...
     async def create_batch(
-        self, steps: list[ResearchRunStep],
+        self,
+        steps: list[ResearchRunStep],
     ) -> list[ResearchRunStep]: ...
     async def get_by_run(self, run_id: uuid.UUID) -> list[ResearchRunStep]: ...
     async def update_status(
@@ -75,23 +92,32 @@ class ResearchRunStepRepositoryProtocol(Protocol):
 class ResearchFindingRepositoryProtocol(Protocol):
     async def create(self, finding: ResearchFinding) -> ResearchFinding: ...
     async def create_batch(
-        self, findings: list[ResearchFinding],
+        self,
+        findings: list[ResearchFinding],
     ) -> list[ResearchFinding]: ...
     async def get_by_run(
-        self, run_id: uuid.UUID, *, finding_type: str | None = None,
+        self,
+        run_id: uuid.UUID,
+        *,
+        finding_type: str | None = None,
     ) -> list[ResearchFinding]: ...
     async def get_unsupported_facts(
-        self, run_id: uuid.UUID,
+        self,
+        run_id: uuid.UUID,
     ) -> list[ResearchFinding]: ...
     async def get_current_for_company(
-        self, company_id: uuid.UUID,
+        self,
+        company_id: uuid.UUID,
     ) -> list[ResearchFinding]: ...
 
 
 class ResearchArtifactRepositoryProtocol(Protocol):
     async def create(self, artifact: ResearchArtifact) -> ResearchArtifact: ...
     async def get_by_run(
-        self, run_id: uuid.UUID, *, artifact_type: str | None = None,
+        self,
+        run_id: uuid.UUID,
+        *,
+        artifact_type: str | None = None,
     ) -> list[ResearchArtifact]: ...
 
 
@@ -110,7 +136,8 @@ class ResearchRunRepository(BaseRepository[ResearchRun]):
         super().__init__(session, ResearchRun)
 
     async def get_with_relations(
-        self, run_id: uuid.UUID,
+        self,
+        run_id: uuid.UUID,
     ) -> ResearchRun | None:
         stmt = (
             sa.select(ResearchRun)
@@ -124,7 +151,10 @@ class ResearchRunRepository(BaseRepository[ResearchRun]):
         return result.scalar_one_or_none()
 
     async def get_by_company(
-        self, company_id: uuid.UUID, *, limit: int = 10,
+        self,
+        company_id: uuid.UUID,
+        *,
+        limit: int = 10,
     ) -> list[ResearchRun]:
         stmt = (
             sa.select(ResearchRun)
@@ -162,7 +192,9 @@ class ResearchRunRepository(BaseRepository[ResearchRun]):
         return run
 
     async def update_company_id(
-        self, run_id: uuid.UUID, company_id: uuid.UUID,
+        self,
+        run_id: uuid.UUID,
+        company_id: uuid.UUID,
     ) -> ResearchRun | None:
         run = await self.get_by_id(run_id)
         if run is None:
@@ -173,7 +205,8 @@ class ResearchRunRepository(BaseRepository[ResearchRun]):
         return run
 
     async def get_active_run(
-        self, company_id: uuid.UUID,
+        self,
+        company_id: uuid.UUID,
     ) -> ResearchRun | None:
         active_statuses = [
             ResearchRunStatus.CREATED,
@@ -212,13 +245,49 @@ class ResearchRunRepository(BaseRepository[ResearchRun]):
         await self._session.refresh(run)
         return run
 
+    async def get_by_industry(
+        self,
+        industry_id: uuid.UUID,
+        *,
+        limit: int = 10,
+    ) -> list[ResearchRun]:
+        stmt = (
+            sa.select(ResearchRun)
+            .where(ResearchRun.industry_id == industry_id)
+            .order_by(ResearchRun.started_at.desc())
+            .limit(limit)
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_active_industry_run(
+        self,
+        industry_id: uuid.UUID,
+    ) -> ResearchRun | None:
+        active_statuses = [
+            ResearchRunStatus.CREATED,
+            ResearchRunStatus.QUEUED,
+            ResearchRunStatus.RUNNING,
+        ]
+        stmt = (
+            sa.select(ResearchRun)
+            .where(
+                ResearchRun.industry_id == industry_id,
+                ResearchRun.status.in_(active_statuses),
+            )
+            .limit(1)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none()
+
 
 class ResearchRunStepRepository(BaseRepository[ResearchRunStep]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, ResearchRunStep)
 
     async def create_batch(
-        self, steps: list[ResearchRunStep],
+        self,
+        steps: list[ResearchRunStep],
     ) -> list[ResearchRunStep]:
         self._session.add_all(steps)
         await self._session.flush()
@@ -227,7 +296,8 @@ class ResearchRunStepRepository(BaseRepository[ResearchRunStep]):
         return steps
 
     async def get_by_run(
-        self, run_id: uuid.UUID,
+        self,
+        run_id: uuid.UUID,
     ) -> list[ResearchRunStep]:
         stmt = (
             sa.select(ResearchRunStep)
@@ -266,7 +336,8 @@ class AgentExecutionRepository(BaseRepository[AgentExecution]):
         super().__init__(session, AgentExecution)
 
     async def get_by_run(
-        self, run_id: uuid.UUID,
+        self,
+        run_id: uuid.UUID,
     ) -> list[AgentExecution]:
         stmt = (
             sa.select(AgentExecution)
@@ -277,18 +348,19 @@ class AgentExecutionRepository(BaseRepository[AgentExecution]):
         return list(result.scalars().all())
 
     async def get_by_step(
-        self, step_id: uuid.UUID,
+        self,
+        step_id: uuid.UUID,
     ) -> list[AgentExecution]:
         stmt = (
-            sa.select(AgentExecution)
-            .where(AgentExecution.step_id == step_id)
-            .order_by(AgentExecution.attempt_number)
+            sa.select(AgentExecution).where(AgentExecution.step_id == step_id).order_by(AgentExecution.attempt_number)
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
     async def get_latest_for_agent(
-        self, run_id: uuid.UUID, agent_name: str,
+        self,
+        run_id: uuid.UUID,
+        agent_name: str,
     ) -> AgentExecution | None:
         stmt = (
             sa.select(AgentExecution)
@@ -308,7 +380,8 @@ class ResearchFindingRepository(BaseRepository[ResearchFinding]):
         super().__init__(session, ResearchFinding)
 
     async def create_batch(
-        self, findings: list[ResearchFinding],
+        self,
+        findings: list[ResearchFinding],
     ) -> list[ResearchFinding]:
         self._session.add_all(findings)
         await self._session.flush()
@@ -332,7 +405,8 @@ class ResearchFindingRepository(BaseRepository[ResearchFinding]):
         return list(result.scalars().all())
 
     async def get_unsupported_facts(
-        self, run_id: uuid.UUID,
+        self,
+        run_id: uuid.UUID,
     ) -> list[ResearchFinding]:
         from app.models.research import research_finding_evidence
 
@@ -342,19 +416,17 @@ class ResearchFindingRepository(BaseRepository[ResearchFinding]):
             .correlate(ResearchFinding)
             .exists()
         )
-        stmt = (
-            sa.select(ResearchFinding)
-            .where(
-                ResearchFinding.research_run_id == run_id,
-                ResearchFinding.finding_type == FindingType.FACT,
-                ~subq,
-            )
+        stmt = sa.select(ResearchFinding).where(
+            ResearchFinding.research_run_id == run_id,
+            ResearchFinding.finding_type == FindingType.FACT,
+            ~subq,
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
     async def get_current_for_company(
-        self, company_id: uuid.UUID,
+        self,
+        company_id: uuid.UUID,
     ) -> list[ResearchFinding]:
         superseded_ids = (
             sa.select(ResearchFinding.supersedes_finding_id)
@@ -399,7 +471,8 @@ class ResearchRunSourceRepository(BaseRepository[ResearchRunSource]):
         super().__init__(session, ResearchRunSource)
 
     async def get_by_run(
-        self, run_id: uuid.UUID,
+        self,
+        run_id: uuid.UUID,
     ) -> list[ResearchRunSource]:
         stmt = (
             sa.select(ResearchRunSource)

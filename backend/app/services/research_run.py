@@ -1,4 +1,5 @@
 """Research Run domain service — lifecycle management, state machine enforcement, temporal validation."""
+
 from __future__ import annotations
 
 import uuid
@@ -61,16 +62,30 @@ class ResearchRunService:
     # -- Run lifecycle (AC-1, AC-3, AC-6, AC-13) -----------------------------
 
     async def initiate_run(self, data: ResearchRunCreate) -> ResearchRun:
-        active = await self._runs.get_active_run(data.company_id)
-        if active is not None:
-            raise ValidationError(
-                message="A research run is already active for this company",
-                details={
-                    "company_id": str(data.company_id),
-                    "active_run_id": str(active.id),
-                    "active_status": active.status,
-                },
-            )
+        if data.target_type == "company":
+            assert data.company_id is not None
+            active = await self._runs.get_active_run(data.company_id)
+            if active is not None:
+                raise ValidationError(
+                    message="A research run is already active for this company",
+                    details={
+                        "company_id": str(data.company_id),
+                        "active_run_id": str(active.id),
+                        "active_status": active.status,
+                    },
+                )
+        else:
+            assert data.industry_id is not None
+            active = await self._runs.get_active_industry_run(data.industry_id)
+            if active is not None:
+                raise ValidationError(
+                    message="A research run is already active for this industry",
+                    details={
+                        "industry_id": str(data.industry_id),
+                        "active_run_id": str(active.id),
+                        "active_status": active.status,
+                    },
+                )
 
         if data.parent_run_id is not None:
             parent = await self._runs.get_by_id(data.parent_run_id)
@@ -89,7 +104,9 @@ class ResearchRunService:
                 )
 
         run = ResearchRun(
+            target_type=data.target_type,
             company_id=data.company_id,
+            industry_id=data.industry_id,
             initiated_by=data.initiated_by,
             run_type=data.run_type,
             trigger_type=data.trigger_type,
@@ -111,7 +128,8 @@ class ResearchRunService:
         run = await self._get_run(run_id)
         validate_run_transition(run.status, ResearchRunStatus.RUNNING)
         result = await self._runs.update_status(
-            run_id, ResearchRunStatus.RUNNING,
+            run_id,
+            ResearchRunStatus.RUNNING,
             started_at=datetime.now(UTC),
         )
         assert result is not None
@@ -125,7 +143,8 @@ class ResearchRunService:
         run = await self._get_run(run_id)
         validate_run_transition(run.status, ResearchRunStatus.COMPLETED)
         result = await self._runs.update_status(
-            run_id, ResearchRunStatus.COMPLETED,
+            run_id,
+            ResearchRunStatus.COMPLETED,
             completed_at=datetime.now(UTC),
             quality_gate_results=quality_gates,
         )
@@ -133,12 +152,15 @@ class ResearchRunService:
         return result
 
     async def fail_run(
-        self, run_id: uuid.UUID, error_summary: str,
+        self,
+        run_id: uuid.UUID,
+        error_summary: str,
     ) -> ResearchRun:
         run = await self._get_run(run_id)
         validate_run_transition(run.status, ResearchRunStatus.FAILED)
         result = await self._runs.update_status(
-            run_id, ResearchRunStatus.FAILED,
+            run_id,
+            ResearchRunStatus.FAILED,
             completed_at=datetime.now(UTC),
             error_summary=error_summary,
         )
@@ -154,7 +176,8 @@ class ResearchRunService:
         run = await self._get_run(run_id)
         validate_run_transition(run.status, ResearchRunStatus.PARTIAL)
         result = await self._runs.update_status(
-            run_id, ResearchRunStatus.PARTIAL,
+            run_id,
+            ResearchRunStatus.PARTIAL,
             completed_at=datetime.now(UTC),
             error_summary=error_summary,
             quality_gate_results=quality_gates,
@@ -166,7 +189,8 @@ class ResearchRunService:
         run = await self._get_run(run_id)
         validate_run_transition(run.status, ResearchRunStatus.CANCELLED)
         result = await self._runs.update_status(
-            run_id, ResearchRunStatus.CANCELLED,
+            run_id,
+            ResearchRunStatus.CANCELLED,
             completed_at=datetime.now(UTC),
         )
         assert result is not None
@@ -176,18 +200,27 @@ class ResearchRunService:
         return await self._get_run(run_id)
 
     async def get_runs_for_company(
-        self, company_id: uuid.UUID, *, limit: int = 10,
+        self,
+        company_id: uuid.UUID,
+        *,
+        limit: int = 10,
     ) -> list[ResearchRun]:
         return await self._runs.get_by_company(company_id, limit=limit)
+
+    async def get_runs_for_industry(
+        self,
+        industry_id: uuid.UUID,
+        *,
+        limit: int = 10,
+    ) -> list[ResearchRun]:
+        return await self._runs.get_by_industry(industry_id, limit=limit)
 
     async def get_run_progress(self, run_id: uuid.UUID) -> RunProgress:
         run = await self._get_run(run_id)
         steps = await self._steps.get_by_run(run_id)
         findings = await self._findings.get_by_run(run_id)
 
-        steps_completed = sum(
-            1 for s in steps if s.status == StepStatus.COMPLETED
-        )
+        steps_completed = sum(1 for s in steps if s.status == StepStatus.COMPLETED)
         current_step: str | None = None
         current_agent: str | None = None
         for s in steps:
@@ -199,10 +232,7 @@ class ResearchRunService:
             for s in steps:
                 if s.step_name == current_step:
                     execs = await self._executions.get_by_step(s.id)
-                    running = [
-                        e for e in execs
-                        if e.status == AgentExecutionStatus.RUNNING
-                    ]
+                    running = [e for e in execs if e.status == AgentExecutionStatus.RUNNING]
                     if running:
                         current_agent = running[0].agent_name
                     break
@@ -274,7 +304,9 @@ class ResearchRunService:
         return result
 
     async def fail_step(
-        self, step_id: uuid.UUID, error_message: str,
+        self,
+        step_id: uuid.UUID,
+        error_message: str,
     ) -> ResearchRunStep:
         step = await self._get_step(step_id)
         validate_step_transition(step.status, StepStatus.FAILED)
@@ -351,7 +383,8 @@ class ResearchRunService:
     ) -> AgentExecution:
         execution = await self._get_execution(execution_id)
         validate_execution_transition(
-            execution.status, AgentExecutionStatus.COMPLETED,
+            execution.status,
+            AgentExecutionStatus.COMPLETED,
         )
         execution.status = AgentExecutionStatus.COMPLETED
         execution.completed_at = datetime.now(UTC)
@@ -444,7 +477,8 @@ class ResearchRunService:
         return await self._findings.get_by_run(run_id, finding_type=finding_type)
 
     async def get_unsupported_facts(
-        self, run_id: uuid.UUID,
+        self,
+        run_id: uuid.UUID,
     ) -> list[ResearchFinding]:
         return await self._findings.get_unsupported_facts(run_id)
 
@@ -477,7 +511,8 @@ class ResearchRunService:
         artifact_type: str | None = None,
     ) -> list[ResearchArtifact]:
         return await self._artifacts.get_by_run(
-            run_id, artifact_type=artifact_type,
+            run_id,
+            artifact_type=artifact_type,
         )
 
     # -- Sources (AC-23) ------------------------------------------------------
@@ -509,7 +544,8 @@ class ResearchRunService:
     # -- Aggregate updates (AC-22) --------------------------------------------
 
     async def update_run_aggregates(
-        self, run_id: uuid.UUID,
+        self,
+        run_id: uuid.UUID,
     ) -> ResearchRun:
         await self._get_run(run_id)
         executions = await self._executions.get_by_run(run_id)
@@ -548,7 +584,8 @@ class ResearchRunService:
         return step
 
     async def _get_execution(
-        self, execution_id: uuid.UUID,
+        self,
+        execution_id: uuid.UUID,
     ) -> AgentExecution:
         execution = await self._executions.get_by_id(execution_id)
         if execution is None:

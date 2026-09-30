@@ -470,7 +470,7 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - Provider error handling
 - Source attribution completeness
 
-**Status:** Phase 9.1 (Schema Migration) COMPLETE — Phase 9.2 (Agent Implementation) NOT STARTED
+**Status:** Phase 9.1 (Schema Migration) COMPLETE — Phase 9.2 (Contracts & Integration) COMPLETE — Phase 9.3 (Agent Implementation) NOT STARTED
 
 **Phase 9.1 Deliverables (complete):**
 - Alembic migration 006: `target_type` discriminator, nullable `company_id`, `industry_id` FK, XOR CHECK, indexes
@@ -478,6 +478,15 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - Safe downgrade guard (refuses if industry runs exist)
 - 17 migration tests passing
 - Technical debt recorded: TD-12 (API schemas), TD-13 (service/repo queries)
+
+**Phase 9.2 Deliverables (complete):**
+- Pydantic schemas updated: `ResearchRunCreate` XOR validation, `ResearchRunRead`/`RunSummary` with target_type/industry_id (TD-12 resolved)
+- `IndustryResearchRequest` and `IndustryResearchConfig` frozen contracts
+- `INDUSTRY_FINDING_CATEGORIES` (14), `INDUSTRY_RESEARCH_STEPS` (7), agent constants (20K budget)
+- Repository protocol + impl: `get_by_industry()`, `get_active_industry_run()` (TD-13 resolved)
+- Service layer: `initiate_run()` branching on target_type, `get_runs_for_industry()`
+- 59 new tests, all passing; zero regressions on 1765 existing tests
+- No new migrations, no ORM changes, no agent/tool/prompt/workflow implementation
 
 ---
 

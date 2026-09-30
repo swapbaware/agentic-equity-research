@@ -1,11 +1,12 @@
 """Pydantic v2 schemas for Research Run infrastructure."""
+
 from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # ---------------------------------------------------------------------------
 # Token / cost DTOs
@@ -23,7 +24,9 @@ class TokenUsage(BaseModel):
 
 
 class ResearchRunCreate(BaseModel):
-    company_id: uuid.UUID
+    target_type: str = Field(default="company", max_length=50)
+    company_id: uuid.UUID | None = None
+    industry_id: uuid.UUID | None = None
     initiated_by: str = Field(max_length=200)
     run_type: str = Field(max_length=50)
     trigger_type: str = Field(max_length=50)
@@ -31,12 +34,40 @@ class ResearchRunCreate(BaseModel):
     observation_date: date | None = None
     configuration: dict[str, object] | None = None
 
+    @model_validator(mode="after")
+    def validate_target(self) -> ResearchRunCreate:
+        if self.target_type == "company":
+            if self.company_id is None:
+                raise ValueError(
+                    "company_id is required when target_type is 'company'",
+                )
+            if self.industry_id is not None:
+                raise ValueError(
+                    "industry_id must be None when target_type is 'company'",
+                )
+        elif self.target_type == "industry":
+            if self.industry_id is None:
+                raise ValueError(
+                    "industry_id is required when target_type is 'industry'",
+                )
+            if self.company_id is not None:
+                raise ValueError(
+                    "company_id must be None when target_type is 'industry'",
+                )
+        else:
+            raise ValueError(
+                f"target_type must be 'company' or 'industry', got '{self.target_type}'",
+            )
+        return self
+
 
 class ResearchRunRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    company_id: uuid.UUID
+    target_type: str
+    company_id: uuid.UUID | None
+    industry_id: uuid.UUID | None
     initiated_by: str
     run_type: str | None
     trigger_type: str | None
@@ -58,7 +89,9 @@ class ResearchRunRead(BaseModel):
 
 class RunSummary(BaseModel):
     id: uuid.UUID
-    company_id: uuid.UUID
+    target_type: str = "company"
+    company_id: uuid.UUID | None = None
+    industry_id: uuid.UUID | None = None
     status: str
     run_type: str | None
     started_at: datetime
