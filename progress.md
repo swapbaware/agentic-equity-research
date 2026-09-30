@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-09-30 (Phase 8.2 Company Research Agent implementation complete)
+**Last Updated:** 2026-09-30 (Phase 8.2 Post-Audit Remediation complete — 4 material issues fixed)
 
 ---
 
@@ -441,6 +441,33 @@ Post-audit remediation of 6 findings from Phase 7 implementation audit:
 - [x] ruff: zero errors on all agent module files
 - [x] mypy strict: zero new errors (1 preexisting in yahoo_finance.py)
 - [x] Full backend: 1675 passed, 7 skipped, 1 known failure (TD-6) — zero regressions
+
+### Phase 8.2 Post-Audit Remediation — COMPLETE
+
+Independent audit verdict: PASS WITH MINOR FIXES (11 issues, 4 material).
+Remediation fixed exactly the 4 material issues:
+
+- [x] **ISSUE-01**: company_id update via service/repository layer instead of direct ORM mutation
+  - Added `update_company_id()` to ResearchRunRepositoryProtocol + concrete repository
+  - Added `update_run_company()` to ResearchRunService
+  - Agent.execute() calls service method, no longer touches session directly
+  - 2 regression tests
+- [x] **ISSUE-03**: observation_date propagated to all FindingItem constructions
+  - `_step_finding_generation()` and `_step_gap_contradiction()` accept `observation_date` parameter
+  - All FindingItem constructions set `observation_date=observation_date`
+  - Call sites in execute() pass `request.observation_date`
+  - 3 regression tests
+- [x] **ISSUE-07**: temporal validation (source_publication_date > observation_date) in finding_validation step
+  - `_step_finding_validation()` checks `source_publication_date <= observation_date`
+  - Emits `temporal_inconsistency` issue type when violated
+  - None dates preserved (no false positives)
+  - 5 regression tests
+- [x] **ISSUE-08**: ResearchRunSource records created during document retrieval
+  - `_step_document_retrieval()` calls `record_source_access(run_id, doc_id, "retrieved")` after each document creation
+  - No source record when retrieval fails or run_id not provided
+  - 4 regression tests
+
+Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ---
 

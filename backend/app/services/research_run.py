@@ -496,6 +496,16 @@ class ResearchRunService:
         )
         return await self._sources.create(source)
 
+    async def update_run_company(
+        self,
+        run_id: uuid.UUID,
+        company_id: uuid.UUID,
+    ) -> ResearchRun:
+        await self._get_run(run_id)
+        result = await self._runs.update_company_id(run_id, company_id)
+        assert result is not None
+        return result
+
     # -- Aggregate updates (AC-22) --------------------------------------------
 
     async def update_run_aggregates(

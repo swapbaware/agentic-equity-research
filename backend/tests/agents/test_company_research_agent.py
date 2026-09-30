@@ -291,6 +291,8 @@ class MockRunService:
         self.fail_agent = AsyncMock()
 
         self.record_findings = AsyncMock(return_value=[])
+        self.record_source_access = AsyncMock()
+        self.update_run_company = AsyncMock(return_value=self._run)
 
 
 def _build_agent(
@@ -1755,3 +1757,431 @@ class TestCompanyResearchResultModel:
         restored = CompanyResearchResult.model_validate(data)
         assert restored.run_id == RUN_UUID
         assert restored.findings_count == 3
+
+
+# ===========================================================================
+# Phase 8.2 Post-Audit Remediation Tests
+# ===========================================================================
+
+
+# -- ISSUE-01: company_id update via service layer, not direct ORM mutation --
+
+
+class TestIssue01ServiceLayerCompanyIdUpdate:
+    @pytest.mark.asyncio()
+    async def test_company_id_updated_via_service(self) -> None:
+        agent, run_service, _ = _build_agent(
+            llm_responses=[
+                _make_llm_evidence_response(),
+                _make_llm_finding_response(),
+                _make_llm_gap_response(),
+            ],
+        )
+
+        with patch.object(
+            agent._tools, "validate_company",
+            new_callable=AsyncMock,
+            return_value=_make_validate_output(),
+        ), patch.object(
+            agent._tools, "discover_sources",
+            new_callable=AsyncMock,
+            return_value=MagicMock(candidates=[_make_source_candidate()]),
+        ), patch.object(
+            agent._tools, "retrieve_document",
+            new_callable=AsyncMock,
+            return_value=_make_doc_output(),
+        ), patch.object(
+            agent._tools, "create_research_document",
+            new_callable=AsyncMock,
+            return_value=DOC_UUID,
+        ), patch.object(
+            agent._tools, "persist_evidence",
+            new_callable=AsyncMock,
+            return_value=MagicMock(evidence_ids=[uuid.uuid4()]),
+        ), patch.object(
+            agent._tools, "persist_findings",
+            new_callable=AsyncMock,
+            return_value=MagicMock(finding_ids=[uuid.uuid4()], rejected=[]),
+        ):
+            request = CompanyResearchRequest(
+                company_identifier="RELIANCE",
+                identifier_type=IdentifierType.NSE_SYMBOL,
+                observation_date=date(2025, 9, 30),
+                initiated_by="test_user",
+            )
+            await agent.execute(request)
+
+        run_service.update_run_company.assert_awaited_once_with(
+            RUN_UUID, COMPANY_UUID,
+        )
+
+    @pytest.mark.asyncio()
+    async def test_no_direct_session_flush_for_company_id(self) -> None:
+        agent, run_service, mocks = _build_agent(
+            llm_responses=[
+                _make_llm_evidence_response(),
+                _make_llm_finding_response(),
+                _make_llm_gap_response(),
+            ],
+        )
+
+        with patch.object(
+            agent._tools, "validate_company",
+            new_callable=AsyncMock,
+            return_value=_make_validate_output(),
+        ), patch.object(
+            agent._tools, "discover_sources",
+            new_callable=AsyncMock,
+            return_value=MagicMock(candidates=[_make_source_candidate()]),
+        ), patch.object(
+            agent._tools, "retrieve_document",
+            new_callable=AsyncMock,
+            return_value=_make_doc_output(),
+        ), patch.object(
+            agent._tools, "create_research_document",
+            new_callable=AsyncMock,
+            return_value=DOC_UUID,
+        ), patch.object(
+            agent._tools, "persist_evidence",
+            new_callable=AsyncMock,
+            return_value=MagicMock(evidence_ids=[uuid.uuid4()]),
+        ), patch.object(
+            agent._tools, "persist_findings",
+            new_callable=AsyncMock,
+            return_value=MagicMock(finding_ids=[uuid.uuid4()], rejected=[]),
+        ):
+            request = CompanyResearchRequest(
+                company_identifier="RELIANCE",
+                identifier_type=IdentifierType.NSE_SYMBOL,
+                observation_date=date(2025, 9, 30),
+                initiated_by="test_user",
+            )
+            await agent.execute(request)
+
+        mocks["session"].flush.assert_not_awaited()
+
+
+# -- ISSUE-03: observation_date propagation to FindingItem -------------------
+
+
+class TestIssue03ObservationDatePropagation:
+    @pytest.mark.asyncio()
+    async def test_finding_generation_sets_observation_date(self) -> None:
+        agent, _, _ = _build_agent(
+            llm_responses=[_make_llm_finding_response()],
+        )
+        evidence = [
+            ExtractedEvidence(
+                evidence_type=EvidenceType.FACT,
+                claim="Revenue was Rs 950,000 crore",
+                confidence=ConfidenceLevel.HIGH,
+            ),
+        ]
+        obs_date = date(2025, 9, 30)
+
+        with patch.object(
+            agent._tools, "persist_findings",
+            new_callable=AsyncMock,
+            return_value=MagicMock(finding_ids=[uuid.uuid4()], rejected=[]),
+        ):
+            findings = await agent._step_finding_generation(
+                _make_validate_output(),
+                evidence,
+                [uuid.uuid4()],
+                RUN_UUID,
+                EXEC_UUID,
+                TokenBudget(),
+                CompanyResearchConfig(),
+                observation_date=obs_date,
+            )
+
+        for f in findings:
+            assert f.observation_date == obs_date
+
+    @pytest.mark.asyncio()
+    async def test_finding_generation_none_observation_date(self) -> None:
+        agent, _, _ = _build_agent(
+            llm_responses=[_make_llm_finding_response()],
+        )
+        evidence = [
+            ExtractedEvidence(
+                evidence_type=EvidenceType.FACT,
+                claim="Revenue was Rs 950,000 crore",
+                confidence=ConfidenceLevel.HIGH,
+            ),
+        ]
+
+        with patch.object(
+            agent._tools, "persist_findings",
+            new_callable=AsyncMock,
+            return_value=MagicMock(finding_ids=[uuid.uuid4()], rejected=[]),
+        ):
+            findings = await agent._step_finding_generation(
+                _make_validate_output(),
+                evidence,
+                [uuid.uuid4()],
+                RUN_UUID,
+                EXEC_UUID,
+                TokenBudget(),
+                CompanyResearchConfig(),
+                observation_date=None,
+            )
+
+        for f in findings:
+            assert f.observation_date is None
+
+    @pytest.mark.asyncio()
+    async def test_gap_contradiction_sets_observation_date(self) -> None:
+        agent, _, _ = _build_agent(
+            llm_responses=[_make_llm_gap_response()],
+        )
+        existing = [
+            FindingItem(
+                finding_type=FindingType.FACT,
+                category="company_identity",
+                content="Test finding",
+                confidence=ConfidenceLevel.HIGH,
+                evidence_ids=[uuid.uuid4()],
+            ),
+        ]
+        obs_date = date(2025, 3, 31)
+
+        with patch.object(
+            agent._tools, "persist_findings",
+            new_callable=AsyncMock,
+            return_value=MagicMock(finding_ids=[uuid.uuid4()], rejected=[]),
+        ):
+            gap_findings = await agent._step_gap_contradiction(
+                _make_validate_output(),
+                existing,
+                RUN_UUID,
+                EXEC_UUID,
+                TokenBudget(),
+                CompanyResearchConfig(),
+                observation_date=obs_date,
+            )
+
+        for f in gap_findings:
+            assert f.observation_date == obs_date
+
+
+# -- ISSUE-07: temporal validation (source_publication_date > observation_date)
+
+
+class TestIssue07TemporalValidation:
+    @pytest.mark.asyncio()
+    async def test_publication_before_observation_is_valid(self) -> None:
+        agent, _, _ = _build_agent()
+        findings = [
+            FindingItem(
+                finding_type=FindingType.FACT,
+                category="company_identity",
+                content="Valid fact with dates",
+                confidence=ConfidenceLevel.HIGH,
+                observation_date=date(2025, 9, 30),
+                source_publication_date=date(2025, 5, 30),
+                evidence_ids=[uuid.uuid4()],
+            ),
+        ]
+        result = await agent._step_finding_validation(findings, [uuid.uuid4()])
+        assert result.valid_count == 1
+        assert result.rejected_count == 0
+
+    @pytest.mark.asyncio()
+    async def test_publication_equals_observation_is_valid(self) -> None:
+        agent, _, _ = _build_agent()
+        findings = [
+            FindingItem(
+                finding_type=FindingType.FACT,
+                category="company_identity",
+                content="Fact published on observation date",
+                confidence=ConfidenceLevel.HIGH,
+                observation_date=date(2025, 9, 30),
+                source_publication_date=date(2025, 9, 30),
+                evidence_ids=[uuid.uuid4()],
+            ),
+        ]
+        result = await agent._step_finding_validation(findings, [uuid.uuid4()])
+        assert result.valid_count == 1
+        assert result.rejected_count == 0
+
+    @pytest.mark.asyncio()
+    async def test_publication_after_observation_flagged(self) -> None:
+        agent, _, _ = _build_agent()
+        findings = [
+            FindingItem(
+                finding_type=FindingType.FACT,
+                category="company_identity",
+                content="Fact from the future",
+                confidence=ConfidenceLevel.HIGH,
+                observation_date=date(2025, 9, 30),
+                source_publication_date=date(2025, 10, 15),
+                evidence_ids=[uuid.uuid4()],
+            ),
+        ]
+        result = await agent._step_finding_validation(findings, [uuid.uuid4()])
+        assert result.rejected_count == 1
+        assert result.issues[0].issue_type == "temporal_inconsistency"
+
+    @pytest.mark.asyncio()
+    async def test_none_dates_preserve_uncertainty(self) -> None:
+        agent, _, _ = _build_agent()
+        findings = [
+            FindingItem(
+                finding_type=FindingType.AI_INFERENCE,
+                category="risk",
+                content="Inference without dates",
+                confidence=ConfidenceLevel.MEDIUM,
+                observation_date=None,
+                source_publication_date=None,
+            ),
+        ]
+        result = await agent._step_finding_validation(findings, [])
+        temporal_issues = [
+            i for i in result.issues if i.issue_type == "temporal_inconsistency"
+        ]
+        assert len(temporal_issues) == 0
+
+    @pytest.mark.asyncio()
+    async def test_publication_date_without_observation_date_no_flag(self) -> None:
+        agent, _, _ = _build_agent()
+        findings = [
+            FindingItem(
+                finding_type=FindingType.FACT,
+                category="company_identity",
+                content="Fact with pub date but no obs date",
+                confidence=ConfidenceLevel.HIGH,
+                observation_date=None,
+                source_publication_date=date(2025, 5, 30),
+                evidence_ids=[uuid.uuid4()],
+            ),
+        ]
+        result = await agent._step_finding_validation(findings, [uuid.uuid4()])
+        temporal_issues = [
+            i for i in result.issues if i.issue_type == "temporal_inconsistency"
+        ]
+        assert len(temporal_issues) == 0
+
+
+# -- ISSUE-08: ResearchRunSource records created during document retrieval ---
+
+
+class TestIssue08SourceAccessRecording:
+    @pytest.mark.asyncio()
+    async def test_record_source_access_called_per_document(self) -> None:
+        agent, run_service, _ = _build_agent()
+        sources = [
+            _make_source_candidate("filing-1"),
+            _make_source_candidate("filing-2"),
+        ]
+        doc_uuid_1 = uuid.uuid4()
+        doc_uuid_2 = uuid.uuid4()
+
+        with patch.object(
+            agent._tools, "retrieve_document",
+            new_callable=AsyncMock,
+            return_value=_make_doc_output(),
+        ), patch.object(
+            agent._tools, "create_research_document",
+            new_callable=AsyncMock,
+            side_effect=[doc_uuid_1, doc_uuid_2],
+        ):
+            await agent._step_document_retrieval(
+                COMPANY_UUID, sources, CompanyResearchConfig(),
+                run_id=RUN_UUID,
+            )
+
+        assert run_service.record_source_access.await_count == 2
+        calls = run_service.record_source_access.call_args_list
+        recorded_doc_ids = {c.args[1] for c in calls}
+        assert doc_uuid_1 in recorded_doc_ids
+        assert doc_uuid_2 in recorded_doc_ids
+        for c in calls:
+            assert c.args[0] == RUN_UUID
+            assert c.args[2] == "retrieved"
+
+    @pytest.mark.asyncio()
+    async def test_no_source_access_when_retrieval_fails(self) -> None:
+        agent, run_service, _ = _build_agent()
+        sources = [_make_source_candidate("filing-1")]
+
+        with patch.object(
+            agent._tools, "retrieve_document",
+            new_callable=AsyncMock,
+            side_effect=ProviderError(message="network timeout", provider="test"),
+        ):
+            docs, doc_ids = await agent._step_document_retrieval(
+                COMPANY_UUID, sources, CompanyResearchConfig(),
+                run_id=RUN_UUID,
+            )
+
+        assert len(docs) == 0
+        assert len(doc_ids) == 0
+        run_service.record_source_access.assert_not_awaited()
+
+    @pytest.mark.asyncio()
+    async def test_no_source_access_without_run_id(self) -> None:
+        agent, run_service, _ = _build_agent()
+        sources = [_make_source_candidate("filing-1")]
+
+        with patch.object(
+            agent._tools, "retrieve_document",
+            new_callable=AsyncMock,
+            return_value=_make_doc_output(),
+        ), patch.object(
+            agent._tools, "create_research_document",
+            new_callable=AsyncMock,
+            return_value=DOC_UUID,
+        ):
+            await agent._step_document_retrieval(
+                COMPANY_UUID, sources, CompanyResearchConfig(),
+            )
+
+        run_service.record_source_access.assert_not_awaited()
+
+    @pytest.mark.asyncio()
+    async def test_source_access_in_full_execution(self) -> None:
+        agent, run_service, _ = _build_agent(
+            llm_responses=[
+                _make_llm_evidence_response(),
+                _make_llm_finding_response(),
+                _make_llm_gap_response(),
+            ],
+        )
+
+        with patch.object(
+            agent._tools, "validate_company",
+            new_callable=AsyncMock,
+            return_value=_make_validate_output(),
+        ), patch.object(
+            agent._tools, "discover_sources",
+            new_callable=AsyncMock,
+            return_value=MagicMock(candidates=[_make_source_candidate()]),
+        ), patch.object(
+            agent._tools, "retrieve_document",
+            new_callable=AsyncMock,
+            return_value=_make_doc_output(),
+        ), patch.object(
+            agent._tools, "create_research_document",
+            new_callable=AsyncMock,
+            return_value=DOC_UUID,
+        ), patch.object(
+            agent._tools, "persist_evidence",
+            new_callable=AsyncMock,
+            return_value=MagicMock(evidence_ids=[uuid.uuid4()]),
+        ), patch.object(
+            agent._tools, "persist_findings",
+            new_callable=AsyncMock,
+            return_value=MagicMock(finding_ids=[uuid.uuid4()], rejected=[]),
+        ):
+            request = CompanyResearchRequest(
+                company_identifier="RELIANCE",
+                identifier_type=IdentifierType.NSE_SYMBOL,
+                observation_date=date(2025, 9, 30),
+                initiated_by="test_user",
+            )
+            await agent.execute(request)
+
+        run_service.record_source_access.assert_awaited_once_with(
+            RUN_UUID, DOC_UUID, "retrieved",
+        )

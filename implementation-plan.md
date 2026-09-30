@@ -435,6 +435,14 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - Agent depends on Protocol interfaces only
 - Total backend: 1675 passed, 7 skipped, 1 known failure (TD-6)
 
+**Phase 8.2 Post-Audit Remediation — COMPLETE:**
+- ISSUE-01: company_id update via service/repository layer (no direct ORM mutation)
+- ISSUE-03: observation_date propagated to all FindingItem constructions
+- ISSUE-07: temporal validation (source_publication_date > observation_date) in finding_validation
+- ISSUE-08: ResearchRunSource records created during document retrieval
+- 14 new regression tests (2 + 3 + 5 + 4)
+- Total backend: 1690 passed, 7 skipped, 0 failed
+
 ---
 
 ## Phase 9 — Industry Research Agent

@@ -42,6 +42,9 @@ class ResearchRunRepositoryProtocol(Protocol):
         started_at: datetime | None = None,
         quality_gate_results: dict[str, object] | None = None,
     ) -> ResearchRun | None: ...
+    async def update_company_id(
+        self, run_id: uuid.UUID, company_id: uuid.UUID,
+    ) -> ResearchRun | None: ...
     async def get_active_run(self, company_id: uuid.UUID) -> ResearchRun | None: ...
 
 
@@ -154,6 +157,17 @@ class ResearchRunRepository(BaseRepository[ResearchRun]):
             run.started_at = started_at
         if quality_gate_results is not None:
             run.quality_gate_results = quality_gate_results
+        await self._session.flush()
+        await self._session.refresh(run)
+        return run
+
+    async def update_company_id(
+        self, run_id: uuid.UUID, company_id: uuid.UUID,
+    ) -> ResearchRun | None:
+        run = await self.get_by_id(run_id)
+        if run is None:
+            return None
+        run.company_id = company_id
         await self._session.flush()
         await self._session.refresh(run)
         return run

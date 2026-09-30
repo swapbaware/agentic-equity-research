@@ -188,9 +188,10 @@ class CompanyResearchAgent:
             )
             steps_completed += 1
 
-            # Update run with real company_id
-            run.company_id = company_info.company_id
-            await self._session.flush()
+            # Update run with real company_id via service layer
+            await self._run_service.update_run_company(
+                run_id, company_info.company_id,
+            )
 
             # -- Step 2: source_discovery --------------------------------------
             sources = await self._run_step_deterministic(
@@ -208,6 +209,7 @@ class CompanyResearchAgent:
                 step_map["document_retrieval"],
                 self._step_document_retrieval(
                     company_info.company_id, sources, config,
+                    run_id=run_id,
                 ),
             )
             documents = doc_retrieval_result[0]
@@ -238,6 +240,7 @@ class CompanyResearchAgent:
                 lambda exec_id: self._step_finding_generation(
                     company_info, all_evidence, all_evidence_ids,
                     run_id, exec_id, token_budget, config,
+                    observation_date=request.observation_date,
                 ),
             )
             steps_completed += 1
@@ -260,6 +263,7 @@ class CompanyResearchAgent:
                 lambda exec_id: self._step_gap_contradiction(
                     company_info, all_findings, run_id, exec_id,
                     token_budget, config,
+                    observation_date=request.observation_date,
                 ),
             )
             all_findings.extend(gap_findings)
@@ -443,6 +447,7 @@ class CompanyResearchAgent:
         company_id: uuid.UUID,
         sources: list[SourceCandidate],
         config: CompanyResearchConfig,
+        run_id: uuid.UUID | None = None,
     ) -> tuple[dict[str, RetrieveDocumentOutput], dict[str, uuid.UUID]]:
         documents: dict[str, RetrieveDocumentOutput] = {}
         document_ids: dict[str, uuid.UUID] = {}
@@ -462,6 +467,10 @@ class CompanyResearchAgent:
                         company_id, candidate, doc.content_hash,
                     )
                     document_ids[candidate.source_id] = doc_id
+                    if run_id is not None:
+                        await self._run_service.record_source_access(
+                            run_id, doc_id, "retrieved",
+                        )
                 except ProviderError:
                     logger.warning(
                         "Failed to retrieve document %s", candidate.source_id,
@@ -541,6 +550,7 @@ class CompanyResearchAgent:
         execution_id: uuid.UUID,
         token_budget: TokenBudget,
         config: CompanyResearchConfig,
+        observation_date: date | None = None,
     ) -> list[FindingItem]:
         if token_budget.is_exhausted:
             raise TokenBudgetExhaustedError(
@@ -583,6 +593,7 @@ class CompanyResearchAgent:
                 category=gf.category,
                 content=gf.content,
                 confidence=gf.confidence,
+                observation_date=observation_date,
                 source_publication_date=gf.source_publication_date,
                 evidence_ids=linked_evidence or None,
             ))
@@ -625,6 +636,20 @@ class CompanyResearchAgent:
                     message="FACT-type finding must have linked evidence",
                 ))
 
+            if (
+                f.source_publication_date is not None
+                and f.observation_date is not None
+                and f.source_publication_date > f.observation_date
+            ):
+                issues.append(FindingValidationIssue(
+                    finding_index=i,
+                    issue_type="temporal_inconsistency",
+                    message=(
+                        f"source_publication_date ({f.source_publication_date})"
+                        f" is after observation_date ({f.observation_date})"
+                    ),
+                ))
+
         rejected_indices = {iss.finding_index for iss in issues}
         valid_count = len(findings) - len(rejected_indices)
 
@@ -643,6 +668,7 @@ class CompanyResearchAgent:
         execution_id: uuid.UUID,
         token_budget: TokenBudget,
         config: CompanyResearchConfig,
+        observation_date: date | None = None,
     ) -> list[FindingItem]:
         if token_budget.is_exhausted:
             raise TokenBudgetExhaustedError(
@@ -681,6 +707,7 @@ class CompanyResearchAgent:
                 category=gf.category,
                 content=gf.content,
                 confidence=gf.confidence,
+                observation_date=observation_date,
                 source_publication_date=None,
                 evidence_ids=None,
             ))
