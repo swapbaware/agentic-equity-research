@@ -253,7 +253,7 @@ Three finding categories share names between agents: `growth_drivers`, `research
 
 - Phase 8 agent: `backend/app/agents/company_research/agent.py`
 - Company finding categories: `backend/app/agents/contracts.py:25-40` — `FINDING_CATEGORIES`
-- Industry finding categories: `backend/app/agents/contracts.py:60-75` — `INDUSTRY_FINDING_CATEGORIES`
+- Industry finding categories: `backend/app/agents/contracts.py:81-98` — `INDUSTRY_FINDING_CATEGORIES`
 - XOR constraint: `backend/alembic/versions/006_research_run_target_type.py`
 - ResearchRunCreate validator: `backend/app/schemas/research_run.py`
 
@@ -290,7 +290,7 @@ Each dimension maps to one finding category and defines the analytical scope for
 ### Codebase References
 
 - EXPECTED_INDUSTRY_DIMENSIONS: defined in Phase 9 architecture §19, to be implemented as a list constant
-- INDUSTRY_FINDING_CATEGORIES: `backend/app/agents/contracts.py:60-75`
+- INDUSTRY_FINDING_CATEGORIES: `backend/app/agents/contracts.py:81-98`
 
 ---
 
@@ -354,7 +354,7 @@ WHERE agent_name = 'industry_research_agent'
 
 ### 14 Industry Finding Categories
 
-Defined in `backend/app/agents/contracts.py:60-75` as `INDUSTRY_FINDING_CATEGORIES: frozenset[str]`:
+Defined in `backend/app/agents/contracts.py:81-98` as `INDUSTRY_FINDING_CATEGORIES: frozenset[str]`:
 
 | # | Category | Description | Primary FindingType(s) |
 |---|---|---|---|
@@ -383,8 +383,8 @@ Three categories overlap: `growth_drivers`, `research_gap`, `contradiction`. Res
 
 ### Codebase References
 
-- Industry categories: `backend/app/agents/contracts.py:60-75`
-- Company categories: `backend/app/agents/contracts.py:25-40`
+- Industry categories: `backend/app/agents/contracts.py:81-98`
+- Company categories: `backend/app/agents/contracts.py:45-62`
 - FindingItem model: `backend/app/agents/contracts.py:356-369`
 
 ---
@@ -620,9 +620,9 @@ class IndustryResearchConfig(BaseModel):
 
 - IndustryResearchRequest: `backend/app/agents/contracts.py:605-614`
 - IndustryResearchConfig: `backend/app/agents/contracts.py:589-602`
-- INDUSTRY_AGENT_TOKEN_BUDGET constant: `backend/app/agents/contracts.py:56` (20_000)
-- INDUSTRY_AGENT_TOKEN_WARNING constant: `backend/app/agents/contracts.py:57` (16_000)
-- MAX_LLM_ATTEMPTS constant: `backend/app/agents/contracts.py:59` (2)
+- INDUSTRY_AGENT_TOKEN_BUDGET constant: `backend/app/agents/contracts.py:77` (20_000)
+- INDUSTRY_AGENT_TOKEN_WARNING constant: `backend/app/agents/contracts.py:78` (16_000)
+- MAX_LLM_ATTEMPTS constant: `backend/app/agents/contracts.py:71` (2)
 
 ---
 
@@ -806,7 +806,7 @@ Uses `PersistEvidenceInput` / `PersistEvidenceOutput` from `backend/app/agents/c
 
 #### Tool 8: `persist_findings` (REUSED from Phase 8 — Persistence — Steps 5/7)
 
-Uses `PersistFindingsInput` / `PersistFindingsOutput` from `backend/app/agents/contracts.py:380-392`. `FindingItem.agent_name` defaults to `"industry_research_agent"` (vs. `"company_research_agent"` in Phase 8).
+Uses `PersistFindingsInput` / `PersistFindingsOutput` from `backend/app/agents/contracts.py:380-392`. **Important**: `FindingItem.agent_name` has a schema default of `"company_research_agent"` via the shared `AGENT_NAME` constant (`contracts.py:70`). The Industry Research Agent MUST explicitly pass `agent_name=INDUSTRY_AGENT_NAME` (`"industry_research_agent"`) when constructing `FindingItem` instances. This is a construction-time override — the shared `FindingItem` schema default is NOT changed for Phase 9.
 
 ### Tool Allowlisting
 
@@ -1010,17 +1010,21 @@ Every structured output model uses `ConfigDict(frozen=True)` — immutable after
 
 ### Budget Constants
 
-From `backend/app/agents/contracts.py:56-59`:
+From `backend/app/agents/contracts.py:77-79`:
 ```python
 INDUSTRY_AGENT_TOKEN_BUDGET: int = 20_000
 INDUSTRY_AGENT_TOKEN_WARNING: int = 16_000
 INDUSTRY_AGENT_NAME: str = "industry_research_agent"
+```
+
+Shared constant from `backend/app/agents/contracts.py:71`:
+```python
 MAX_LLM_ATTEMPTS: int = 2
 ```
 
 ### Why 20,000 Not 30,000
 
-Phase 8's `AGENT_TOKEN_BUDGET = 30_000` corresponds to the Financial Analysis Agent (#2), not the Company Research Agent (#3). The architecture document (`architecture/agent-architecture.md`) assigns 20,000 to Industry Analysis Agent (#4). Industry reports are typically shorter per-document; more documents but less per-document extraction cost. The aggregate run budget across all 17 agents is ~325,000 tokens.
+Phase 8's `AGENT_TOKEN_BUDGET = 30_000` is the Company Research Agent (#3) budget (`backend/app/agents/contracts.py:68-70`). The architecture document (`architecture/agent-architecture.md`) assigns 20,000 to Industry Analysis Agent (#4). Industry reports are typically shorter per-document; more documents but less per-document extraction cost. The aggregate run budget across all 17 agents is ~325,000 tokens.
 
 ### Budget Distribution Across Steps
 
@@ -1059,8 +1063,8 @@ When budget exhausted:
 ### Codebase References
 
 - TokenBudget class: `backend/app/agents/contracts.py:477-512`
-- INDUSTRY_AGENT_TOKEN_BUDGET: `backend/app/agents/contracts.py:56`
-- INDUSTRY_AGENT_TOKEN_WARNING: `backend/app/agents/contracts.py:57`
+- INDUSTRY_AGENT_TOKEN_BUDGET: `backend/app/agents/contracts.py:77`
+- INDUSTRY_AGENT_TOKEN_WARNING: `backend/app/agents/contracts.py:78`
 - ADR-008: `architecture/adr/adr-008-cost-controls.md`
 
 ---
@@ -1407,7 +1411,7 @@ Query `ResearchRunStep` records for the run, find last COMPLETED step, resume fr
 
 ### Codebase References
 
-- MAX_LLM_ATTEMPTS: `backend/app/agents/contracts.py:59` (2)
+- MAX_LLM_ATTEMPTS: `backend/app/agents/contracts.py:71` (2)
 - State machines: `backend/app/models/state_machines.py` — VALID_RUN_TRANSITIONS, TERMINAL_RUN_STATUSES
 - ProviderBase retry: `backend/app/providers/base.py`
 - Phase 8 retry logic: `backend/app/agents/company_research/agent.py` — `_run_step_llm` with retry
@@ -1785,16 +1789,17 @@ Downstream consumers query these tables filtered by `agent_name = "industry_rese
 | Unit tests | TO DO | Large | Agent core |
 | Integration tests | TO DO | Medium | Agent core |
 
-#### Phase 9d: API Integration and Golden Dataset
+#### Phase 9d: Golden Dataset
 
 | Task | Status | Effort | Dependencies |
 |---|---|---|---|
-| API endpoint: `POST /api/v1/research/industry` | TO DO | Small | 9c |
 | Golden dataset tests (3-5 industries) | TO DO | Medium | 9c |
+
+**Note**: REST API endpoints (`POST /api/v1/research/industry`, etc.) are Phase 20 scope — see §30.
 
 ### Estimated Remaining Effort: 3-4 Days
 
-Phase 9a and 9b are partially complete. The remaining work is primarily 9b (tools, prompts), 9c (agent core + tests), and 9d (API + golden dataset).
+Phase 9a and 9b are partially complete. The remaining work is primarily 9b (tools, prompts), 9c (agent core + tests), and 9d (golden dataset).
 
 ---
 
@@ -1958,7 +1963,7 @@ Phase 9a and 9b are partially complete. The remaining work is primarily 9b (tool
 | D-04 | 14 finding categories; `growth_rate` merged into `growth_drivers` | Semantic consistency and queryability |
 | D-05 | Porter's Five Forces as structured findings, not free-form text | Framework adherence enforced by schema |
 | D-06 | SearchProvider = direct dependency; MacroDataProvider = limited, non-blocking | Phase 9 uses macro for context only; Phase 13 owns full macro |
-| D-07 | 20,000 token budget (not 30,000) | 30K is Financial Analysis Agent's budget; 20K consistent with architecture spec |
+| D-07 | 20,000 token budget (not 30,000) | 30K is Company Research Agent's budget; 20K consistent with architecture spec |
 | D-08 | `ResearchDocument.company_id=NULL` for industry documents | Field already nullable; no schema change |
 | D-09 | Concurrency lock keyed by `industry_id:observation_date`; three mechanisms separated | Prevents cross-temporal blocking; independent evolution |
 | D-10 | Phase 8 reuse: 20 Category A, 10 Category B, 4 Category C | Explicit classification replaces ambiguous "reuse" |
@@ -2052,9 +2057,9 @@ No blockers. Mock providers sufficient for development and testing.
 | 3 | ResearchRunCreate schema validator (XOR) | **COMPLETE** | Phase 9.1, @model_validator |
 | 4 | IndustryResearchRequest contract | **COMPLETE** | Phase 9.2, contracts.py:605-614 |
 | 5 | IndustryResearchConfig contract | **COMPLETE** | Phase 9.2, contracts.py:589-602 |
-| 6 | INDUSTRY_FINDING_CATEGORIES (14 categories) | **COMPLETE** | Phase 9.2, contracts.py:60-75 |
+| 6 | INDUSTRY_FINDING_CATEGORIES (14 categories) | **COMPLETE** | Phase 9.2, contracts.py:81-98 |
 | 7 | INDUSTRY_RESEARCH_STEPS (7 steps) | **COMPLETE** | Phase 9.2, contracts.py:617-663 |
-| 8 | Token budget constants (20K budget, 16K warning) | **COMPLETE** | Phase 9.2, contracts.py:56-57 |
+| 8 | Token budget constants (20K budget, 16K warning) | **COMPLETE** | Phase 9.2, contracts.py:77-78 |
 | 9 | Industry-specific tool I/O schemas (5 new) | **TO DO** | ValidateIndustry, DiscoverIndustrySources, SearchIndustryData, GetMacroIndicators, GetIndustryCompanies |
 | 10 | IndustryResearchTools class (8 tools) | **TO DO** | 3 reused (retrieve_document, persist_evidence, persist_findings), 5 new |
 | 11 | Agent prompts (evidence extraction, industry analysis, gap/contradiction) | **TO DO** | Follow Phase 8 prompt security patterns |
@@ -2069,15 +2074,15 @@ No blockers. Mock providers sufficient for development and testing.
 | 20 | Unit tests — error handling | **TO DO** | 10-15 tests |
 | 21 | Integration tests — full run | **TO DO** | 5-8 tests |
 | 22 | Golden dataset tests | **TO DO** | 3-5 reference industries |
-| 23 | API endpoint (POST /api/v1/research/industry) | **TO DO** | Small effort, depends on agent core |
+| 23 | API endpoint (POST /api/v1/research/industry) | **PHASE 20** | Transport-independent; REST API deferred to Phase 20 (§30) |
 | 24 | ADR-010 (Industry-Level Research Run Identity) | **RECOMMENDED** | Formal documentation of target_type decision |
 | 25 | Category C shared extraction (app.agents.base) | **DEFERRED** | Recommended before Phase 10; ~200 lines duplicated |
 
 ### Summary
 
 - **8 of 25 items COMPLETE** (items 1-8: schema, contracts, constants)
-- **15 of 25 items TO DO** (items 9-23: tools, agent, prompts, tests, API)
-- **2 of 25 items DEFERRED/RECOMMENDED** (items 24-25: ADR-010, shared extraction)
+- **14 of 25 items TO DO** (items 9-22: tools, agent, prompts, tests)
+- **3 of 25 items DEFERRED/RECOMMENDED/PHASE 20** (items 23-25: API, ADR-010, shared extraction)
 - **0 blockers** — all prerequisites satisfied
 - **Architecture reuses ~55% of Phase 8** (20 Category A direct-reuse components)
 - **Estimated remaining effort: 3-4 days** for an experienced developer familiar with Phase 8
