@@ -364,9 +364,40 @@ Post-audit remediation of 6 findings from Phase 7 implementation audit:
 
 ---
 
+### Phase 8.1: Company Research Agent Contracts & Schemas — COMPLETE
+
+- [x] `app/agents/__init__.py` — Agent module init
+- [x] `app/agents/contracts.py` — All Phase 8.1 typed contracts (~480 lines):
+  - `IdentifierType` enum (NSE_SYMBOL, BSE_CODE, ISIN)
+  - `FINDING_CATEGORIES` frozenset (14 categories)
+  - Constants: AGENT_TOKEN_BUDGET=30,000, AGENT_TOKEN_WARNING_THRESHOLD=24,000, AGENT_NAME, MAX_LLM_ATTEMPTS=2
+  - `CompanyResearchRequest` (frozen) — agent input contract
+  - `CompanyResearchConfig` (frozen) — agent configuration
+  - `SourceCandidate` (frozen) — generic source representation (Filing/Transcript/News)
+  - 8 tool I/O contracts (validate_company through persist_findings)
+  - `EvidenceExtractionOutput` — LLM structured output schema
+  - `FindingGenerationOutput` — LLM structured output schema with evidence_indices
+  - `FindingValidationResult` — deterministic validation results
+  - `TokenBudget` (mutable) — cumulative usage tracking with Decimal utilization_pct
+  - `StepDefinition` + `COMPANY_RESEARCH_STEPS` — 7-step workflow configuration
+- [x] `tests/agents/__init__.py` — Test package init
+- [x] `tests/agents/test_contracts.py` — 126 comprehensive tests (~750 lines):
+  - 20+ test classes covering all contract areas
+  - Constants, enums, request/config, SourceCandidate, all 8 tools, LLM outputs
+  - Validation (frozen immutability, field constraints, boundary values)
+  - Enum reuse verification (DocumentType, SourceTier, EvidenceType, FindingType, ConfidenceLevel)
+  - JSON serialization round-trip tests with Decimal preservation
+- [x] `pyproject.toml` — Added agents per-file ignore for ruff TCH rules
+- [x] Quality gates: 126 tests passing, ruff clean, mypy strict clean
+- [x] Zero database schema changes
+- [x] Zero new dependencies
+- [x] Full backend: 1612 passed, 7 skipped, 1 known failure (TD-6)
+
+---
+
 ## Current Phase
 
-**Next Phase:** Phase 8 — Company Research Agent (first agent using Phase 7 infrastructure)
+**Next Phase:** Phase 8.2 — Company Research Agent Implementation (orchestrator, tool implementations, LLM integration)
 
 ---
 

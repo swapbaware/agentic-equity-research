@@ -417,7 +417,7 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - Token budget enforcement
 - Reproducibility (same inputs → structurally consistent output)
 
-**Status:** NOT STARTED
+**Status:** Phase 8.1 (Contracts & Schemas) COMPLETE — Phase 8.2 (Agent Implementation) NOT STARTED
 
 ---
 
