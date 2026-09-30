@@ -359,7 +359,7 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - Finding persistence: finding with evidence reference round-trip
 - ResearchState typed access: correct fields, type safety
 
-**Status:** COMPLETE — Commit: (pending)
+**Status:** COMPLETE — Commit: `2f6c8a9`
 
 **Phase 7 Implementation Notes:**
 - ResearchRunStatus uses VARCHAR(20) + CHECK constraint (not PG native enum)
