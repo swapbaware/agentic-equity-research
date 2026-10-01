@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-01 (Phase 10.2 competitive moat tools complete)
+**Last Updated:** 2026-10-01 (Phase 10.3 competitive moat prompts complete)
 
 ---
 
@@ -633,7 +633,33 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 - [x] Temporal semantics: `publication_date=None` for search results (never fabricated)
 - [x] Conservative defaults: tool layer preserves provided assessment strength, no upgrades
 
-**Next Sub-Phase:** Phase 10.3 — Competitive Moat Agent Prompts
+### Phase 10.3: Competitive Moat Agent Prompts — COMPLETE
+
+- [x] `MOAT_SYSTEM_PREAMBLE` constant — prompt injection defense per architecture §26
+- [x] `_wrap_document()` helper — XML wrapping for retrieved documents (TD-16 pattern)
+- [x] `moat_evidence_extraction_prompt()` — Step 4: moat-focused evidence extraction targeting `EvidenceExtractionOutput`
+- [x] `moat_analysis_prompt()` — Step 5: 16-type moat assessment targeting `MoatAnalysisOutput`
+- [x] `moat_durability_challenge_prompt()` — Step 7: durability/challenge analysis targeting `DurabilityChallengeOutput`
+- [x] All prompts include MOAT_SYSTEM_PREAMBLE (AC-24)
+- [x] Evidence extraction wraps documents in `<retrieved_document>` XML tags (AC-23)
+- [x] Anti-hallucination instructions in all three prompts
+- [x] Management claims classified as MANAGEMENT_CLAIM, never FACT
+- [x] Counter-evidence mandate for non-NONE moats
+- [x] Conservative default: NONE preferred over unsupported conclusions
+- [x] Adversarial mandate in durability challenge prompt
+- [x] All 16 MoatType values listed in analysis prompt
+- [x] All 13 per-moat finding categories listed in analysis prompt
+- [x] All 6 cross-cutting finding categories listed in durability prompt
+- [x] Peer over-extrapolation warning in analysis prompt
+- [x] Snippet confidence guidance in evidence extraction
+- [x] Pure functions: deterministic, no DB/network/LLM calls, no side effects
+- [x] No secrets in any prompt
+- [x] 93 unit tests — all passing
+- [x] ruff check clean, ruff format clean
+- [x] mypy strict clean
+- [x] Full backend suite: 2192 passed, 7 skipped, 0 failed
+
+**Next Sub-Phase:** Phase 10.4 — Competitive Moat Agent Orchestration
 
 ---
 
@@ -755,7 +781,6 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Next Actions
 
-1. **Phase 10.3: Competitive Moat Agent Prompts** — prompt templates for moat analysis, durability challenge, validation
-2. **Phase 10.4: Competitive Moat Agent Orchestration** — LangGraph agent implementation
+1. **Phase 10.4: Competitive Moat Agent Orchestration** — LangGraph agent implementation
 3. **SEBI XBRL integration** for authoritative financial data
 4. **Evaluate Celery vs Temporal** (ADR-002) for background tasks
