@@ -111,36 +111,38 @@ class TestWrapDocument:
 
 class TestMoatEvidenceExtractionPrompt:
     def test_includes_system_preamble(self) -> None:
-        result = moat_evidence_extraction_prompt("Infosys", "IT Services", "doc content", "s1", "Annual Report")
+        result = moat_evidence_extraction_prompt(
+            "Infosys", "IT Services", "doc content", "s1", "Annual Report", "2024-06-30"
+        )
         assert MOAT_SYSTEM_PREAMBLE in result
 
     def test_includes_company_name(self) -> None:
-        result = moat_evidence_extraction_prompt("TCS", None, "doc", "s1", "title")
+        result = moat_evidence_extraction_prompt("TCS", None, "doc", "s1", "title", "2024-06-30")
         assert "Company: TCS" in result
 
     def test_includes_industry_name_when_provided(self) -> None:
-        result = moat_evidence_extraction_prompt("TCS", "IT Services", "doc", "s1", "title")
+        result = moat_evidence_extraction_prompt("TCS", "IT Services", "doc", "s1", "title", "2024-06-30")
         assert "Industry: IT Services" in result
 
     def test_omits_industry_line_when_none(self) -> None:
-        result = moat_evidence_extraction_prompt("TCS", None, "doc", "s1", "title")
+        result = moat_evidence_extraction_prompt("TCS", None, "doc", "s1", "title", "2024-06-30")
         assert "Industry:" not in result
 
     def test_wraps_document_in_xml_tags(self) -> None:
-        result = moat_evidence_extraction_prompt("Reliance", None, "document body", "src-42", "AR 2024")
+        result = moat_evidence_extraction_prompt("Reliance", None, "document body", "src-42", "AR 2024", "2024-06-30")
         assert '<retrieved_document source_id="src-42" title="AR 2024">' in result
         assert "</retrieved_document>" in result
         assert "document body" in result
 
     def test_mentions_moat_focus_areas(self) -> None:
-        result = moat_evidence_extraction_prompt("HDFC", None, "doc", "s1", "title")
+        result = moat_evidence_extraction_prompt("HDFC", None, "doc", "s1", "title", "2024-06-30")
         assert "Brand" in result or "brand" in result.lower()
         assert "Network effect" in result or "network" in result.lower()
         assert "Switching cost" in result or "switching" in result.lower()
         assert "Regulatory" in result or "regulatory" in result.lower()
 
     def test_specifies_evidence_types(self) -> None:
-        result = moat_evidence_extraction_prompt("ITC", None, "doc", "s1", "title")
+        result = moat_evidence_extraction_prompt("ITC", None, "doc", "s1", "title", "2024-06-30")
         assert "FACT" in result
         assert "FINANCIAL_DATA" in result
         assert "MANAGEMENT_STATEMENT" in result
@@ -148,37 +150,37 @@ class TestMoatEvidenceExtractionPrompt:
         assert "REGULATORY_FILING" in result
 
     def test_specifies_confidence_levels(self) -> None:
-        result = moat_evidence_extraction_prompt("ITC", None, "doc", "s1", "title")
+        result = moat_evidence_extraction_prompt("ITC", None, "doc", "s1", "title", "2024-06-30")
         assert "HIGH" in result
         assert "MEDIUM" in result
         assert "LOW" in result
 
     def test_requests_evidences_json_key(self) -> None:
-        result = moat_evidence_extraction_prompt("SBI", None, "doc", "s1", "title")
+        result = moat_evidence_extraction_prompt("SBI", None, "doc", "s1", "title", "2024-06-30")
         assert '"evidences"' in result
 
     def test_prohibits_hallucination(self) -> None:
-        result = moat_evidence_extraction_prompt("Wipro", None, "doc", "s1", "title")
+        result = moat_evidence_extraction_prompt("Wipro", None, "doc", "s1", "title", "2024-06-30")
         lower = result.lower()
         assert "do not invent" in lower or "do not fabricate" in lower
 
     def test_management_statement_classification_instruction(self) -> None:
-        result = moat_evidence_extraction_prompt("ICICI", None, "doc", "s1", "title")
+        result = moat_evidence_extraction_prompt("ICICI", None, "doc", "s1", "title", "2024-06-30")
         assert "MANAGEMENT_STATEMENT" in result
         assert "never as FACT" in result or "not FACT" in result.lower()
 
     def test_snippet_confidence_guidance(self) -> None:
-        result = moat_evidence_extraction_prompt("Bajaj", None, "doc", "s1", "title")
+        result = moat_evidence_extraction_prompt("Bajaj", None, "doc", "s1", "title", "2024-06-30")
         assert "snippet" in result.lower()
 
     def test_contains_no_secrets(self) -> None:
-        result = moat_evidence_extraction_prompt("Test Co", None, "doc", "s1", "title")
+        result = moat_evidence_extraction_prompt("Test Co", None, "doc", "s1", "title", "2024-06-30")
         for keyword in ("api_key", "password", "token=", "secret", "credential"):
             assert keyword not in result.lower()
 
     def test_is_pure_function(self) -> None:
-        a = moat_evidence_extraction_prompt("X", "Y", "d", "s", "t")
-        b = moat_evidence_extraction_prompt("X", "Y", "d", "s", "t")
+        a = moat_evidence_extraction_prompt("X", "Y", "d", "s", "t", "2024-06-30")
+        b = moat_evidence_extraction_prompt("X", "Y", "d", "s", "t", "2024-06-30")
         assert a == b
 
 
@@ -485,7 +487,7 @@ class TestCrossCuttingProperties:
     @pytest.mark.parametrize(
         "prompt_fn,args",
         [
-            (moat_evidence_extraction_prompt, ("Co", None, "doc", "s", "t")),
+            (moat_evidence_extraction_prompt, ("Co", None, "doc", "s", "t", "2024-06-30")),
             (moat_analysis_prompt, ("Co", None, "ev", None, None, None)),
             (moat_durability_challenge_prompt, ("Co", "assess", "ev")),
         ],
@@ -497,7 +499,7 @@ class TestCrossCuttingProperties:
     @pytest.mark.parametrize(
         "prompt_fn,args",
         [
-            (moat_evidence_extraction_prompt, ("Co", None, "doc", "s", "t")),
+            (moat_evidence_extraction_prompt, ("Co", None, "doc", "s", "t", "2024-06-30")),
             (moat_analysis_prompt, ("Co", None, "ev", None, None, None)),
             (moat_durability_challenge_prompt, ("Co", "assess", "ev")),
         ],
@@ -510,7 +512,7 @@ class TestCrossCuttingProperties:
     @pytest.mark.parametrize(
         "prompt_fn,args",
         [
-            (moat_evidence_extraction_prompt, ("Co", None, "doc", "s", "t")),
+            (moat_evidence_extraction_prompt, ("Co", None, "doc", "s", "t", "2024-06-30")),
             (moat_analysis_prompt, ("Co", None, "ev", None, None, None)),
             (moat_durability_challenge_prompt, ("Co", "assess", "ev")),
         ],
@@ -523,7 +525,7 @@ class TestCrossCuttingProperties:
     @pytest.mark.parametrize(
         "prompt_fn,args",
         [
-            (moat_evidence_extraction_prompt, ("Co", None, "doc", "s", "t")),
+            (moat_evidence_extraction_prompt, ("Co", None, "doc", "s", "t", "2024-06-30")),
             (moat_analysis_prompt, ("Co", None, "ev", None, None, None)),
             (moat_durability_challenge_prompt, ("Co", "assess", "ev")),
         ],
@@ -534,7 +536,7 @@ class TestCrossCuttingProperties:
         assert len(result) > 0
 
     def test_evidence_extraction_wraps_document(self) -> None:
-        result = moat_evidence_extraction_prompt("Co", None, "content", "src-123", "Title")
+        result = moat_evidence_extraction_prompt("Co", None, "content", "src-123", "Title", "2024-06-30")
         assert '<retrieved_document source_id="src-123" title="Title">' in result
         assert "</retrieved_document>" in result
 
@@ -545,3 +547,76 @@ class TestCrossCuttingProperties:
     def test_durability_does_not_wrap_document(self) -> None:
         result = moat_durability_challenge_prompt("Co", "assessments", "evidence")
         assert "<retrieved_document source_id=" not in result
+
+
+# ---------------------------------------------------------------------------
+# R-01: Temporal awareness (evidence extraction)
+# ---------------------------------------------------------------------------
+
+
+class TestTemporalAwareness:
+    """Tests for R-01: observation_date parameter and temporal rules."""
+
+    def test_observation_date_parameter_accepted(self) -> None:
+        result = moat_evidence_extraction_prompt("TCS", "IT Services", "doc", "s1", "title", "2024-03-31")
+        assert isinstance(result, str)
+
+    def test_observation_date_appears_in_prompt(self) -> None:
+        result = moat_evidence_extraction_prompt("TCS", None, "doc", "s1", "title", "2024-03-31")
+        assert "2024-03-31" in result
+
+    def test_temporal_rule_observation_date_boundary(self) -> None:
+        result = moat_evidence_extraction_prompt("TCS", None, "doc", "s1", "title", "2024-03-31")
+        lower = result.lower()
+        assert "observation date" in lower
+        assert "<= the observation date" in lower or "on or before" in lower
+
+    def test_date_type_distinction(self) -> None:
+        result = moat_evidence_extraction_prompt("TCS", None, "doc", "s1", "title", "2024-03-31")
+        assert "publication_date" in result
+        assert "document_date" in result
+        assert "filing_date" in result
+        assert "period_end" in result
+        assert "information_available_date" in result
+
+    def test_post_observation_exclusion_instruction(self) -> None:
+        result = moat_evidence_extraction_prompt("TCS", None, "doc", "s1", "title", "2024-03-31")
+        lower = result.lower()
+        assert "after the observation date" in lower or "after" in lower and "exclude" in lower
+
+    def test_no_fabricated_dates_instruction(self) -> None:
+        result = moat_evidence_extraction_prompt("TCS", None, "doc", "s1", "title", "2024-03-31")
+        lower = result.lower()
+        assert "do not fabricate" in lower and "information_available_date" in lower
+
+    def test_uncertainty_preservation_instruction(self) -> None:
+        result = moat_evidence_extraction_prompt("TCS", None, "doc", "s1", "title", "2024-03-31")
+        lower = result.lower()
+        assert "uncertainty" in lower
+
+
+# ---------------------------------------------------------------------------
+# R-02: Date fabrication prohibition (all three prompts)
+# ---------------------------------------------------------------------------
+
+
+class TestDateFabricationProhibition:
+    """Tests for R-02: 'dates' in hallucination prohibition."""
+
+    def test_evidence_extraction_prohibits_date_invention(self) -> None:
+        result = moat_evidence_extraction_prompt("TCS", None, "doc", "s1", "title", "2024-03-31")
+        lower = result.lower()
+        assert "do not invent" in lower
+        assert "dates" in lower
+
+    def test_analysis_prohibits_date_invention(self) -> None:
+        result = moat_analysis_prompt("TCS", None, "evidence", None, None, None)
+        lower = result.lower()
+        assert "do not invent" in lower
+        assert "dates" in lower
+
+    def test_durability_prohibits_date_invention(self) -> None:
+        result = moat_durability_challenge_prompt("TCS", "assessments", "evidence")
+        lower = result.lower()
+        assert "do not invent" in lower
+        assert "dates" in lower

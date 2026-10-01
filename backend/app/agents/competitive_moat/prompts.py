@@ -28,6 +28,7 @@ def moat_evidence_extraction_prompt(
     document_content: str,
     source_id: str,
     document_title: str,
+    observation_date: str,
 ) -> str:
     """Build the prompt for Step 4: moat-focused evidence extraction.
 
@@ -38,7 +39,8 @@ def moat_evidence_extraction_prompt(
     return (
         f"{MOAT_SYSTEM_PREAMBLE}\n\n"
         f"Company: {company_name}\n"
-        f"{industry_line}\n"
+        f"{industry_line}"
+        f"Observation date: {observation_date}\n\n"
         f"Extract all evidence relevant to competitive advantages (moats) "
         f"from the following document.  Focus on:\n"
         f"- Brand recognition, pricing power, customer loyalty\n"
@@ -50,11 +52,29 @@ def moat_evidence_extraction_prompt(
         f"- Intellectual property, patents, proprietary technology\n"
         f"- Data assets, ecosystem integration\n"
         f"- Supply chain advantages, location benefits, capital access\n\n"
+        f"TEMPORAL RULES:\n"
+        f"- Only consider information that was available on or before the "
+        f"observation date ({observation_date}).\n"
+        f"- Each piece of evidence has an information_available_date — the "
+        f"date the information became publicly available.  This must be "
+        f"<= the observation date.\n"
+        f"- Distinguish between: publication_date (when the document was "
+        f"published), document_date (the date on the document), "
+        f"filing_date (when a filing was submitted), period_end (the end "
+        f"of the reporting period), and information_available_date (when "
+        f"the information became publicly available).\n"
+        f"- Do NOT fabricate an information_available_date.  If the date "
+        f"cannot be determined from the document, leave it null and note "
+        f"the uncertainty.\n"
+        f"- If the document contains information about events after the "
+        f"observation date, exclude that evidence.\n"
+        f"- When temporal context is ambiguous, preserve the uncertainty "
+        f"rather than assuming a date.\n\n"
         f"The content may be a search snippet rather than a complete "
         f"document — extract only what is explicitly stated, do not infer "
         f"beyond the text.  Do NOT invent financial figures, market share "
-        f"numbers, competitor names, or evidence not present in the "
-        f"document.\n\n"
+        f"numbers, dates, competitor names, or evidence not present in "
+        f"the document.\n\n"
         f"For each piece of evidence, classify its type (FACT, "
         f"FINANCIAL_DATA, MANAGEMENT_STATEMENT, ANALYST_OPINION, "
         f"REGULATORY_FILING), state the claim clearly, provide context, "
@@ -125,7 +145,7 @@ def moat_analysis_prompt(
         f"- Every non-NONE moat MUST have counter-evidence considered.  "
         f"Populate counter_evidence_indices or explain why none exists.\n"
         f"- Do NOT invent financial figures, market share numbers, "
-        f"competitor names, or evidence not in the provided data.\n"
+        f"dates, competitor names, or evidence not in the provided data.\n"
         f"- Peer information is limited context, not a full competitor "
         f"analysis — do not over-extrapolate.\n"
         f"- evidence_indices and counter_evidence_indices are 0-based "
@@ -187,7 +207,7 @@ def moat_durability_challenge_prompt(
         f"IMPORTANT RULES:\n"
         f"- Be adversarial: attempt to disprove each moat assessment.\n"
         f"- Do NOT invent financial figures, market share numbers, "
-        f"competitor names, or evidence not in the provided data.\n"
+        f"dates, competitor names, or evidence not in the provided data.\n"
         f"- Management claims must remain MANAGEMENT_CLAIM, not FACT.\n"
         f"- Your analysis outputs are AI_INFERENCE, not FACT.\n"
         f"- Prefer conservative conclusions — NONE is better than an "
