@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-01 (Phase 10.3 competitive moat prompts complete)
+**Last Updated:** 2026-10-01 (Phase 10.4 competitive moat agent orchestration complete)
 
 ---
 
@@ -659,7 +659,30 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 - [x] mypy strict clean
 - [x] Full backend suite: 2192 passed, 7 skipped, 0 failed
 
-**Next Sub-Phase:** Phase 10.4 — Competitive Moat Agent Orchestration
+### Phase 10.4: Competitive Moat Agent Orchestration — COMPLETE
+
+- [x] CompetitiveMoatAgent class with constructor DI (session, run_service, search, news, corporate_filings, llm)
+- [x] 7-step sequential workflow: company_context_load → moat_source_discovery → document_retrieval → evidence_extraction → moat_analysis → moat_validation → durability_challenge
+- [x] _run_step_deterministic() — wraps deterministic steps with start/complete/fail lifecycle
+- [x] _run_step_llm() — wraps LLM steps with retry loop (max_attempts=2), AgentExecution tracking, TokenBudget enforcement
+- [x] Step 1 (company_context_load): loads company context and peer data via tools
+- [x] Step 2 (moat_source_discovery): discovers moat-relevant sources via tools
+- [x] Step 3 (document_retrieval): retrieves documents, skips failures gracefully
+- [x] Step 4 (evidence_extraction): per-document LLM extraction with budget checks
+- [x] Step 5 (moat_analysis): LLM analysis producing 16 assessments + findings
+- [x] Step 6 (moat_validation): 9 deterministic validation checks (coverage_completeness, evidence_sufficiency, durability_presence, threat_presence, temporal_consistency, category_validity, content_non_empty, fact_evidence_linkage, strength_confidence_consistency)
+- [x] Step 7 (durability_challenge): LLM adversarial durability/counter-evidence analysis
+- [x] Validation downgrades: evidence_sufficiency → NONE, WIDE+LOW → MODERATE
+- [x] Partial completion: steps_completed >= 5 → PARTIAL; otherwise → FAILED
+- [x] Token budget: 25K cumulative, 20K warning threshold
+- [x] Frozen MoatResearchResult model
+- [x] Phase 8/9 agent patterns followed exactly (MockRunService, _build_agent, _make_* helpers)
+- [x] 61 unit tests across 16 test classes — all passing
+- [x] ruff check clean, ruff format clean
+- [x] mypy clean (pre-existing yahoo_finance.py issue unrelated)
+- [x] Full competitive moat test suite: 164 passed (61 agent + 103 prompts), 0 failed
+
+**Next Sub-Phase:** Phase 10.5 — Competitive Moat Agent API Endpoints (future)
 
 ---
 
@@ -689,6 +712,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 - Company Research Agent: 7-step sequential orchestrator (validate → discover → retrieve → extract → generate → validate → gap/contradiction), 8 tool implementations, LLM integration with structured output parsing, evidence extraction and persistence, finding generation with evidence linking, deterministic finding validation, gap/contradiction detection, token budget enforcement (30K hard/24K warning), retry handling (MAX_LLM_ATTEMPTS=2), prompt injection defense; 64 tests with 5 golden scenarios
 - Industry Research Agent Skeleton (Phase 9.3b.1): 7-step sequential orchestrator (industry_validation → source_discovery → document_retrieval → evidence_extraction[stub] → industry_analysis[stub] → finding_validation → gap_contradiction[stub]), token budget enforcement (20K hard/16K warning), three-tier error handling, ResearchRun lifecycle (target_type="industry"), LLM steps as stub boundaries; 46 tests
 - Industry Research Agent LLM Reasoning (Phase 9.3b.2): LLM stubs replaced with real implementations — evidence extraction (per-document LLM calls with budget checks), industry analysis (finding generation with evidence linking via indices), gap/contradiction detection, finding validation enhanced to 4 criteria (category, content, FACT-evidence, temporal), prompt injection defense, structured output parsing; 76 tests
+- Competitive Moat Agent (Phase 10): contracts (10.1), tools (10.2), prompts (10.3), orchestration (10.4) — 7-step sequential workflow, 16 moat types, 9 deterministic validation checks, token budget enforcement, partial completion semantics, adversarial durability challenge; 164 tests
 
 ---
 
