@@ -261,6 +261,8 @@ class LoadCompanyContextOutput(BaseModel):
     industry_name: str | None
     company_findings: list[FindingSummary]
     industry_findings: list[FindingSummary]
+    has_company_research: bool
+    has_industry_research: bool
 
 class FindingSummary(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -270,6 +272,8 @@ class FindingSummary(BaseModel):
     content: str
     confidence: ConfidenceLevel
 ```
+
+> **Note**: The abbreviated contract shown here is the same as the authoritative Step 1 contract defined in §18. See §18 "Step 1: Company Context Load" for the canonical `LoadContextOutput` definition including `nse_symbol`, `has_company_research`, and `has_industry_research` fields.
 
 The tool queries `ResearchRunService` for the latest COMPLETED runs and extracts findings. No external API calls — purely database reads.
 
@@ -604,18 +608,16 @@ Counter-evidence is a first-class concept. For every moat assessed as non-NONE, 
 
 Counter-evidence is captured in two ways:
 1. **ResearchFinding with `category='counter_evidence'`** — documented in the research findings with `FindingType.AI_INFERENCE` or `FindingType.FACT` depending on whether it's observed or hypothesized.
-2. **`threats` JSONB field on MoatAssessment** — structured threats per moat type stored as:
+2. **`threats` JSONB field on MoatAssessment** — structured threats per moat type stored as a JSON array of threat objects (see §21 "Threats Serialization Path" for the full conversion chain from `list[ThreatItem]` to JSONB):
    ```json
-   {
-     "threats": [
-       {
-         "description": "Deregulation could remove licensing barriers",
-         "severity": "HIGH",
-         "timeframe": "2-3 years",
-         "evidence_basis": "Government committee report recommending sector reform"
-       }
-     ]
-   }
+   [
+     {
+       "description": "Deregulation could remove licensing barriers",
+       "severity": "HIGH",
+       "timeframe": "2-3 years",
+       "evidence_basis": "Government committee report recommending sector reform"
+     }
+   ]
    ```
 
 ### Counter-Evidence Mandate
@@ -997,7 +999,7 @@ class MoatAssessmentItem(BaseModel):
     moat_type: MoatType
     strength: MoatStrength
     durability_years: int | None
-    threats: dict[str, object] | None
+    threats: list[dict[str, object]] | None
     competitor_comparison: dict[str, object] | None
     confidence: ConfidenceLevel
     explanation: str | None
@@ -1013,6 +1015,17 @@ class PersistMoatAssessmentsOutput(BaseModel):
     model_config = ConfigDict(frozen=True)
     assessment_ids: list[uuid.UUID]
 ```
+
+#### Threats Serialization Path
+
+The `threats` field undergoes the following conversion between the LLM output boundary and persistence:
+
+1. **LLM output** (Step 5): `MoatAssessmentDraft.threats` is `list[ThreatItem] | None` — a typed Pydantic list.
+2. **Agent conversion** (between Step 5/6 and `persist_moat_assessments`): Each `ThreatItem` is serialized via `item.model_dump()`, producing `list[dict[str, object]]`. `None` is preserved as `None`.
+3. **Persistence contract**: `MoatAssessmentItem.threats` is `list[dict[str, object]] | None` — the serialized array representation.
+4. **JSONB column**: The `analysis.moat_assessment.threats` column (`JSONB, nullable=True`) accepts any JSON-serializable value. The serialized `list[dict]` is stored as a JSON array. No semantic transformation occurs — the threat content is preserved verbatim.
+
+The authoritative conversion point is the agent code between Step 5 output parsing and the `persist_moat_assessments` tool call. The ORM model's `Mapped[dict[str, object] | None]` type annotation is a Python-level hint; SQLAlchemy's JSONB column accepts both JSON objects and arrays at the database level.
 
 ---
 
@@ -1085,7 +1098,7 @@ Uses `validate_run_transition()` from `backend/app/models/state_machines.py`. Te
 ```python
 MOAT_RESEARCH_STEPS: tuple[StepDefinition, ...] = (
     StepDefinition(step_order=1, step_name="company_context_load",  step_type=STEP_TYPE_DETERMINISTIC, timeout_seconds=10),
-    StepDefinition(step_order=2, step_name="moat_source_discovery", step_type=STEP_TYPE_PROVIDER_CALL, timeout_seconds=30),
+    StepDefinition(step_order=2, step_name="moat_source_discovery", step_type=STEP_TYPE_PROVIDER_CALL, timeout_seconds=30),  # see timeout rationale below
     StepDefinition(step_order=3, step_name="document_retrieval",    step_type=STEP_TYPE_PROVIDER_CALL, timeout_seconds=60),
     StepDefinition(step_order=4, step_name="evidence_extraction",   step_type=STEP_TYPE_LLM_REASONING, timeout_seconds=120, uses_llm=True),
     StepDefinition(step_order=5, step_name="moat_analysis",         step_type=STEP_TYPE_LLM_REASONING, timeout_seconds=120, uses_llm=True),
@@ -1093,6 +1106,10 @@ MOAT_RESEARCH_STEPS: tuple[StepDefinition, ...] = (
     StepDefinition(step_order=7, step_name="durability_challenge",  step_type=STEP_TYPE_LLM_REASONING, timeout_seconds=60, uses_llm=True),
 )
 ```
+
+#### Step 2 Timeout Rationale
+
+`moat_source_discovery` uses two providers (SearchProvider, NewsProvider) with `timeout_seconds=30`. This is consistent with both Phase 8's `source_discovery` step — which uses 30 seconds despite invoking four providers (CorporateFilingsProvider, TranscriptProvider, NewsProvider, SearchProvider — see `company_research/tools.py:132-230`) — and Phase 9's `industry_source_discovery`, which uses 30 seconds with two providers (SearchProvider, NewsProvider). The 30-second timeout is sufficient because each provider call is wrapped in `try/except ProviderError` and fails fast on error rather than blocking, and provider calls execute sequentially with individual provider-level timeouts enforced by the shared `RateLimiter`. CorporateFilingsProvider is available to the tools class but is used in Step 3 (document retrieval), not Step 2 (source discovery). Retaining 30 seconds maintains consistency across all three agent phases.
 
 ### Agent Execution Recording
 
