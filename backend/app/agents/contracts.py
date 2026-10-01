@@ -1,4 +1,4 @@
-"""Typed contracts for the Company Research Agent.
+"""Typed contracts for the research agents.
 
 Defines Pydantic v2 frozen models for:
 - Research request and configuration
@@ -9,6 +9,7 @@ Defines Pydantic v2 frozen models for:
 - Token budget tracking
 - Step configuration
 - Finding category constants
+- Competitive Moat Agent contracts (Phase 10)
 """
 
 from __future__ import annotations
@@ -25,6 +26,8 @@ from app.models.enums import (
     DocumentType,
     EvidenceType,
     FindingType,
+    MoatStrength,
+    MoatType,
     SourceTier,
 )
 
@@ -775,6 +778,358 @@ INDUSTRY_RESEARCH_STEPS: tuple[StepDefinition, ...] = (
     StepDefinition(
         step_order=7,
         step_name="gap_contradiction_analysis",
+        step_type=STEP_TYPE_LLM_REASONING,
+        timeout_seconds=60,
+        uses_llm=True,
+    ),
+)
+
+
+# ===========================================================================
+# Competitive Moat Agent — constants and contracts (Phase 10)
+# ===========================================================================
+
+MOAT_AGENT_TOKEN_BUDGET: int = 25_000
+MOAT_AGENT_TOKEN_WARNING: int = 20_000
+MOAT_AGENT_NAME: str = "competitive_moat_agent"
+
+MOAT_FINDING_CATEGORIES: frozenset[str] = frozenset(
+    {
+        "brand_moat",
+        "cost_advantage_moat",
+        "network_effect_moat",
+        "switching_cost_moat",
+        "distribution_moat",
+        "scale_moat",
+        "regulatory_moat",
+        "intangible_asset_moat",
+        "technology_moat",
+        "ecosystem_moat",
+        "customer_lock_in_moat",
+        "structural_moat",
+        "competitive_position",
+        "moat_durability",
+        "moat_threat",
+        "counter_evidence",
+        "moat_summary",
+        "research_gap",
+        "contradiction",
+    }
+)
+
+MOAT_TYPE_TO_CATEGORY: dict[MoatType, str] = {
+    MoatType.BRAND: "brand_moat",
+    MoatType.COST_ADVANTAGE: "cost_advantage_moat",
+    MoatType.NETWORK_EFFECT: "network_effect_moat",
+    MoatType.SWITCHING_COST: "switching_cost_moat",
+    MoatType.DISTRIBUTION: "distribution_moat",
+    MoatType.SCALE: "scale_moat",
+    MoatType.REGULATORY: "regulatory_moat",
+    MoatType.IP: "intangible_asset_moat",
+    MoatType.TECHNOLOGY: "technology_moat",
+    MoatType.DATA: "technology_moat",
+    MoatType.ECOSYSTEM: "ecosystem_moat",
+    MoatType.CUSTOMER_EMBEDDEDNESS: "customer_lock_in_moat",
+    MoatType.MANUFACTURING: "structural_moat",
+    MoatType.SUPPLY_CHAIN: "structural_moat",
+    MoatType.CAPITAL_ACCESS: "structural_moat",
+    MoatType.LOCATION: "structural_moat",
+}
+
+
+# ---------------------------------------------------------------------------
+# Competitive Moat Agent — request / config / result contracts
+# ---------------------------------------------------------------------------
+
+
+class MoatResearchConfig(BaseModel):
+    """Agent-level configuration for a Competitive Moat Agent run."""
+
+    model_config = ConfigDict(frozen=True)
+
+    token_budget: int = Field(default=MOAT_AGENT_TOKEN_BUDGET, gt=0)
+    token_warning_threshold: int = Field(default=MOAT_AGENT_TOKEN_WARNING, gt=0)
+    max_llm_attempts: int = Field(default=MAX_LLM_ATTEMPTS, ge=1, le=3)
+    document_types: list[DocumentType] | None = None
+    source_limit: int = Field(default=20, ge=1, le=100)
+    concurrent_retrievals: int = Field(default=5, ge=1, le=20)
+    extraction_model: str | None = None
+    analysis_model: str | None = None
+
+
+class MoatResearchRequest(BaseModel):
+    """Input contract for initiating a Competitive Moat Agent run."""
+
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    observation_date: date
+    initiated_by: str = Field(min_length=1, max_length=200)
+    configuration: MoatResearchConfig | None = None
+
+
+class MoatResearchResult(BaseModel):
+    """Output contract returned by CompetitiveMoatAgent.execute()."""
+
+    model_config = ConfigDict(frozen=True)
+
+    status: str = Field(min_length=1, max_length=20)
+    run_id: uuid.UUID | None = None
+    finding_ids: list[uuid.UUID] = Field(default_factory=list)
+    assessment_ids: list[uuid.UUID] = Field(default_factory=list)
+    error: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Step 1: Company Context Load
+# ---------------------------------------------------------------------------
+
+
+class FindingSummary(BaseModel):
+    """Compact representation of an existing finding for context loading."""
+
+    model_config = ConfigDict(frozen=True)
+
+    finding_id: uuid.UUID
+    category: str
+    finding_type: FindingType
+    content: str
+    confidence: ConfidenceLevel
+
+
+class LoadContextInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    industry_id: uuid.UUID | None
+    observation_date: date
+
+
+class LoadContextOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    company_name: str
+    nse_symbol: str | None
+    industry_id: uuid.UUID | None
+    industry_name: str | None
+    company_findings: list[FindingSummary]
+    industry_findings: list[FindingSummary]
+    has_company_research: bool
+    has_industry_research: bool
+
+
+# ---------------------------------------------------------------------------
+# Step 2: Moat Source Discovery
+# ---------------------------------------------------------------------------
+
+
+class DiscoverMoatSourcesInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_name: str
+    nse_symbol: str | None
+    industry_name: str | None
+    observation_date: date
+    document_types: list[DocumentType] | None = None
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+class DiscoverMoatSourcesOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    candidates: list[SourceCandidate]
+
+
+# ---------------------------------------------------------------------------
+# Step 5: Moat Analysis — LLM output schemas
+# ---------------------------------------------------------------------------
+
+
+class ThreatItem(BaseModel):
+    """A single threat to a competitive moat, produced by LLM."""
+
+    model_config = ConfigDict(frozen=True)
+
+    description: str
+    severity: str
+    timeframe: str | None = None
+    evidence_basis: str | None = None
+
+
+class MoatAssessmentDraft(BaseModel):
+    """LLM-produced assessment for one moat type (Step 5 output)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    moat_type: str
+    strength: str
+    durability_years: int | None = None
+    explanation: str
+    threats: list[ThreatItem] | None = None
+    competitor_comparison: dict[str, str] | None = None
+    confidence: str
+    evidence_indices: list[int] | None = None
+    counter_evidence_indices: list[int] | None = None
+
+
+class MoatAnalysisOutput(BaseModel):
+    """LLM structured output from moat analysis (Step 5)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    assessments: list[MoatAssessmentDraft]
+    findings: list[GeneratedFinding]
+
+
+# ---------------------------------------------------------------------------
+# Step 6: Moat Validation
+# ---------------------------------------------------------------------------
+
+
+class MoatValidationIssue(BaseModel):
+    """A single validation issue found during moat assessment validation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    moat_type: str
+    issue_type: str
+    message: str
+    action: str
+
+
+class MoatValidationResult(BaseModel):
+    """Result of moat assessment validation (Step 6)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    total_assessments: int = Field(ge=0)
+    valid_count: int = Field(ge=0)
+    downgraded_count: int = Field(ge=0)
+    issues: list[MoatValidationIssue]
+
+
+# ---------------------------------------------------------------------------
+# Step 7: Durability & Challenge — LLM output schema
+# ---------------------------------------------------------------------------
+
+
+class DurabilityChallengeOutput(BaseModel):
+    """LLM structured output from durability challenge (Step 7)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    findings: list[GeneratedFinding]
+
+
+# ---------------------------------------------------------------------------
+# Moat Tool: get_peer_data
+# ---------------------------------------------------------------------------
+
+
+class GetPeerDataInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    industry_id: uuid.UUID
+    limit: int = Field(default=5, ge=1, le=20)
+
+
+class PeerCompanySummary(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    name: str
+    nse_symbol: str | None = None
+    market_cap: Decimal | None = None
+
+
+class GetPeerDataOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    peers: list[PeerCompanySummary]
+
+
+# ---------------------------------------------------------------------------
+# Moat Tool: persist_moat_assessments
+# ---------------------------------------------------------------------------
+
+
+class MoatAssessmentItem(BaseModel):
+    """A single moat assessment ready for persistence (typed enum fields)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    moat_type: MoatType
+    strength: MoatStrength
+    durability_years: int | None = None
+    threats: list[dict[str, object]] | None = None
+    competitor_comparison: dict[str, object] | None = None
+    confidence: ConfidenceLevel
+    explanation: str | None = None
+    evidence_ids: list[uuid.UUID] = Field(default_factory=list)
+
+
+class PersistMoatAssessmentsInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    research_run_id: uuid.UUID
+    assessments: list[MoatAssessmentItem] = Field(min_length=1)
+
+
+class PersistMoatAssessmentsOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    assessment_ids: list[uuid.UUID]
+
+
+# ---------------------------------------------------------------------------
+# Competitive Moat Agent — step definitions
+# ---------------------------------------------------------------------------
+
+MOAT_RESEARCH_STEPS: tuple[StepDefinition, ...] = (
+    StepDefinition(
+        step_order=1,
+        step_name="company_context_load",
+        step_type=STEP_TYPE_DETERMINISTIC,
+        timeout_seconds=10,
+    ),
+    StepDefinition(
+        step_order=2,
+        step_name="moat_source_discovery",
+        step_type=STEP_TYPE_PROVIDER_CALL,
+        timeout_seconds=30,
+    ),
+    StepDefinition(
+        step_order=3,
+        step_name="document_retrieval",
+        step_type=STEP_TYPE_PROVIDER_CALL,
+        timeout_seconds=60,
+    ),
+    StepDefinition(
+        step_order=4,
+        step_name="evidence_extraction",
+        step_type=STEP_TYPE_LLM_REASONING,
+        timeout_seconds=120,
+        uses_llm=True,
+    ),
+    StepDefinition(
+        step_order=5,
+        step_name="moat_analysis",
+        step_type=STEP_TYPE_LLM_REASONING,
+        timeout_seconds=120,
+        uses_llm=True,
+    ),
+    StepDefinition(
+        step_order=6,
+        step_name="moat_validation",
+        step_type=STEP_TYPE_DETERMINISTIC,
+        timeout_seconds=10,
+    ),
+    StepDefinition(
+        step_order=7,
+        step_name="durability_challenge",
         step_type=STEP_TYPE_LLM_REASONING,
         timeout_seconds=60,
         uses_llm=True,
