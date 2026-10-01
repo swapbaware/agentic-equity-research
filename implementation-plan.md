@@ -533,9 +533,9 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - Phase 10.1: Contracts — 42 Pydantic models, 19 finding categories, 16 moat types, 7 step definitions; 106 tests
 - Phase 10.2: Tools — CompetitiveMoatTools with 8 methods (context loading, source discovery, retrieval, evidence/finding/assessment persistence); 56 tests
 - Phase 10.3: Prompts — 3 prompt functions (evidence extraction, moat analysis, durability challenge) with temporal awareness, prompt injection defense; 93 tests
-- Phase 10.4: Agent Orchestration — CompetitiveMoatAgent with 7-step sequential workflow, 9 deterministic validation checks, token budget enforcement (25K/20K), partial completion, retry handling; 61 tests
+- Phase 10.4: Agent Orchestration — CompetitiveMoatAgent with 7-step sequential workflow, 9 deterministic validation checks, token budget enforcement (25K/20K), partial completion, retry handling; 66 tests (remediation: graduated evidence sufficiency downgrades per §20 Check 2, strength-confidence consistency per §20 Check 9, test rename F-03)
 
-**Total Test Count:** 316 tests across all sub-phases
+**Total Test Count:** 321 tests across all sub-phases
 
 ---
 

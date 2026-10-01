@@ -1257,7 +1257,7 @@ class TestStep6MoatValidation:
                 durability_years=10 if mt == "BRAND" else None,
                 explanation=f"Assessment for {mt}",
                 confidence="HIGH" if mt == "BRAND" else "LOW",
-                evidence_indices=[0] if mt == "BRAND" else None,
+                evidence_indices=[0, 1, 2] if mt == "BRAND" else None,
                 threats=None,
             )
             for mt in _ALL_16_MOAT_TYPES
@@ -1398,7 +1398,7 @@ class TestStep6MoatValidation:
                 durability_years=10 if mt == "BRAND" else None,
                 explanation=f"Assessment for {mt}",
                 confidence="LOW",
-                evidence_indices=[0] if mt == "BRAND" else None,
+                evidence_indices=[0, 1, 2] if mt == "BRAND" else None,
             )
             for mt in _ALL_16_MOAT_TYPES
         ]
@@ -1413,6 +1413,131 @@ class TestStep6MoatValidation:
         assert brand_assessment.strength == "MODERATE"
         sc_issues = [i for i in result.issues if i.issue_type == "strength_confidence_mismatch"]
         assert len(sc_issues) == 1
+
+    def test_wide_with_2_evidence_downgrades_to_moderate(self) -> None:
+        drafts = [
+            MoatAssessmentDraft(
+                moat_type=mt,
+                strength="WIDE" if mt == "BRAND" else "NONE",
+                durability_years=10 if mt == "BRAND" else None,
+                explanation=f"Assessment for {mt}",
+                confidence="HIGH",
+                evidence_indices=[0, 1] if mt == "BRAND" else None,
+            )
+            for mt in _ALL_16_MOAT_TYPES
+        ]
+        validated, result = _validate_moat_assessments(
+            drafts,
+            [],
+            [],
+            [],
+            date(2025, 9, 30),
+        )
+        brand = next(a for a in validated if a.moat_type == "BRAND")
+        assert brand.strength == "MODERATE"
+        ev_issues = [i for i in result.issues if i.issue_type == "insufficient_evidence"]
+        assert len(ev_issues) == 1
+        assert ev_issues[0].action == "downgraded_to_moderate"
+
+    def test_wide_with_1_evidence_downgrades_to_narrow(self) -> None:
+        drafts = [
+            MoatAssessmentDraft(
+                moat_type=mt,
+                strength="WIDE" if mt == "BRAND" else "NONE",
+                durability_years=10 if mt == "BRAND" else None,
+                explanation=f"Assessment for {mt}",
+                confidence="HIGH",
+                evidence_indices=[0] if mt == "BRAND" else None,
+            )
+            for mt in _ALL_16_MOAT_TYPES
+        ]
+        validated, result = _validate_moat_assessments(
+            drafts,
+            [],
+            [],
+            [],
+            date(2025, 9, 30),
+        )
+        brand = next(a for a in validated if a.moat_type == "BRAND")
+        assert brand.strength == "NARROW"
+        ev_issues = [i for i in result.issues if i.issue_type == "insufficient_evidence"]
+        assert len(ev_issues) == 1
+        assert ev_issues[0].action == "downgraded_to_narrow"
+
+    def test_moderate_with_1_evidence_downgrades_to_narrow(self) -> None:
+        drafts = [
+            MoatAssessmentDraft(
+                moat_type=mt,
+                strength="MODERATE" if mt == "BRAND" else "NONE",
+                durability_years=10 if mt == "BRAND" else None,
+                explanation=f"Assessment for {mt}",
+                confidence="MEDIUM",
+                evidence_indices=[0] if mt == "BRAND" else None,
+            )
+            for mt in _ALL_16_MOAT_TYPES
+        ]
+        validated, result = _validate_moat_assessments(
+            drafts,
+            [],
+            [],
+            [],
+            date(2025, 9, 30),
+        )
+        brand = next(a for a in validated if a.moat_type == "BRAND")
+        assert brand.strength == "NARROW"
+        ev_issues = [i for i in result.issues if i.issue_type == "insufficient_evidence"]
+        assert len(ev_issues) == 1
+        assert ev_issues[0].action == "downgraded_to_narrow"
+
+    def test_wide_medium_confidence_downgrades_to_moderate(self) -> None:
+        drafts = [
+            MoatAssessmentDraft(
+                moat_type=mt,
+                strength="WIDE" if mt == "BRAND" else "NONE",
+                durability_years=10 if mt == "BRAND" else None,
+                explanation=f"Assessment for {mt}",
+                confidence="MEDIUM" if mt == "BRAND" else "LOW",
+                evidence_indices=[0, 1, 2] if mt == "BRAND" else None,
+            )
+            for mt in _ALL_16_MOAT_TYPES
+        ]
+        validated, result = _validate_moat_assessments(
+            drafts,
+            [],
+            [],
+            [],
+            date(2025, 9, 30),
+        )
+        brand = next(a for a in validated if a.moat_type == "BRAND")
+        assert brand.strength == "MODERATE"
+        sc_issues = [i for i in result.issues if i.issue_type == "strength_confidence_mismatch"]
+        assert len(sc_issues) == 1
+        assert sc_issues[0].action == "downgraded_to_moderate"
+
+    def test_moderate_low_confidence_downgrades_to_narrow(self) -> None:
+        drafts = [
+            MoatAssessmentDraft(
+                moat_type=mt,
+                strength="MODERATE" if mt == "BRAND" else "NONE",
+                durability_years=10 if mt == "BRAND" else None,
+                explanation=f"Assessment for {mt}",
+                confidence="LOW",
+                evidence_indices=[0, 1] if mt == "BRAND" else None,
+            )
+            for mt in _ALL_16_MOAT_TYPES
+        ]
+        validated, result = _validate_moat_assessments(
+            drafts,
+            [],
+            [],
+            [],
+            date(2025, 9, 30),
+        )
+        brand = next(a for a in validated if a.moat_type == "BRAND")
+        assert brand.strength == "NARROW"
+        sc_issues = [i for i in result.issues if i.issue_type == "strength_confidence_mismatch"]
+        assert len(sc_issues) == 1
+        assert sc_issues[0].action == "downgraded_to_narrow"
 
     def test_all_none_passes_cleanly(self) -> None:
         drafts = [
@@ -1521,7 +1646,7 @@ class TestErrorHandling:
         run_service.fail_run.assert_awaited_once()
 
     @pytest.mark.asyncio()
-    async def test_step5_failure_returns_partial(self) -> None:
+    async def test_step5_failure_returns_failed(self) -> None:
         agent, run_service, mocks = _build_agent(
             llm_responses=[
                 _make_llm_evidence_response(),

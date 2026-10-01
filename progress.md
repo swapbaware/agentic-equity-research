@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-01 (Phase 10.4 competitive moat agent orchestration complete)
+**Last Updated:** 2026-10-01 (Phase 10.4 remediation — graduated validation)
 
 ---
 
@@ -672,15 +672,16 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 - [x] Step 5 (moat_analysis): LLM analysis producing 16 assessments + findings
 - [x] Step 6 (moat_validation): 9 deterministic validation checks (coverage_completeness, evidence_sufficiency, durability_presence, threat_presence, temporal_consistency, category_validity, content_non_empty, fact_evidence_linkage, strength_confidence_consistency)
 - [x] Step 7 (durability_challenge): LLM adversarial durability/counter-evidence analysis
-- [x] Validation downgrades: evidence_sufficiency → NONE, WIDE+LOW → MODERATE
+- [x] Validation downgrades: graduated evidence sufficiency (WIDE≥3, MODERATE≥2, NARROW≥1), strength-confidence consistency (WIDE requires HIGH, MODERATE requires MEDIUM)
 - [x] Partial completion: steps_completed >= 5 → PARTIAL; otherwise → FAILED
 - [x] Token budget: 25K cumulative, 20K warning threshold
 - [x] Frozen MoatResearchResult model
 - [x] Phase 8/9 agent patterns followed exactly (MockRunService, _build_agent, _make_* helpers)
-- [x] 61 unit tests across 16 test classes — all passing
-- [x] ruff check clean, ruff format clean
-- [x] mypy clean (pre-existing yahoo_finance.py issue unrelated)
-- [x] Full competitive moat test suite: 164 passed (61 agent + 103 prompts), 0 failed
+- [x] Audit remediation (F-01: graduated evidence sufficiency, F-02: complete strength-confidence consistency, F-03: test rename)
+- [x] 66 unit tests across 16 test classes — all passing (5 new + 1 renamed)
+- [x] ruff check clean, ruff format clean, mypy strict clean
+- [x] Full competitive moat test suite: 169 passed (66 agent + 103 prompts), 0 failed
+- [x] Full backend suite: 2268 passed, 7 skipped, 0 failed
 
 **Next Sub-Phase:** Phase 10.5 — Competitive Moat Agent API Endpoints (future)
 

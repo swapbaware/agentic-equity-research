@@ -857,28 +857,46 @@ def _validate_moat_assessments(
     validated: dict[str, MoatAssessmentDraft] = dict(assessment_by_type)
 
     # 2. evidence_sufficiency
+    _evidence_thresholds: dict[str, int] = {
+        "WIDE": 3,
+        "MODERATE": 2,
+        "NARROW": 1,
+    }
+    _downgrade_ladder = ("WIDE", "MODERATE", "NARROW", "NONE")
     for mt, a in list(validated.items()):
-        if a.strength != "NONE" and not a.evidence_indices:
-            issues.append(
-                MoatValidationIssue(
+        if a.strength == "NONE":
+            continue
+        ev_count = len(a.evidence_indices) if a.evidence_indices else 0
+        required = _evidence_thresholds.get(a.strength, 0)
+        if ev_count < required:
+            new_strength = a.strength
+            for target in _downgrade_ladder:
+                target_req = _evidence_thresholds.get(target, 0)
+                if ev_count >= target_req:
+                    new_strength = target
+                    break
+            if new_strength != a.strength:
+                action = f"downgraded_to_{new_strength.lower()}"
+                issues.append(
+                    MoatValidationIssue(
+                        moat_type=mt,
+                        issue_type="insufficient_evidence",
+                        message=(f"{mt} has strength {a.strength} but only {ev_count} evidence (requires {required})"),
+                        action=action,
+                    ),
+                )
+                validated[mt] = MoatAssessmentDraft(
                     moat_type=mt,
-                    issue_type="insufficient_evidence",
-                    message=(f"{mt} has strength {a.strength} but no evidence indices"),
-                    action="downgraded_to_none",
-                ),
-            )
-            validated[mt] = MoatAssessmentDraft(
-                moat_type=mt,
-                strength="NONE",
-                durability_years=None,
-                explanation=a.explanation,
-                threats=a.threats,
-                competitor_comparison=a.competitor_comparison,
-                confidence=a.confidence,
-                evidence_indices=a.evidence_indices,
-                counter_evidence_indices=a.counter_evidence_indices,
-            )
-            downgraded_count += 1
+                    strength=new_strength,
+                    durability_years=a.durability_years if new_strength != "NONE" else None,
+                    explanation=a.explanation,
+                    threats=a.threats,
+                    competitor_comparison=a.competitor_comparison,
+                    confidence=a.confidence,
+                    evidence_indices=a.evidence_indices,
+                    counter_evidence_indices=a.counter_evidence_indices,
+                )
+                downgraded_count += 1
 
     # 3. durability_presence
     for mt, a in validated.items():
@@ -958,18 +976,23 @@ def _validate_moat_assessments(
 
     # 9. strength_confidence_consistency
     for mt, a in list(validated.items()):
-        if a.strength == "WIDE" and a.confidence == "LOW":
+        sc_target: str | None = None
+        if a.strength == "WIDE" and a.confidence != "HIGH":
+            sc_target = "MODERATE"
+        elif a.strength == "MODERATE" and a.confidence == "LOW":
+            sc_target = "NARROW"
+        if sc_target is not None:
             issues.append(
                 MoatValidationIssue(
                     moat_type=mt,
                     issue_type="strength_confidence_mismatch",
-                    message=f"{mt} has WIDE strength but LOW confidence",
-                    action="downgraded_to_moderate",
+                    message=(f"{mt} has {a.strength} strength but {a.confidence} confidence"),
+                    action=f"downgraded_to_{sc_target.lower()}",
                 ),
             )
             validated[mt] = MoatAssessmentDraft(
                 moat_type=mt,
-                strength="MODERATE",
+                strength=sc_target,
                 durability_years=a.durability_years,
                 explanation=a.explanation,
                 threats=a.threats,
