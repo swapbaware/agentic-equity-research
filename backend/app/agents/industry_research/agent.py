@@ -256,7 +256,6 @@ class IndustryResearchAgent:
                 step_map["finding_validation"],
                 self._step_finding_validation(
                     all_findings,
-                    all_evidence_ids,
                     request.observation_date,
                 ),
             )
@@ -657,7 +656,6 @@ class IndustryResearchAgent:
     async def _step_finding_validation(
         self,
         findings: list[FindingItem],
-        evidence_ids: list[uuid.UUID],
         observation_date: date,
     ) -> FindingValidationResult:
         issues: list[FindingValidationIssue] = []

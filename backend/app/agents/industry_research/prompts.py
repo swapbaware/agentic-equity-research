@@ -5,6 +5,7 @@ tags and include explicit instructions that the content is DATA, not
 instructions.  This is the mandatory prompt injection defense per
 ``architecture/security-architecture.md`` and CLAUDE.md §5.
 """
+
 from __future__ import annotations
 
 INDUSTRY_SYSTEM_PREAMBLE = (
@@ -19,11 +20,7 @@ INDUSTRY_SYSTEM_PREAMBLE = (
 
 
 def _wrap_document(content: str, source_id: str, title: str) -> str:
-    return (
-        f'<retrieved_document source_id="{source_id}" title="{title}">\n'
-        f"{content}\n"
-        "</retrieved_document>"
-    )
+    return f'<retrieved_document source_id="{source_id}" title="{title}">\n{content}\n</retrieved_document>'
 
 
 def industry_evidence_extraction_prompt(
@@ -65,11 +62,7 @@ def industry_finding_generation_prompt(
     company_list_summary: str | None,
 ) -> str:
     sector_line = f"Sector: {sector_name}\n" if sector_name else ""
-    company_line = (
-        f"\nKey companies in this industry:\n{company_list_summary}\n"
-        if company_list_summary
-        else ""
-    )
+    company_line = f"\nKey companies in this industry:\n{company_list_summary}\n" if company_list_summary else ""
     return (
         f"{INDUSTRY_SYSTEM_PREAMBLE}\n\n"
         f"Industry: {industry_name}\n"

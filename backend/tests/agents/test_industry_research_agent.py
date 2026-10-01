@@ -612,7 +612,7 @@ class TestFindingValidation:
     @pytest.mark.asyncio
     async def test_empty_findings_valid(self) -> None:
         agent, _, _ = _build_agent()
-        result = await agent._step_finding_validation([], [], OBS_DATE)
+        result = await agent._step_finding_validation([], OBS_DATE)
 
         assert result.total_findings == 0
         assert result.valid_count == 0
@@ -631,7 +631,7 @@ class TestFindingValidation:
             observation_date=OBS_DATE,
             evidence_ids=[uuid.uuid4()],
         )
-        result = await agent._step_finding_validation([finding], [], OBS_DATE)
+        result = await agent._step_finding_validation([finding], OBS_DATE)
 
         assert result.rejected_count >= 1
         assert any(i.issue_type == "invalid_category" for i in result.issues)
@@ -657,7 +657,7 @@ class TestFindingValidation:
                 observation_date=OBS_DATE,
             ),
         ]
-        result = await agent._step_finding_validation(findings, [], OBS_DATE)
+        result = await agent._step_finding_validation(findings, OBS_DATE)
 
         assert result.total_findings == 2
         assert result.valid_count == 2
@@ -675,7 +675,7 @@ class TestFindingValidation:
             observation_date=OBS_DATE,
             evidence_ids=None,
         )
-        result = await agent._step_finding_validation([finding], [], OBS_DATE)
+        result = await agent._step_finding_validation([finding], OBS_DATE)
 
         assert any(i.issue_type == "fact_without_evidence" for i in result.issues)
 
@@ -692,7 +692,7 @@ class TestFindingValidation:
             observation_date=OBS_DATE,
             source_publication_date=future_date,
         )
-        result = await agent._step_finding_validation([finding], [], OBS_DATE)
+        result = await agent._step_finding_validation([finding], OBS_DATE)
 
         assert any(i.issue_type == "temporal_inconsistency" for i in result.issues)
 
@@ -710,7 +710,6 @@ class TestErrorHandlingPartial:
 
         async def _fail_validation(
             findings: list[FindingItem],
-            evidence_ids: list[uuid.UUID],
             observation_date: date,
         ) -> FindingValidationResult:
             raise ValueError("validation step forced failure")
