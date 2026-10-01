@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-09-30 (Phase 9.3b.2 industry research LLM reasoning complete)
+**Last Updated:** 2026-10-01 (Phase 10.2 competitive moat tools complete)
 
 ---
 
@@ -610,7 +610,30 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 - [x] Finding categories validated against INDUSTRY_FINDING_CATEGORIES (14 categories)
 - [x] Finding types: 7-type classification (FACT, CALCULATION, MANAGEMENT_CLAIM, ANALYST_OPINION, AI_INFERENCE, ASSUMPTION, UNCERTAINTY)
 
-**Next Sub-Phase:** Phase 10 — Competitive Moat Agent
+### Phase 10.2: Competitive Moat Agent Tools — COMPLETE
+
+- [x] `CompetitiveMoatTools` class with 7 agent-facing tools + 1 internal helper
+- [x] Tool 1: `load_company_context` — queries company, loads prior Phase 8/9 findings via ResearchRunService
+- [x] Tool 2: `discover_moat_sources` — moat-specific search queries, news, corporate filings; dedup, temporal filtering, graceful provider degradation
+- [x] Tool 3: `retrieve_document` — routes corporate_filings vs search, SHA256 hashing
+- [x] Tool 4: `get_peer_data` — same-industry active peers ordered by market_cap desc
+- [x] Tool 5: `persist_evidence` — uses MOAT_AGENT_NAME for extracted_by
+- [x] Tool 6: `persist_findings` — validates against MOAT_FINDING_CATEGORIES (19 categories), rejects invalid
+- [x] Tool 7: `persist_moat_assessments` — creates MoatAssessment ORM records, links evidence via junction table
+- [x] Internal helper: `create_research_document` — with company_id (unlike Phase 9)
+- [x] Helper functions: `_classify_moat_source`, `_tier_from_url`, `_map_filing_type`
+- [x] `CompanyNotFoundForMoatError` exception
+- [x] 80 unit tests — all passing
+- [x] 106 Phase 10.1 contract tests — all passing (regression clean)
+- [x] 64 Phase 9 tests — all passing (regression clean)
+- [x] ruff check clean, ruff format clean
+- [x] mypy strict clean (3 source files)
+- [x] No new database migrations, no new ORM models, no new dependencies
+- [x] Provider dependencies: SearchProvider, NewsProvider, CorporateFilingsProvider only (no LLMProvider)
+- [x] Temporal semantics: `publication_date=None` for search results (never fabricated)
+- [x] Conservative defaults: tool layer preserves provided assessment strength, no upgrades
+
+**Next Sub-Phase:** Phase 10.3 — Competitive Moat Agent Prompts
 
 ---
 
@@ -732,6 +755,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Next Actions
 
-1. **Phase 9: Industry Research Agent** — second agent implementation (industry structure, competitive dynamics, sector trends)
-2. **SEBI XBRL integration** for authoritative financial data
-3. **Evaluate Celery vs Temporal** (ADR-002) for background tasks
+1. **Phase 10.3: Competitive Moat Agent Prompts** — prompt templates for moat analysis, durability challenge, validation
+2. **Phase 10.4: Competitive Moat Agent Orchestration** — LangGraph agent implementation
+3. **SEBI XBRL integration** for authoritative financial data
+4. **Evaluate Celery vs Temporal** (ADR-002) for background tasks
