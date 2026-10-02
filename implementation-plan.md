@@ -527,7 +527,7 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - Output schema validation
 - Classification correctness (claims vs facts vs inferences)
 
-**Status:** COMPLETE (sub-phases 10.1–10.5)
+**Status:** COMPLETE (sub-phases 10.1–10.6)
 
 **Sub-Phases Completed:**
 - Phase 10.1: Contracts — 42 Pydantic models, 19 finding categories, 16 moat types, 7 step definitions; 106 tests
@@ -535,8 +535,9 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - Phase 10.3: Prompts — 3 prompt functions (evidence extraction, moat analysis, durability challenge) with temporal awareness, prompt injection defense; 93 tests
 - Phase 10.4: Agent Orchestration — CompetitiveMoatAgent with 7-step sequential workflow, 9 deterministic validation checks, token budget enforcement (25K/20K), partial completion, retry handling; 66 tests (remediation: graduated evidence sufficiency downgrades per §20 Check 2, strength-confidence consistency per §20 Check 9, test rename F-03)
 - Phase 10.5: Competitive Moat Validation Tests — 130 cross-cutting validation tests across 20 test classes proving Phase 10 conforms to accepted architecture (AC-01→AC-32); covers workflow sequence, evidence classification, moat type taxonomy, token budgets, provider abstraction, error handling, schema validation, frozen result model, prompt structure, persistence, finding categories, deterministic vs LLM step types, graduated evidence sufficiency, strength-confidence consistency, durability challenge, and security
+- Phase 10.6: Competitive Moat Integration Tests — 83 integration tests across 20 test classes proving cross-component integration (AC-01→AC-39); covers end-to-end pipeline, partial/failed runs, LLM retry, evidence→finding→assessment chain, evidence sufficiency matrix, strength-confidence matrix, temporal evidence, prompt injection defense, provider failure, persistence integrity, research run lifecycle, retry/multi-run isolation, tool boundaries, prompt builders, dual output, durability challenge, token budget, and contract-tool-agent integration
 
-**Total Test Count:** 451 tests across all sub-phases
+**Total Test Count:** 534 tests across all sub-phases
 
 ---
 

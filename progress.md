@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-01 (Phase 10.5 — Competitive Moat Validation Tests)
+**Last Updated:** 2026-10-02 (Phase 10.6 — Competitive Moat Integration Tests)
 
 ---
 
@@ -711,7 +711,36 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 - [x] Phase 10.4 regression: 66 passed, 0 failed
 - [x] Full backend suite: 2398 passed, 7 skipped, 0 failed
 
-**Next Sub-Phase:** Phase 10.6 — Competitive Moat Agent API Endpoints (future)
+### Phase 10.6: Competitive Moat Integration Tests — COMPLETE
+
+- [x] Comprehensive integration test suite (`test_competitive_moat_integration.py`) — 83 tests across 20 test classes
+- [x] TestEndToEndSuccess (6 tests): full 7-step pipeline, ResearchRun metadata, AgentExecution records, prompt invocation, tool exercise, source access
+- [x] TestEndToEndPartialRun (3 tests): step 6/7 failure → PARTIAL, prior artifacts preserved
+- [x] TestEarlyFailure (4 tests): steps 1-4 failure → FAILED status with appropriate error
+- [x] TestLLMRetryIntegration (5 tests): first attempt success, retry on parsing/provider error, both fail → FAILED, budget exhaustion not retried
+- [x] TestEvidenceFindingAssessmentChain (4 tests): brand moat chain, multiple types, unsupported downgrade, typed enum preservation
+- [x] TestEvidenceSufficiencyIntegration (10 parametrized tests): WIDE≥3, MODERATE≥2, NARROW≥1, NONE=0 through full validation pipeline
+- [x] TestStrengthConfidenceIntegration (12 parametrized tests): 4×3 matrix through full validation pipeline
+- [x] TestTemporalEvidenceIntegration (4 tests): past/same-day/future evidence through pipeline, propagation in full run
+- [x] TestPromptInjectionIntegration (3 tests): malicious content, fake system messages, XML injection — all contained
+- [x] TestProviderFailureIntegration (3 tests): search failure, LLM failure with retry, corporate filings graceful skip
+- [x] TestPersistenceIntegrity (3 tests): foreign key chain, no orphaned artifacts, evidence-to-document traceability
+- [x] TestResearchRunLifecycle (3 tests): created→completed, created→failed, created→partial transitions
+- [x] TestRetryIsolation (1 test): retry creates distinct AgentExecution records
+- [x] TestMultiRunIsolation (2 tests): same company different dates, different companies same date
+- [x] TestToolBoundaryIntegration (2 tests): all 7 tools invoked, correct method signatures
+- [x] TestPromptBuilderIntegration (4 tests): evidence/analysis/durability prompts correct, prompts used in agent execution
+- [x] TestDualOutputIntegration (2 tests): produces both findings and assessments, both persisted
+- [x] TestDurabilityChallengeIntegration (4 tests): threats, counter-evidence, no threats, absent results in partial
+- [x] TestTokenBudgetEndToEnd (2 tests): accumulation across steps, budget exhaustion mid-pipeline
+- [x] TestContractToolAgentIntegration (6 tests): request accepted, config defaults, frozen result, step definitions, finding categories, moat type mapping
+- [x] No production code modified — tests only
+- [x] ruff check clean, ruff format clean, mypy strict clean (only pre-existing yahoo_finance.py error)
+- [x] Phase 10.4 regression: 66 passed, 0 failed
+- [x] Phase 10.5 regression: 130 passed, 0 failed
+- [x] Full backend suite: 2473 passed, 7 skipped, 0 failed (1 pre-existing health test excluded — requires DB)
+
+**Next Sub-Phase:** Phase 10.7 — Competitive Moat Agent API Endpoints (future)
 
 ---
 
@@ -741,7 +770,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 - Company Research Agent: 7-step sequential orchestrator (validate → discover → retrieve → extract → generate → validate → gap/contradiction), 8 tool implementations, LLM integration with structured output parsing, evidence extraction and persistence, finding generation with evidence linking, deterministic finding validation, gap/contradiction detection, token budget enforcement (30K hard/24K warning), retry handling (MAX_LLM_ATTEMPTS=2), prompt injection defense; 64 tests with 5 golden scenarios
 - Industry Research Agent Skeleton (Phase 9.3b.1): 7-step sequential orchestrator (industry_validation → source_discovery → document_retrieval → evidence_extraction[stub] → industry_analysis[stub] → finding_validation → gap_contradiction[stub]), token budget enforcement (20K hard/16K warning), three-tier error handling, ResearchRun lifecycle (target_type="industry"), LLM steps as stub boundaries; 46 tests
 - Industry Research Agent LLM Reasoning (Phase 9.3b.2): LLM stubs replaced with real implementations — evidence extraction (per-document LLM calls with budget checks), industry analysis (finding generation with evidence linking via indices), gap/contradiction detection, finding validation enhanced to 4 criteria (category, content, FACT-evidence, temporal), prompt injection defense, structured output parsing; 76 tests
-- Competitive Moat Agent (Phase 10): contracts (10.1), tools (10.2), prompts (10.3), orchestration (10.4), validation tests (10.5) — 7-step sequential workflow, 16 moat types, 9 deterministic validation checks, token budget enforcement, partial completion semantics, adversarial durability challenge; 296 tests
+- Competitive Moat Agent (Phase 10): contracts (10.1), tools (10.2), prompts (10.3), orchestration (10.4), validation tests (10.5), integration tests (10.6) — 7-step sequential workflow, 16 moat types, 9 deterministic validation checks, token budget enforcement, partial completion semantics, adversarial durability challenge; 379 tests
 
 ---
 
