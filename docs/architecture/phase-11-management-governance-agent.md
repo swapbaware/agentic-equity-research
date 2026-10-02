@@ -83,16 +83,7 @@ The agent follows the established 7-step sequential workflow pattern from Phases
 
 ### Primary Output
 
-The agent produces `ManagementGovernanceAnalysis` — a frozen Pydantic model containing:
-
-- List of `ManagementStatement` records (new promises extracted, existing promises with updated status)
-- Shareholding summary with trend direction
-- Promoter pledge summary with trend direction
-- Capital allocation assessment
-- Related-party transaction summary
-- Governance red flag list (each with evidence and justification)
-- Research findings (typed as `FACT`, `MANAGEMENT_CLAIM`, `AI_INFERENCE`, etc.)
-- Evidence records linking every finding to source documents
+The agent produces `ManagementGovernanceResult` — a frozen Pydantic model (see §24a for the full contract definition) containing status, run_id, finding_ids, statement_ids, shareholding/pledge/corporate-action IDs, red_flag_count, and error fields.
 
 ---
 
@@ -146,6 +137,8 @@ Agent #6: Management & Governance (Phase 11) — Tier 2 (requires #1)    ← THI
 ─────────────────────────────────────────────
 Agent #7–#17: Tier 3+ (require Tier 2 outputs)
 ```
+
+**Note**: Agent numbers (#1–#17) denote positions in the execution graph (`architecture/agent-architecture.md`). Phase numbers (8–20+) denote implementation order. These are deliberately different — agents are implemented in dependency order, not execution-graph order. For example, Agent #5 (Competitive Moat) was implemented in Phase 10, while Agent #6 (Management & Governance) is implemented in Phase 11. Phase numbers for future agents are subject to change as the roadmap evolves.
 
 ### Execution Graph Position
 
@@ -273,6 +266,18 @@ Step 1 (Company Context Load) queries:
 
 The agent consumes only company profile data and its own prior ManagementStatement records. This independence enables Tier 2 parallel execution.
 
+### Cold-Start Behavior
+
+When the agent runs on a company for the first time (zero existing ManagementStatements, zero existing governance findings):
+
+1. **Step 1**: `existing_statements` is an empty list. `company_findings` may contain findings from Phase 8 (Company Research) if available.
+2. **Step 5**: The LLM receives no prior ManagementStatements. It extracts new promises from current filings only. No promise-vs-execution tracking occurs (there is nothing to track against).
+3. **Step 5a**: Shareholding/pledge findings are generated normally from provider data.
+4. **Step 6**: Validation proceeds normally. MSV-03/MSV-04 (existing statement checks) are not triggered since there are no statement updates — only new statement creation.
+5. **Output**: The result contains new ManagementStatements, shareholding data, and any governance red flags detectable from current filings alone. Promise track record red flags cannot fire (no historical data).
+
+This is the expected behavior — the first run establishes the baseline. Subsequent runs build on this baseline for promise tracking.
+
 ---
 
 ## 8. Management & Governance Domains
@@ -292,6 +297,72 @@ The agent covers 9 analytical domains, each producing typed findings:
 | Subsidiary Complexity | Corporate structure disclosure | FACT | §17 |
 | Equity Dilution | CorporateActionsProvider | FACT, CALCULATION | §18 |
 | Governance Red Flags | Aggregation of above domains | AI_INFERENCE | §19 |
+
+---
+
+## 8a. Finding Category Sets
+
+### GOVERNANCE_FINDING_CATEGORIES
+
+The `GOVERNANCE_FINDING_CATEGORIES` frozenset defines the valid `category` values for findings produced by the Management & Governance Agent. FV-02 (§26) rejects any finding whose category is not in this set.
+
+```python
+GOVERNANCE_FINDING_CATEGORIES: frozenset[str] = frozenset({
+    "management_claim",
+    "promise_tracking",
+    "shareholding",
+    "promoter_pledge",
+    "capital_allocation",
+    "related_party_transaction",
+    "auditor_qualification",
+    "executive_compensation",
+    "subsidiary_complexity",
+    "equity_dilution",
+    "governance_red_flag",
+    "governance_general",
+    "data_gap",
+})
+```
+
+**Derivation**: Each category maps to an analytical domain (§8) or a cross-domain finding type:
+
+| Category | Domain (§8) | Typical FindingType |
+|----------|-------------|---------------------|
+| `management_claim` | Management Claims (§9) | MANAGEMENT_CLAIM |
+| `promise_tracking` | Promise Tracking (§10) | FACT, MANAGEMENT_CLAIM |
+| `shareholding` | Shareholding (§11) | FACT, CALCULATION |
+| `promoter_pledge` | Promoter Pledge (§12) | FACT, CALCULATION |
+| `capital_allocation` | Capital Allocation (§13) | FACT, CALCULATION, AI_INFERENCE |
+| `related_party_transaction` | Related-Party Txns (§14) | FACT, AI_INFERENCE |
+| `auditor_qualification` | Auditor Qualifications (§15) | FACT |
+| `executive_compensation` | Exec Compensation (§16) | FACT, CALCULATION |
+| `subsidiary_complexity` | Subsidiary Complexity (§17) | FACT |
+| `equity_dilution` | Equity Dilution (§18) | FACT, CALCULATION |
+| `governance_red_flag` | Governance Red Flags (§19) | AI_INFERENCE |
+| `governance_general` | Cross-domain observations | AI_INFERENCE, ASSUMPTION |
+| `data_gap` | Any domain | UNCERTAINTY |
+
+This follows the pattern established by `FINDING_CATEGORIES` (Phase 8, `contracts.py:49`), `INDUSTRY_FINDING_CATEGORIES` (Phase 9, `contracts.py:85`), and `MOAT_FINDING_CATEGORIES` (Phase 10, `contracts.py:796`).
+
+### GOVERNANCE_RED_FLAG_CATEGORIES
+
+The `GOVERNANCE_RED_FLAG_CATEGORIES` frozenset defines the valid `category` values for `GovernanceRedFlag` objects. RF-01 (§26) rejects any red flag whose category is not in this set.
+
+```python
+GOVERNANCE_RED_FLAG_CATEGORIES: frozenset[str] = frozenset({
+    "promoter_pledge_elevation",
+    "declining_promoter_holding",
+    "auditor_qualification",
+    "auditor_change",
+    "related_party_materiality",
+    "executive_compensation_excess",
+    "promise_track_record",
+    "equity_dilution",
+    "subsidiary_opacity",
+})
+```
+
+**Derivation**: Each category maps to a row in the §19 red flag categories table.
 
 ---
 
@@ -329,43 +400,76 @@ This means:
 3. **Never auto-mark a PENDING promise as MET.** The transition requires `outcome_evidence_id`.
 4. **Never synthesize a management statement from multiple sources.** Each ManagementStatement maps to one source document excerpt.
 
+### ManagementStatement Deduplication Constraint
+
+When the same management promise appears in multiple filings (e.g., reiterated in the annual report and the conference call), the agent MUST NOT create duplicate ManagementStatement records. The deduplication rule is: if a new statement matches an existing ManagementStatement on `(company_id, category, statement)` — where `statement` text is a semantic match as determined by the LLM in Step 5 — the agent skips creation and reports the duplicate in `resolution_detail`. The exact implementation of semantic matching (exact string match vs. LLM-assisted similarity) is a Phase 11.2 implementation decision (per OQ-03).
+
 ---
 
 ## 10. Promise → Execution Lifecycle
 
 ### ManagementStatement State Machine
 
+The ORM enum `ManagementStatementStatus` defines 5 states: PENDING, MET, PARTIALLY_MET, MISSED, UNKNOWN. The agent represents additional semantic distinctions via the `resolution_detail` field on the contract (see below), NOT via enum expansion.
+
 ```
-                    ┌──────────────┐
-                    │              │
-                    │   PENDING    │ ← Initial state (newly extracted promise)
-                    │              │
-                    └──────┬───────┘
-                           │
-        ┌──────────────────┼──────────────────┐
-        │                  │                  │
-        ▼                  ▼                  ▼
-┌───────────┐     ┌──────────────┐    ┌───────────┐
-│    MET    │     │ PARTIALLY_MET│    │  MISSED   │
-│           │     │              │    │           │
-└───────────┘     └──────────────┘    └───────────┘
-                                            │
-                                            ▼
-                                      ┌───────────┐
-                                      │  UNKNOWN  │
-                                      └───────────┘
+                    ┌──────────────────┐
+                    │                  │
+                    │     PENDING      │ ← Initial state (newly extracted promise)
+                    │  [NOT_DUE]       │    Substates tracked via resolution_detail
+                    │                  │
+                    └────────┬─────────┘
+                             │
+          ┌──────────────────┼──────────────────┐
+          │                  │                  │
+          ▼                  ▼                  ▼
+  ┌───────────┐     ┌──────────────┐    ┌───────────┐
+  │    MET    │     │ PARTIALLY_MET│    │  MISSED   │
+  │           │     │              │    │           │
+  └───────────┘     └──────────────┘    └───────────┘
+          ▲                  ▲                  ▲
+          │                  │                  │
+          └──────────────────┼──────────────────┘
+                             │
+                    ┌────────┴─────────┐
+                    │                  │
+                    │     UNKNOWN      │ ← Timeframe elapsed, no conclusive evidence
+                    │                  │
+                    └──────────────────┘
 ```
+
+### Substate Semantics via `resolution_detail`
+
+The ORM enum is NOT expanded. Instead, semantic substates are carried in the `resolution_detail: str | None` field on `ManagementStatementUpdate` and persisted in `ManagementStatement.actual_outcome` (which serves dual purpose: stores the outcome narrative AND the substate context).
+
+| Parent State | Substate Label | Meaning | Stored In |
+|-------------|----------------|---------|-----------|
+| PENDING | `NOT_DUE` | Promise timeframe has not elapsed; agent MUST NOT evaluate | `resolution_detail` on contract; NOT persisted as status change |
+| UNKNOWN | `INSUFFICIENT_EVIDENCE` | Timeframe elapsed; outcome evidence searched but not found | `actual_outcome` text on ManagementStatement |
+| UNKNOWN | `CONTRADICTORY` | Evidence both supports and contradicts the promise | `actual_outcome` text on ManagementStatement |
+| MISSED | `REVISED` | Management revised guidance; original target missed but superseded | `actual_outcome` text on ManagementStatement |
+
+**Handling rules** (deterministic, enforced in Step 6):
+
+1. **NOT_DUE**: If `expected_outcome` contains a timeframe reference (e.g., "FY25", "next year", "by Q3") and the observation_date has not reached the implied due date, the agent MUST skip evaluation and report the statement as `NOT_DUE` in its analysis. The ManagementStatement status remains PENDING. No status transition is proposed.
+2. **INSUFFICIENT_EVIDENCE**: When the agent determines a promise's timeframe has elapsed but cannot find confirming or denying evidence, it transitions to UNKNOWN with `actual_outcome` recording "Insufficient evidence: [explanation]".
+3. **CONTRADICTORY**: When evidence both supports and contradicts a promise (e.g., revenue target met through acquisition, not organic growth as stated), the agent transitions to PARTIALLY_MET with `actual_outcome` recording the contradiction: "Contradictory evidence: [claim met by X but not by stated method Y]".
+4. **REVISED**: When management issues revised guidance superseding an earlier promise, the original promise transitions to MISSED with `actual_outcome` recording "Revised: original target [X] superseded by revised guidance [Y] (see statement ID [Z])". A new ManagementStatement is created for the revised guidance.
 
 ### Transition Rules
 
-| From | To | Requires |
-|------|----|----------|
-| PENDING | MET | `outcome_evidence_id` must be non-null |
-| PENDING | PARTIALLY_MET | `outcome_evidence_id` must be non-null |
-| PENDING | MISSED | `outcome_evidence_id` must be non-null |
-| PENDING | UNKNOWN | `expected_timeframe` elapsed, no outcome evidence available |
-| MET/PARTIALLY_MET/MISSED | * | Terminal — no further transitions |
-| UNKNOWN | MET/PARTIALLY_MET/MISSED | New `outcome_evidence_id` becomes available |
+| From | To | Requires | Notes |
+|------|----|----------|-------|
+| PENDING | MET | `outcome_evidence_index` must reference valid evidence | Terminal |
+| PENDING | PARTIALLY_MET | `outcome_evidence_index` must reference valid evidence | Terminal; used for contradictory evidence |
+| PENDING | MISSED | `outcome_evidence_index` must reference valid evidence | Terminal; used for revised guidance (original missed) |
+| PENDING | UNKNOWN | observation_date beyond implied due date AND no conclusive outcome evidence | Non-terminal; `actual_outcome` records reason |
+| UNKNOWN | MET | New `outcome_evidence_index` becomes available | Terminal |
+| UNKNOWN | PARTIALLY_MET | New `outcome_evidence_index` becomes available | Terminal |
+| UNKNOWN | MISSED | New `outcome_evidence_index` becomes available | Terminal |
+| MET | * | No further transitions | Terminal |
+| PARTIALLY_MET | * | No further transitions | Terminal |
+| MISSED | * | No further transitions | Terminal |
 
 **Domain Invariant 5** (`architecture/domain-model.md`, line 526): `ManagementStatement.status` can only transition to `MET` or `MISSED` (or `PARTIALLY_MET`) when `outcome_evidence_id` is provided.
 
@@ -373,11 +477,14 @@ This means:
 
 1. **Step 1**: Load existing `ManagementStatement` records for the company.
 2. **Step 4 (Evidence Extraction)**: Extract new promises from current filings. Extract outcome evidence for existing promises.
-3. **Step 5 (Governance Analysis)**: LLM identifies which existing promises have verifiable outcomes in the current evidence set. For each match, the LLM proposes a status transition and cites the specific evidence.
+3. **Step 5 (Governance Analysis)**: LLM identifies which existing promises have verifiable outcomes in the current evidence set. For each match, the LLM proposes a status transition, cites the specific evidence, and provides `resolution_detail` where applicable. The LLM also identifies NOT_DUE promises and skips evaluation for them.
 4. **Step 6 (Validation)**: Deterministic validation ensures:
-   - Every proposed status transition has a non-null `outcome_evidence_id`.
+   - Every proposed status transition to MET/PARTIALLY_MET/MISSED has a valid `outcome_evidence_index`.
    - No PENDING → MET/PARTIALLY_MET/MISSED transition without evidence.
-   - The `outcome_evidence_id` references a valid `Evidence` record created in this run or a prior run.
+   - The `outcome_evidence_index` references a valid evidence item.
+   - Promises flagged as NOT_DUE have NO status transition proposed.
+   - PENDING → UNKNOWN transitions have a non-empty `resolution_detail`.
+   - REVISED substates have a corresponding new ManagementStatement for the revised guidance.
 5. **Step 7 (Persistence)**: Valid transitions are persisted. Invalid transitions are rejected and logged.
 
 ### ManagementStatement Fields
@@ -392,10 +499,22 @@ From `backend/app/models/research.py:134`:
 | `statement` | text | Verbatim or close-to-verbatim quote |
 | `category` | ManagementStatementCategory | REVENUE_GUIDANCE, MARGIN_GUIDANCE, CAPEX_PLAN, PRODUCT_LAUNCH, EXPANSION, OTHER |
 | `source_evidence_id` | UUID (FK → research.evidence.id) | Evidence record for the source document where the statement was found |
-| `expected_outcome` | text (nullable) | What was promised (quantified where possible) |
-| `actual_outcome` | text (nullable) | What actually happened (filled on status transition) |
+| `expected_outcome` | text (nullable) | What was promised (quantified where possible); includes timeframe when stated |
+| `actual_outcome` | text (nullable) | What actually happened (filled on status transition); also carries substate context (INSUFFICIENT_EVIDENCE, CONTRADICTORY, REVISED) |
 | `outcome_evidence_id` | UUID (FK → research.evidence.id) | Evidence record documenting the outcome |
 | `status` | ManagementStatementStatus | PENDING → MET / PARTIALLY_MET / MISSED / UNKNOWN |
+
+### expected_timeframe Resolution
+
+The ORM has `expected_outcome` (text, nullable) but NOT a dedicated `expected_timeframe` field. The architecture resolves this as follows:
+
+1. **Timeframe is embedded in `expected_outcome`**: When the agent extracts a management statement, the `expected_outcome` field captures both the target and its timeframe in natural language (e.g., "20% revenue growth by FY25", "commissioning new plant by Q3 FY24").
+2. **Timeframe is also carried on the contract**: `ManagementStatementSummary` and `NewManagementStatement` include `expected_timeframe: str | None` as a contract-only field. This field is populated by LLM extraction and used for display/analysis but is NOT persisted as a separate ORM column.
+3. **Due-ness determination**: The LLM in Step 5 evaluates whether a promise's expected timeframe (from `expected_outcome` text) has elapsed relative to the `observation_date`. The deterministic validation in Step 6 does NOT programmatically parse timeframes — it validates only that NOT_DUE promises have no status transition and that UNKNOWN transitions have resolution_detail.
+4. **Ambiguous timeframes**: When `expected_outcome` contains no recognizable timeframe (e.g., "We plan to expand into new markets"), the promise remains PENDING indefinitely. The LLM may propose UNKNOWN after a reasonable period (multiple annual report cycles without outcome evidence), with `resolution_detail = "INSUFFICIENT_EVIDENCE: no timeframe specified, no outcome evidence after [N] reporting periods"`.
+5. **Free-text timeframes**: Acceptable formats include "FY25", "by Q3 FY24", "next year", "within 18 months", "by March 2025". The LLM interprets these; deterministic code does not parse them. This is an explicit architectural decision to avoid brittle date parsing of management language.
+
+**No schema migration is required.** The `expected_outcome` field already exists and is sufficient to carry timeframe information. TD-26 is updated to reflect this decision.
 
 ---
 
@@ -697,7 +816,7 @@ Governance red flags are evidence-based aggregations, not arbitrary thresholds. 
 | Auditor Change | Auditor changed within 2 years of qualification (if data available) | Filing disclosures |
 | Related-Party Materiality | RPTs exceeding disclosed thresholds or on unusual terms | Annual report disclosure |
 | Executive Comp Excess | KMP compensation exceeding Companies Act limits | Compensation disclosure + net profit |
-| Promise Track Record | > 50% of trackable promises MISSED or UNKNOWN | ManagementStatement records |
+| Promise Track Record | Significant proportion of trackable promises MISSED or UNKNOWN, relative to total trackable statements | ManagementStatement records |
 | Equity Dilution | Significant dilution without corresponding business growth | Corporate action + filing data |
 | Subsidiary Opacity | Large number of subsidiaries with minimal disclosure | Annual report |
 
@@ -777,7 +896,7 @@ Per CLAUDE.md §8 and `docs/research-methodology.md`:
 
 ## 22. Temporal Semantics
 
-The agent follows the same temporal rules as Phases 8-10:
+The agent follows the same temporal rules as Phases 8-10.
 
 ### Canonical Rule
 
@@ -785,13 +904,31 @@ The agent follows the same temporal rules as Phases 8-10:
 
 Only information that was publicly available on or before the `observation_date` is considered. The agent MUST NOT use future information to assess past management promises.
 
+### Temporal Date Taxonomy
+
+| Date Concept | Definition | Source | Temporal Eligibility | Notes |
+|-------------|-----------|--------|---------------------|-------|
+| `observation_date` | The as-of date for the analysis; the "present" for this research run | Agent input (ManagementGovernanceResearchRequest) | Canonical anchor — all other dates must be ≤ this | Same as Phases 8-10 |
+| `information_available_date` | When information became publicly available | Derived from filing/publication dates | Must be ≤ observation_date for inclusion | Same as Phases 8-10 |
+| `publication_date` | When a document was published or released | Document metadata | Often equals information_available_date; may differ for embargoed content | — |
+| `document_date` | The date printed on the document itself | Document metadata | May differ from publication_date (e.g., board resolution date vs filing date) | — |
+| `filing_date` | When a filing was submitted to exchange/regulator | Filing metadata (BSE/NSE) | Serves as information_available_date for regulatory filings | — |
+| `statement_date` | When a management statement was made | Extracted from source document (conference call date, AGM date) | Must be ≤ observation_date | Specific to this agent |
+| `period_end` | End of the reporting period the document covers | Document metadata (e.g., "Q3 FY24 ended Dec 2023") | The period_end may be before publication_date | — |
+| `expected_timeframe` | When a management promise was due | Extracted from `expected_outcome` text by LLM | Used to determine NOT_DUE vs evaluable status | Contract-only; not a persisted ORM field (see §10) |
+| `outcome_date` | When the outcome of a promise was determined/published | Derived from outcome evidence's information_available_date | Must be ≤ observation_date | — |
+| `as_of_date` | Reporting date for shareholding/pledge snapshots | Provider data (ShareholdingProvider) | Must be ≤ observation_date | — |
+| `ex_date` | Ex-date for corporate actions (dividends, splits) | Provider data (CorporateActionsProvider) | Must be ≤ observation_date | — |
+
 ### Promise Evaluation Temporal Constraint
 
 When evaluating whether a PENDING promise has been MET or MISSED:
 
-1. The `expected_timeframe` on the `ManagementStatement` determines when the promise was due.
+1. The `expected_timeframe` (extracted from `expected_outcome` text) determines when the promise was due. This is LLM-interpreted, not programmatically parsed (see §10 "expected_timeframe Resolution").
 2. Only outcome evidence with `information_available_date <= observation_date` is used.
-3. A promise is not marked MISSED simply because the timeframe has passed — there must be evidence that the target was not achieved, or the promise transitions to UNKNOWN.
+3. A promise whose expected_timeframe has NOT elapsed (relative to observation_date) is NOT_DUE — the agent skips evaluation and proposes no status transition.
+4. A promise whose expected_timeframe has elapsed but for which no conclusive outcome evidence exists transitions to UNKNOWN (not MISSED). MISSED requires evidence of non-achievement.
+5. A promise with no recognizable timeframe in `expected_outcome` remains PENDING until outcome evidence is found or the LLM determines sufficient time has passed.
 
 ### Shareholding Temporal Constraint
 
@@ -810,27 +947,55 @@ When evaluating whether a PENDING promise has been MET or MISSED:
 Following the established pattern from Phases 8, 9, and 10:
 
 ```
-Step 1: Company Context Load          (deterministic, 10s timeout)
+Step 1: Company Context Load          (deterministic, 10s per-operation timeout)
   │     Load company profile, existing findings, existing ManagementStatements
   ▼
-Step 2: Governance Source Discovery    (provider_call, 30s timeout)
+Step 2: Governance Source Discovery    (provider_call, 30s per-operation timeout)
   │     Discover filings + shareholding + corporate action data
   ▼
-Step 3: Document Retrieval             (provider_call, 60s timeout)
+Step 3: Document Retrieval             (provider_call, 60s per-operation timeout)
   │     Retrieve filing content + shareholding data + corporate actions
   ▼
-Step 4: Evidence Extraction            (llm_reasoning, 120s timeout)
+Step 4: Evidence Extraction            (llm_reasoning, 120s per-operation timeout)
   │     LLM extracts management claims, RPTs, auditor quals, comp data
   ▼
-Step 5: Governance Analysis            (llm_reasoning, 120s timeout)
+Step 5: Governance Analysis            (llm_reasoning, 120s per-operation timeout)
   │     LLM produces governance analysis, promise evaluation, red flags
   ▼
-Step 6: Governance Validation          (deterministic, 10s timeout)
+Step 5a: Shareholding Finding Gen      (deterministic, within Step 6 budget)
+  │     Deterministic generation of shareholding/pledge FACT/CALCULATION findings
+  ▼
+Step 6: Governance Validation          (deterministic, 10s per-operation timeout)
   │     Validate ManagementStatement transitions, evidence links, finding types
   ▼
-Step 7: Persistence                    (deterministic, 30s timeout)
+Step 7: Persistence                    (deterministic, 30s per-operation timeout)
         Persist findings, evidence, ManagementStatements, shareholding, pledges
 ```
+
+### Timeout Model
+
+**Three-level timeout hierarchy** (consistent with Phases 8, 9, and 10):
+
+| Level | Scope | Value | Enforcement |
+|-------|-------|-------|-------------|
+| **Per-operation timeout** | Maximum wall-clock time for a single operation within a step | Values per step (see table below) | `asyncio.timeout` wrapping the operation |
+| **Step timeout** | Same as per-operation timeout for this agent (1 operation per step) | Same values | `asyncio.timeout` wrapping the step |
+| **Agent deadline** | Maximum total wall-clock time for the entire agent execution | 120s | Orchestrator-imposed; `asyncio.timeout` wrapping `execute()` |
+
+**The per-operation timeouts are maximums, not cumulative guarantees.** Their sum (380s) exceeds the 120s agent deadline. This is the established convention across all prior agents:
+- Phase 8 (Company Research): step timeouts sum to 405s vs 120s agent deadline
+- Phase 9 (Industry Research): step timeouts sum to 405s vs 120s agent deadline
+- Phase 10 (Competitive Moat): step timeouts sum to 410s vs 120s agent deadline
+
+In practice, most steps complete well under their per-operation timeout. The per-operation timeout prevents a single slow operation from consuming the entire agent budget. The orchestrator deadline is the hard constraint.
+
+**Agent deadline behavior:**
+
+1. When cumulative execution reaches 120s, the orchestrator raises `asyncio.TimeoutError`.
+2. The agent catches this at the top level and proceeds to emergency persistence.
+3. Whatever findings/evidence have been validated at that point are persisted.
+4. The agent returns `status = "PARTIAL"` with the partial results.
+5. Remaining unexecuted steps are recorded as FAILED in `ResearchRunStep`.
 
 ### Key Differences from Phase 10 Workflow
 
@@ -887,14 +1052,18 @@ class ManagementStatementSummary(BaseModel):
     statement_date: date
     statement: str
     category: ManagementStatementCategory
-    expected_outcome: str | None
-    expected_timeframe: str | None
+    expected_outcome: str | None  # from ORM; contains timeframe when stated
+    expected_timeframe: str | None  # contract-only; LLM-extracted from expected_outcome, NOT persisted as ORM column
     status: ManagementStatementStatus
 ```
+
+Note: `expected_timeframe` is populated by parsing the `expected_outcome` text during Step 1 context loading (LLM or heuristic extraction). It exists on the contract for analysis convenience but has no corresponding ORM column. See §10 "expected_timeframe Resolution" for the full rationale.
 
 ### Step 2: Governance Source Discovery
 
 **Type**: `provider_call` | **Timeout**: 30s | **Uses LLM**: No
+
+Discovers governance-relevant sources from three provider families: filings, shareholding, and corporate actions. Each source is tagged with its source tier (§21) and temporal metadata.
 
 **Input**:
 
@@ -902,11 +1071,12 @@ class ManagementStatementSummary(BaseModel):
 class DiscoverGovernanceSourcesInput(BaseModel):
     model_config = ConfigDict(frozen=True)
 
+    company_id: uuid.UUID
     company_name: str
     nse_symbol: str | None
     bse_code: str | None
     observation_date: date
-    filing_types: list[str] | None = None
+    filing_types: list[str] | None = None  # e.g., ["annual_report", "quarterly_result", "corporate_governance"]
     shareholding_quarters: int = Field(default=8, ge=1, le=20)
     corporate_action_years: int = Field(default=5, ge=1, le=10)
 ```
@@ -917,11 +1087,16 @@ class DiscoverGovernanceSourcesInput(BaseModel):
 class DiscoverGovernanceSourcesOutput(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    filing_candidates: list[SourceCandidate]
+    filing_candidates: list[SourceCandidate]  # reuses SourceCandidate from contracts.py
     shareholding_data: list[ShareholdingSnapshot]
     corporate_actions: list[CorporateActionSnapshot]
-    data_gaps: list[str]
+    provider_errors: list[str]  # provider names that failed (e.g., "ShareholdingProvider: timeout")
+    data_gaps: list[str]  # human-readable descriptions of expected but unavailable data
 ```
+
+**Deduplication**: If a filing candidate has the same `(source_url, document_date)` as an existing `ResearchDocument` for this company, it is included but marked as `already_retrieved = True` to avoid re-retrieval in Step 3.
+
+**Temporal eligibility**: All sources must have `information_available_date <= observation_date`. Shareholding snapshots are filtered by `as_of_date <= observation_date`. Corporate actions are filtered by `ex_date <= observation_date`.
 
 **ShareholdingSnapshot** (new contract — provider data normalized):
 
@@ -937,7 +1112,8 @@ class ShareholdingSnapshot(BaseModel):
     public_holding_pct: Decimal
     total_shares: int | None = None
     pledged_percentage: Decimal | None = None
-    source_provider: str
+    source_provider: str  # e.g., "ShareholdingProvider"
+    source_tier: int = 1  # Tier 1: BSE/NSE structured data
 ```
 
 **CorporateActionSnapshot** (new contract — provider data normalized):
@@ -951,18 +1127,54 @@ class CorporateActionSnapshot(BaseModel):
     record_date: date | None = None
     details: str
     value: Decimal | None = None
-    source_provider: str
+    source_provider: str  # e.g., "CorporateActionsProvider"
+    source_tier: int = 1  # Tier 1: BSE/NSE structured data
 ```
 
 ### Step 3: Document Retrieval
 
 **Type**: `provider_call` | **Timeout**: 60s | **Uses LLM**: No
 
-Follows the same pattern as Phase 10 Step 3. Retrieves filing document content for evidence extraction. Structured provider data (shareholding, corporate actions) was already retrieved in Step 2.
+Retrieves filing document content for evidence extraction. Structured provider data (shareholding, corporate actions) was already retrieved in Step 2 and is NOT re-retrieved here.
 
-**Input**: Reuses `RetrieveDocumentInput` from `backend/app/agents/contracts.py:211`.
+**Input**:
 
-**Output**: Reuses `RetrieveDocumentOutput` from `backend/app/agents/contracts.py:218`.
+```python
+class RetrieveGovernanceDocumentsInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    research_run_id: uuid.UUID
+    filing_candidates: list[SourceCandidate]  # from Step 2 output
+```
+
+**Output**:
+
+```python
+class RetrieveGovernanceDocumentsOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    documents: list[RetrievedDocument]  # text content + metadata for each filing
+    retrieval_errors: list[str]  # filings that could not be retrieved
+    total_attempted: int = Field(ge=0)
+    total_retrieved: int = Field(ge=0)
+```
+
+```python
+class RetrievedDocument(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    source_id: str  # unique identifier for citation
+    title: str
+    content: str  # text content (HTML stripped, sanitized)
+    document_date: date | None = None
+    filing_date: date | None = None
+    source_url: str | None = None
+    source_tier: int  # 1, 2, or 3
+    content_hash: str  # SHA-256 for deduplication
+```
+
+Note: The `RetrievedDocument` contract here is specific to governance document retrieval. It does not replace the existing `RetrieveDocumentInput/Output` from `contracts.py:211-224`, which is used internally by the `retrieve_document` tool. The governance-specific contract adds `source_tier` and `content_hash` fields.
 
 ### Step 4: Evidence Extraction
 
@@ -979,7 +1191,7 @@ Extracts governance-relevant evidence from retrieved filing documents. This step
 
 **Input**: Document content passed via `<retrieved_document>` XML tags (prompt injection defense).
 
-**Output**: Reuses `EvidenceExtractionOutput` from `backend/app/agents/contracts.py:415`.
+**Output**: Reuses the `EvidenceExtractionOutput` **schema** from `backend/app/agents/contracts.py:415` (list of `ExtractedEvidence` objects). The schema structure is reused; the extraction **prompts and logic** are governance-specific (Phase 11.3 deliverable), NOT reused from Phase 10 moat extraction. The governance extraction prompt targets management claims, RPTs, auditor qualifications, compensation, and subsidiaries — entirely different domains from moat evidence.
 
 ### Step 5: Governance Analysis
 
@@ -1010,6 +1222,8 @@ class GovernanceAnalysisOutput(BaseModel):
     general_findings: list[GeneratedFinding]
 ```
 
+Note: `GovernanceAnalysisOutput` does NOT include shareholding or pledge findings. Shareholding and pledge data come from structured providers with exact `Decimal` values — finding generation for these domains is deterministic and occurs in Step 5a (see below), not via LLM.
+
 **NewManagementStatement** (new contract):
 
 ```python
@@ -1019,8 +1233,8 @@ class NewManagementStatement(BaseModel):
     statement: str
     statement_date: date
     category: str  # validated against ManagementStatementCategory
-    expected_outcome: str | None = None
-    expected_timeframe: str | None = None
+    expected_outcome: str | None = None  # includes timeframe when stated (e.g., "20% growth by FY25")
+    expected_timeframe: str | None = None  # contract-only; NOT persisted as ORM column
     evidence_index: int  # index into the evidence list
 ```
 
@@ -1032,8 +1246,9 @@ class ManagementStatementUpdate(BaseModel):
 
     statement_id: str  # UUID of existing ManagementStatement
     proposed_status: str  # validated against ManagementStatementStatus
-    actual_outcome: str | None = None
-    outcome_evidence_index: int  # index into the evidence list
+    actual_outcome: str | None = None  # carries substate context (see §10 substate semantics)
+    outcome_evidence_index: int | None = None  # index into the evidence list; None for PENDING→UNKNOWN
+    resolution_detail: str | None = None  # substate: NOT_DUE, INSUFFICIENT_EVIDENCE, CONTRADICTORY, REVISED
     justification: str
 ```
 
@@ -1043,24 +1258,55 @@ class ManagementStatementUpdate(BaseModel):
 class GovernanceRedFlag(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    category: str
+    category: str  # validated against GOVERNANCE_RED_FLAG_CATEGORIES (see §19)
     description: str
     severity: str  # validated against HIGH/MEDIUM/LOW
     justification: str
     evidence_indices: list[int]
 ```
 
+### Step 5a: Shareholding & Pledge Finding Generation
+
+**Type**: `deterministic` | **Timeout**: within Step 6 budget | **Uses LLM**: No
+
+Generates FACT and CALCULATION findings from structured provider data retrieved in Step 2. This step is deterministic — the LLM is NOT involved.
+
+**Input**: `ShareholdingSnapshot` and pledge data from Step 2 output (`DiscoverGovernanceSourcesOutput`).
+
+**Output**: List of `GeneratedFinding` objects added to the finding pool for validation in Step 6.
+
+**Finding generation rules**:
+
+1. Each `ShareholdingSnapshot` generates one FACT finding per holding category:
+   - `"Promoter holding was {pct}% as of {quarter}"` → FACT, category `shareholding`
+   - `"FII holding was {pct}% as of {quarter}"` → FACT, category `shareholding`
+   - `"DII holding was {pct}% as of {quarter}"` → FACT, category `shareholding`
+   - `"Public holding was {pct}% as of {quarter}"` → FACT, category `shareholding`
+2. Trend computation over trailing quarters generates CALCULATION findings:
+   - Direction (increasing/stable/decreasing) computed via `Decimal` arithmetic
+   - `"Promoter holding trend: {direction} from {start_pct}% to {end_pct}% over {N} quarters"` → CALCULATION, category `shareholding`
+3. Each pledge data point generates one FACT finding:
+   - `"Promoter pledge was {pct}% as of {date}"` → FACT, category `promoter_pledge`
+4. Pledge trend computation generates CALCULATION findings:
+   - `"Promoter pledge trend: {direction} from {start_pct}% to {end_pct}% over {N} quarters"` → CALCULATION, category `promoter_pledge`
+
+**Implementation note**: Step 5a is implemented as a separate method within the agent, called between Step 5 and Step 6. It is NOT a separate `ResearchRunStep` record — it shares Step 6's budget. This matches the pattern where deterministic post-processing occurs alongside validation.
+
 ### Step 6: Governance Validation
 
 **Type**: `deterministic` | **Timeout**: 10s | **Uses LLM**: No
 
-Deterministic validation of Step 5 output:
+Deterministic validation of Step 5 and Step 5a output:
 
 1. **ManagementStatement transition validation**:
    - Every proposed status transition from PENDING to MET/PARTIALLY_MET/MISSED has a valid `outcome_evidence_index`.
    - The referenced evidence exists in the evidence list.
    - No transition to MET/PARTIALLY_MET/MISSED without outcome evidence.
    - `statement_id` references a valid existing ManagementStatement.
+   - Existing ManagementStatement status is PENDING or UNKNOWN (no re-transition from terminal states).
+   - PENDING → UNKNOWN transitions have a non-empty `resolution_detail`.
+   - Updates with `resolution_detail = "NOT_DUE"` must NOT propose a status transition.
+   - Updates with `resolution_detail = "REVISED"` must have a corresponding `NewManagementStatement` for the revised guidance.
 2. **New ManagementStatement validation**:
    - `category` is a valid `ManagementStatementCategory` value.
    - `evidence_index` references a valid evidence item.
@@ -1070,7 +1316,7 @@ Deterministic validation of Step 5 output:
    - No `MANAGEMENT_CLAIM` finding lacks a source citation.
    - `AI_INFERENCE` findings for governance red flags have `evidence_indices`.
 4. **Category validation**:
-   - All finding categories are in the allowed set for this agent.
+   - All finding categories are in `GOVERNANCE_FINDING_CATEGORIES` (see §8a).
    - `governance_red_flag` category requires non-empty `justification`.
 5. **Red flag validation**:
    - Every red flag has at least one evidence index.
@@ -1123,6 +1369,42 @@ Persists validated outputs:
 
 ---
 
+## 24a. Agent Result Contract
+
+### ManagementGovernanceResult
+
+The agent's final output, returned by `execute()`. This is the governance equivalent of `MoatResearchResult` (Phase 10, `contracts.py:871`). Downstream agents (Tier 3) consume this model to know what governance data was produced and where to find it.
+
+```python
+class ManagementGovernanceResult(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    status: str  # "COMPLETED" | "PARTIAL" | "FAILED"
+    run_id: uuid.UUID  # UUID of the ResearchRun
+    finding_ids: list[uuid.UUID] = Field(default_factory=list)  # UUIDs of persisted ResearchFinding records
+    statement_ids: list[uuid.UUID] = Field(default_factory=list)  # UUIDs of new or updated ManagementStatement records
+    shareholding_snapshot_ids: list[uuid.UUID] = Field(default_factory=list)  # UUIDs of persisted Shareholding records
+    pledge_snapshot_ids: list[uuid.UUID] = Field(default_factory=list)  # UUIDs of persisted PromoterPledge records
+    corporate_action_ids: list[uuid.UUID] = Field(default_factory=list)  # UUIDs of persisted CorporateAction records
+    red_flag_count: int = Field(default=0, ge=0)  # number of validated governance red flags
+    total_findings: int = Field(default=0, ge=0)  # total validated findings persisted
+    total_statements_created: int = Field(default=0, ge=0)  # new ManagementStatement records created
+    total_statements_updated: int = Field(default=0, ge=0)  # existing ManagementStatement records updated
+    error: str | None = None  # error message on FAILED status
+```
+
+**Status semantics** (same as MoatResearchResult):
+
+| Status | Meaning |
+|--------|---------|
+| `COMPLETED` | All 7 steps executed successfully; all validated findings persisted |
+| `PARTIAL` | Some steps failed (see AgentExecution record for details); partial findings persisted |
+| `FAILED` | Critical failure (Step 1 context load or Step 7 persistence failed); no findings persisted |
+
+**Resolution of OQ-06**: The agent produces a structured `ManagementGovernanceResult` output. This is architecturally decided — OQ-06 is closed. Downstream Tier 3 agents consume this result to determine what governance findings exist (via `finding_ids`) and what ManagementStatement data is available (via `statement_ids`). The typed findings themselves are in the `research.research_finding` table, queryable by UUID.
+
+---
+
 ## 25. LLM Boundaries
 
 ### What the LLM Does
@@ -1158,6 +1440,29 @@ Per the established pattern: `MAX_LLM_ATTEMPTS = 2` (1 initial + 1 retry). This 
 
 ---
 
+## 25a. Deterministic Calculation & Rounding Rules
+
+Per CLAUDE.md §9 rule 4: "Every calculation type documents its rounding rule explicitly."
+
+All deterministic calculations in this agent use `decimal.Decimal` arithmetic. The following table defines the precision and rounding rules for each calculation type:
+
+| Calculation | Formula | Precision | Rounding Mode | Example |
+|-------------|---------|-----------|---------------|---------|
+| Dividend payout ratio | `total_dividends / net_profit * 100` | `Decimal("0.01")` (2 decimal places) | `ROUND_HALF_UP` | 35.24% |
+| Compensation/profit ratio | `total_kmp_compensation / net_profit * 100` | `Decimal("0.01")` (2 decimal places) | `ROUND_HALF_UP` | 4.50% |
+| YoY compensation growth | `(current - previous) / previous * 100` | `Decimal("0.01")` (2 decimal places) | `ROUND_HALF_UP` | 12.35% |
+| Dilution percentage | `(new_shares / pre_event_shares) * 100` | `Decimal("0.01")` (2 decimal places) | `ROUND_HALF_UP` | 2.50% |
+| Shareholding trend (direction) | Compare first and last snapshot pct | No rounding (comparison only) | N/A | increasing/stable/decreasing |
+| Shareholding trend (delta) | `end_pct - start_pct` | `Decimal("0.01")` (2 decimal places) | `ROUND_HALF_UP` | -3.45% |
+| Pledge trend (delta) | `end_pledge_pct - start_pledge_pct` | `Decimal("0.01")` (2 decimal places) | `ROUND_HALF_UP` | +5.20% |
+| Shareholding sum check | `promoter + FII + DII + public` | `Decimal("0.01")` (2 decimal places) | `ROUND_HALF_UP` | 100.00% ± 0.5% tolerance |
+
+**Stable threshold for trend direction**: A shareholding or pledge percentage change of less than `Decimal("0.5")` percentage points over the trailing period is classified as "stable". Changes ≥ 0.5 pp are "increasing" or "decreasing".
+
+**Division by zero**: When a divisor is zero (e.g., net profit = 0 for payout ratio), the calculation is skipped and reported as `UNCERTAINTY` with a data gap finding.
+
+---
+
 ## 26. Deterministic Validation
 
 Step 6 performs the following deterministic checks WITHOUT LLM involvement:
@@ -1170,7 +1475,7 @@ Step 6 performs the following deterministic checks WITHOUT LLM involvement:
 | MSV-02 | `outcome_evidence_index` references a valid evidence item | Reject transition |
 | MSV-03 | `statement_id` references existing ManagementStatement for this company | Reject transition |
 | MSV-04 | Existing ManagementStatement.status is PENDING or UNKNOWN | Reject transition (no re-transition from terminal states) |
-| MSV-05 | PENDING → UNKNOWN: `expected_timeframe` has elapsed, no outcome evidence | Allow (no evidence required) |
+| MSV-05 | PENDING → UNKNOWN: LLM determined due date has elapsed (from `expected_outcome` text), no outcome evidence; `resolution_detail` is non-empty | Allow (no evidence required) |
 | MSV-06 | New statement `category` is valid ManagementStatementCategory | Reject new statement |
 | MSV-07 | New statement `evidence_index` references valid evidence item | Reject new statement |
 | MSV-08 | New statement `statement` is non-empty | Reject new statement |
@@ -1180,7 +1485,7 @@ Step 6 performs the following deterministic checks WITHOUT LLM involvement:
 | Rule | Check | Action on Failure |
 |------|-------|-------------------|
 | FV-01 | `finding_type` is a valid FindingType | Reject finding |
-| FV-02 | `category` is in GOVERNANCE_FINDING_CATEGORIES | Reject finding |
+| FV-02 | `category` is in GOVERNANCE_FINDING_CATEGORIES (see §8a for the enumerated set) | Reject finding |
 | FV-03 | FACT findings have at least one evidence index | Reject finding |
 | FV-04 | MANAGEMENT_CLAIM findings have at least one evidence index | Reject finding |
 | FV-05 | CALCULATION findings have at least one evidence index | Reject finding |
@@ -1191,7 +1496,7 @@ Step 6 performs the following deterministic checks WITHOUT LLM involvement:
 
 | Rule | Check | Action on Failure |
 |------|-------|-------------------|
-| RF-01 | `category` is a valid red flag category | Reject red flag |
+| RF-01 | `category` is in GOVERNANCE_RED_FLAG_CATEGORIES (see §8a for the enumerated set) | Reject red flag |
 | RF-02 | `severity` is HIGH, MEDIUM, or LOW | Reject red flag |
 | RF-03 | `evidence_indices` is non-empty | Reject red flag |
 | RF-04 | `justification` is non-empty | Reject red flag |
@@ -1210,17 +1515,18 @@ Step 6 performs the following deterministic checks WITHOUT LLM involvement:
 
 ## 27. Tool Inventory
 
-The agent uses 10 tools — 5 reused from prior agents and 5 new:
+The agent uses 9 tools — 4 reused from prior agents and 5 new:
 
 ### Reused Tools
 
-| Tool | Contract | Source |
-|------|----------|--------|
-| `load_company_context` | `LoadGovernanceContextInput → LoadGovernanceContextOutput` | Extended from Phase 10 pattern |
-| `retrieve_document` | `RetrieveDocumentInput → RetrieveDocumentOutput` | `contracts.py:211-224` |
-| `persist_evidence` | `PersistEvidenceInput → PersistEvidenceOutput` | `contracts.py:341-351` |
-| `persist_findings` | `PersistFindingsInput → PersistFindingsOutput` | `contracts.py:383-395` |
-| `get_company_profile` | `GetCompanyProfileInput → GetCompanyProfileOutput` | `contracts.py:232-258` |
+| Tool | Contract | Source | Notes |
+|------|----------|--------|-------|
+| `load_company_context` | `LoadGovernanceContextInput → LoadGovernanceContextOutput` | Extended from Phase 10 pattern | Loads company profile, existing findings, existing ManagementStatements internally; replaces the need for a separate `get_company_profile` call |
+| `retrieve_document` | `RetrieveDocumentInput → RetrieveDocumentOutput` | `contracts.py:211-224` | — |
+| `persist_evidence` | `PersistEvidenceInput → PersistEvidenceOutput` | `contracts.py:341-351` | — |
+| `persist_findings` | `PersistFindingsInput → PersistFindingsOutput` | `contracts.py:383-395` | — |
+
+Note: `get_company_profile` (`contracts.py:232-258`) is NOT a separate tool for this agent. Its functionality is subsumed by `load_company_context`, which internally queries the company profile along with findings and ManagementStatements.
 
 ### New Tools (Phase 11)
 
@@ -1231,6 +1537,10 @@ The agent uses 10 tools — 5 reused from prior agents and 5 new:
 | `persist_management_statements` | `PersistStatementsInput → PersistStatementsOutput` | Persist new/updated ManagementStatements |
 | `persist_shareholding` | `PersistShareholdingInput → PersistShareholdingOutput` | Persist shareholding snapshots |
 | `persist_governance_data` | `PersistGovernanceDataInput → PersistGovernanceDataOutput` | Persist pledge + corporate action data |
+
+### Internal Helpers (Not Agent Tools)
+
+`create_research_document` is an internal helper method within the tools class, not an agent-callable tool. It wraps the database insertion of `ResearchDocument` records during Step 3 document retrieval. It follows the same pattern as Phase 10's internal helper and is listed in Phase 11.2 deliverables accordingly.
 
 ### Tool Dependency Map
 
@@ -1275,8 +1585,8 @@ persist_governance_data
 | `CorporateFilingsProvider` | `backend/app/providers/interfaces.py:60` | `MockCorporateFilingsProvider` (`mock.py:203`) | `BSEProvider` (`bse.py:53`) |
 | `CorporateActionsProvider` | `backend/app/providers/interfaces.py:86` | `MockCorporateActionsProvider` (`mock.py:292`) | None (mock only) |
 | `LLMProvider` | `backend/app/providers/interfaces.py` | Existing mock | Existing implementations |
-| `SearchProvider` | `backend/app/providers/interfaces.py` | Existing mock | Existing implementations |
-| `NewsProvider` | `backend/app/providers/interfaces.py` | Existing mock | Existing implementations |
+
+Note: `SearchProvider` and `NewsProvider` are NOT used by this agent. Unlike Phase 10 (Competitive Moat), which uses search and news for source discovery, the Management & Governance Agent discovers sources exclusively through `CorporateFilingsProvider`, `ShareholdingProvider`, and `CorporateActionsProvider`. Conference call transcripts (Tier 3 sources, used for management claim extraction) are retrieved via `CorporateFilingsProvider`, not via search or news APIs.
 
 ### Provider Abstraction Compliance
 
@@ -1401,7 +1711,7 @@ Identical to Phase 10, per `architecture/security-architecture.md` and CLAUDE.md
 1. **`<retrieved_document>` wrapping**: All filing content retrieved from providers is placed inside `<retrieved_document source_id="..." title="...">...</retrieved_document>` XML tags in the LLM prompt.
 2. **System preamble**: The system prompt explicitly states that content in `<retrieved_document>` tags is DATA, not instructions. The LLM is instructed to never follow directives embedded inside those tags.
 3. **Schema validation**: LLM outputs are parsed against strict Pydantic schemas. Any output that doesn't conform is rejected and retried.
-4. **Provider least privilege**: The agent only has access to providers it needs (ShareholdingProvider, CorporateFilingsProvider, CorporateActionsProvider, LLMProvider, SearchProvider, NewsProvider). No direct database access except through tools.
+4. **Provider least privilege**: The agent only has access to providers it needs (ShareholdingProvider, CorporateFilingsProvider, CorporateActionsProvider, LLMProvider). No direct database access except through tools.
 
 ### Governance-Specific Security Considerations
 
@@ -1451,6 +1761,16 @@ Total agent token budget: **20,000 tokens** (per `architecture/agent-architectur
 
 At 16,000 tokens (80% utilization), the agent logs a warning. Step 5 (Governance Analysis) may receive a reduced prompt if the budget is near exhaustion after Step 4.
 
+### Budget Reassessment Trigger
+
+The 20,000-token budget should be reassessed if any of the following occur during Phase 11.4 testing:
+
+1. **Step 5 regularly exceeds budget**: If the governance analysis prompt consistently requires >10,000 tokens (its allocation), the budget may be insufficient for 9 analytical domains.
+2. **Golden dataset tests produce truncated analysis**: If test companies with rich governance data produce noticeably less detailed findings than Phase 10's moat analysis.
+3. **Warning threshold fires on >50% of test runs**: If 80% utilization is the norm rather than the exception.
+
+If reassessment is triggered, the decision to increase the budget (e.g., to 25,000 tokens matching Phase 10) requires updating `architecture/agent-architecture.md` line 516 and documenting the rationale in an ADR.
+
 ---
 
 ## 34. Retry & Failure Semantics
@@ -1471,8 +1791,10 @@ Provider-level retries are handled by the provider implementation (rate limiter,
 
 ### Timeout Enforcement
 
-| Step | Timeout | Enforcement |
-|------|---------|------------|
+Per the three-level timeout hierarchy (§23):
+
+| Step | Per-Operation Timeout | Enforcement |
+|------|----------------------|------------|
 | Step 1 | 10s | asyncio.timeout |
 | Step 2 | 30s | asyncio.timeout |
 | Step 3 | 60s | asyncio.timeout |
@@ -1480,9 +1802,9 @@ Provider-level retries are handled by the provider implementation (rate limiter,
 | Step 5 | 120s | asyncio.timeout |
 | Step 6 | 10s | asyncio.timeout |
 | Step 7 | 30s | asyncio.timeout |
-| **Total agent** | **120s** | Per architecture/agent-architecture.md |
+| **Agent deadline** | **120s** | Orchestrator-imposed (`architecture/agent-architecture.md`, line 516) |
 
-Note: The total agent timeout (120s) is the orchestrator-imposed limit. Individual step timeouts are within-step limits. If the cumulative step execution exceeds 120s, the orchestrator terminates the agent.
+The per-operation timeouts are maximums, not cumulative guarantees. Their sum (380s) exceeds the 120s agent deadline — this is the established convention across Phases 8-10 (see §23 Timeout Model). The agent deadline is the hard constraint; if cumulative execution reaches 120s, the orchestrator terminates the agent and emergency persistence runs.
 
 ---
 
@@ -1528,7 +1850,7 @@ Following the established pattern from Phases 8-10:
 
 #### Unit Tests (Phase 11.2 — Tools)
 
-- Each of the 10 tools tested in isolation with mocked providers/DB
+- Each of the 9 tools tested in isolation with mocked providers/DB
 - load_company_context: company found, company not found, existing statements loaded
 - get_shareholding_data: provider success, provider failure, empty data, temporal filtering
 - get_corporate_actions: provider success, provider failure, empty data, temporal filtering
@@ -1624,7 +1946,7 @@ Per CLAUDE.md §6:
 | TD-23 | ShareholdingProvider has no real implementation | Phase 4 | Future: implement NSE/BSE shareholding data provider |
 | TD-24 | CorporateActionsProvider has no real implementation | Phase 4 | Future: implement BSE corporate actions provider |
 | TD-25 | ManagementStatementCategory enum may need expansion | Phase 4 | Future: evaluate if DIVIDEND_POLICY, M_AND_A, HIRING categories needed |
-| TD-26 | ManagementStatement.expected_timeframe is freetext | Phase 4 | Future: consider structured timeframe (date or quarters) for programmatic evaluation |
+| TD-26 | ManagementStatement timeframes are embedded in `expected_outcome` freetext; `expected_timeframe` is a contract-only field (not persisted as ORM column) | Phase 11 | Future: consider a dedicated ORM column with structured timeframe (date or quarter) for programmatic due-ness evaluation, replacing LLM interpretation |
 | TD-27 | No cross-company governance benchmarking | Phase 11 | Future: Phase 20+ when industry-wide data available |
 | TD-28 | Promise deduplication not addressed | Phase 11 | Future: ManagementStatement deduplication when same promise appears in multiple filings |
 | TD-29 | Governance red flag aggregation is per-run | Phase 11 | Future: longitudinal red flag tracking across runs |
@@ -1639,7 +1961,7 @@ Per CLAUDE.md §6:
 |----|-----------|-------------|
 | AC-01 | All new Pydantic contracts are frozen (immutable) | Unit test: `model_config.frozen == True` |
 | AC-02 | ManagementGovernanceAgent constructor accepts all required providers via DI | Unit test: constructor signature |
-| AC-03 | 10 tools implemented, each with typed I/O contracts | Unit test: method signatures match contracts |
+| AC-03 | 9 tools implemented, each with typed I/O contracts (see §27) | Unit test: method signatures match contracts |
 | AC-04 | get_shareholding_data wraps ShareholdingProvider correctly | Unit test: mock provider called with correct args |
 | AC-05 | get_corporate_actions wraps CorporateActionsProvider correctly | Unit test: mock provider called with correct args |
 | AC-06 | persist_management_statements handles INSERT and UPDATE | Unit test: new statement, status update, invalid transition |
@@ -1665,7 +1987,7 @@ Per CLAUDE.md §6:
 | AC-16 | Agent name is "management_governance_agent" | Unit test: constant check |
 | AC-17 | Step failure does not crash agent (continues to next step) | Unit test: mock step failure, verify subsequent steps run |
 | AC-18 | MAX_LLM_ATTEMPTS = 2 per LLM step | Unit test: retry count |
-| AC-19 | Agent returns MoatResearchResult-equivalent with status | Unit test: frozen result model |
+| AC-19 | Agent returns `ManagementGovernanceResult` with status field (see §24a) | Unit test: frozen result model |
 | AC-20 | ResearchRun created with run_type="management_governance" | Unit test: run_service called correctly |
 
 ### Validation Acceptance (Phase 11.5)
@@ -1715,13 +2037,20 @@ Per CLAUDE.md §6:
 - Snapshot contracts (ShareholdingSnapshot, CorporateActionSnapshot, ManagementStatementSummary)
 - Finding categories set (GOVERNANCE_FINDING_CATEGORIES)
 - Unit tests for all contracts
-- **Acceptance criteria**: AC-01, AC-16
+- **Acceptance criteria**: AC-01, AC-16, AC-41, AC-42
+
+### Phase 11.1 Additional Acceptance Criteria
+
+| ID | Criterion | Verification |
+|----|-----------|-------------|
+| AC-41 | GOVERNANCE_RESEARCH_STEPS tuple defines 7 steps with correct order, names, types, and timeouts | Unit test: step count, step_order 1-7, step_type values |
+| AC-42 | GOVERNANCE_FINDING_CATEGORIES frozenset contains exactly the categories listed in §8a | Unit test: set equality |
 
 ### Phase 11.2: Tools
 
 **Deliverable**: Tool implementations for the Management & Governance Agent.
 
-- ManagementGovernanceTools class (10 methods)
+- ManagementGovernanceTools class (9 tool methods + 1 internal helper)
 - load_company_context (extended with ManagementStatement loading)
 - get_shareholding_data (wraps ShareholdingProvider)
 - get_corporate_actions (wraps CorporateActionsProvider)
@@ -1800,9 +2129,9 @@ Per CLAUDE.md §6:
 | ID | Question | Resolution Owner | Impact |
 |----|----------|-----------------|--------|
 | OQ-01 | Should ManagementStatementCategory be expanded to include DIVIDEND_POLICY, M_AND_A, HIRING? | Architecture review | Contract design; enum migration |
-| OQ-02 | Should ManagementStatement.expected_timeframe be a structured type (date or quarter) rather than freetext? | Architecture review | Programmatic promise expiry evaluation |
+| OQ-02 | ~~Should ManagementStatement.expected_timeframe be a structured type?~~ **RESOLVED**: `expected_timeframe` is contract-only, not a persisted ORM column. Timeframes are embedded in `expected_outcome` text and LLM-interpreted. See §10 "expected_timeframe Resolution" and TD-26. | Architecture review | N/A — resolved |
 | OQ-03 | How should duplicate management statements be handled when the same promise appears in multiple filings? | Phase 11.2 implementation | Deduplication logic in persist_management_statements |
 | OQ-04 | Should governance red flags have a longitudinal tracking mechanism across runs? | Architecture review | Additional table or cross-run query |
 | OQ-05 | Is 20,000 tokens sufficient for 9+ governance domains, or should budget be increased to 25,000? | Phase 11.4 testing | Token budget constant |
-| OQ-06 | Should the agent produce a structured ManagementGovernanceAnalysis output (like MoatAssessment) for downstream agents, or are typed findings sufficient? | Architecture review | Output contract design |
-| OQ-07 | How should the agent handle companies with no available filings (e.g., newly listed)? | Phase 11.4 design | Failure path for data-sparse companies |
+| OQ-06 | ~~Should the agent produce a structured output for downstream agents?~~ **RESOLVED**: Yes — `ManagementGovernanceResult` (see §24a). Decision: produce a structured result model mirroring `MoatResearchResult`. Downstream Tier 3 agents consume this result. | Architecture review | N/A — resolved |
+| OQ-07 | How should the agent handle companies with no available filings (e.g., newly listed)? See §7 "Cold-Start Behavior" for baseline cold-start handling. | Phase 11.4 design | Failure path for data-sparse companies |
