@@ -10,6 +10,7 @@ Defines Pydantic v2 frozen models for:
 - Step configuration
 - Finding category constants
 - Competitive Moat Agent contracts (Phase 10)
+- Management & Governance Agent contracts (Phase 11)
 """
 
 from __future__ import annotations
@@ -23,9 +24,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enums import (
     ConfidenceLevel,
+    CorporateActionType,
     DocumentType,
     EvidenceType,
     FindingType,
+    ManagementStatementCategory,
+    ManagementStatementStatus,
     MoatStrength,
     MoatType,
     SourceTier,
@@ -1133,5 +1137,377 @@ MOAT_RESEARCH_STEPS: tuple[StepDefinition, ...] = (
         step_type=STEP_TYPE_LLM_REASONING,
         timeout_seconds=60,
         uses_llm=True,
+    ),
+)
+
+
+# ===========================================================================
+# Management & Governance Agent — constants and contracts (Phase 11)
+# ===========================================================================
+
+GOVERNANCE_AGENT_TOKEN_BUDGET: int = 20_000
+GOVERNANCE_AGENT_TOKEN_WARNING: int = 16_000
+GOVERNANCE_AGENT_NAME: str = "management_governance_agent"
+
+GOVERNANCE_FINDING_CATEGORIES: frozenset[str] = frozenset(
+    {
+        "management_claim",
+        "promise_tracking",
+        "shareholding",
+        "promoter_pledge",
+        "capital_allocation",
+        "related_party_transaction",
+        "auditor_qualification",
+        "executive_compensation",
+        "subsidiary_complexity",
+        "equity_dilution",
+        "governance_red_flag",
+        "governance_general",
+        "data_gap",
+    }
+)
+
+GOVERNANCE_RED_FLAG_CATEGORIES: frozenset[str] = frozenset(
+    {
+        "promoter_pledge_elevation",
+        "declining_promoter_holding",
+        "auditor_qualification",
+        "auditor_change",
+        "related_party_materiality",
+        "executive_compensation_excess",
+        "promise_track_record",
+        "equity_dilution",
+        "subsidiary_opacity",
+    }
+)
+
+
+# ---------------------------------------------------------------------------
+# Management & Governance Agent — request / config / result contracts
+# ---------------------------------------------------------------------------
+
+
+class ManagementGovernanceConfig(BaseModel):
+    """Agent-level configuration for a Management & Governance Agent run."""
+
+    model_config = ConfigDict(frozen=True)
+
+    token_budget: int = Field(default=GOVERNANCE_AGENT_TOKEN_BUDGET, gt=0)
+    token_warning_threshold: int = Field(default=GOVERNANCE_AGENT_TOKEN_WARNING, gt=0)
+    max_llm_attempts: int = Field(default=MAX_LLM_ATTEMPTS, ge=1, le=3)
+    filing_types: list[str] | None = None
+    shareholding_quarters: int = Field(default=8, ge=1, le=20)
+    corporate_action_years: int = Field(default=5, ge=1, le=10)
+    concurrent_retrievals: int = Field(default=5, ge=1, le=20)
+    extraction_model: str | None = None
+    analysis_model: str | None = None
+
+
+class ManagementGovernanceResearchRequest(BaseModel):
+    """Input contract for initiating a Management & Governance Agent run."""
+
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    observation_date: date
+    initiated_by: str = Field(min_length=1, max_length=200)
+    configuration: ManagementGovernanceConfig | None = None
+
+
+class ManagementGovernanceResult(BaseModel):
+    """Output contract returned by ManagementGovernanceAgent.execute()."""
+
+    model_config = ConfigDict(frozen=True)
+
+    status: str = Field(min_length=1, max_length=20)
+    run_id: uuid.UUID
+    finding_ids: list[uuid.UUID] = Field(default_factory=list)
+    statement_ids: list[uuid.UUID] = Field(default_factory=list)
+    shareholding_snapshot_ids: list[uuid.UUID] = Field(default_factory=list)
+    pledge_snapshot_ids: list[uuid.UUID] = Field(default_factory=list)
+    corporate_action_ids: list[uuid.UUID] = Field(default_factory=list)
+    red_flag_count: int = Field(default=0, ge=0)
+    total_findings: int = Field(default=0, ge=0)
+    total_statements_created: int = Field(default=0, ge=0)
+    total_statements_updated: int = Field(default=0, ge=0)
+    error: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Step 1: Company Context Load
+# ---------------------------------------------------------------------------
+
+
+class ManagementStatementSummary(BaseModel):
+    """Compact representation of an existing ManagementStatement for context loading."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: uuid.UUID
+    statement_date: date
+    statement: str
+    category: ManagementStatementCategory
+    expected_outcome: str | None = None
+    expected_timeframe: str | None = None
+    status: ManagementStatementStatus
+
+
+class LoadGovernanceContextInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    observation_date: date
+
+
+class LoadGovernanceContextOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    company_name: str
+    nse_symbol: str | None = None
+    bse_code: str | None = None
+    industry_name: str | None = None
+    company_findings: list[FindingSummary]
+    has_company_research: bool
+    existing_statements: list[ManagementStatementSummary]
+
+
+# ---------------------------------------------------------------------------
+# Step 2: Governance Source Discovery
+# ---------------------------------------------------------------------------
+
+
+class ShareholdingSnapshot(BaseModel):
+    """Normalized shareholding data from ShareholdingProvider."""
+
+    model_config = ConfigDict(frozen=True)
+
+    as_of_date: date
+    quarter: str
+    promoter_holding_pct: Decimal
+    fii_holding_pct: Decimal
+    dii_holding_pct: Decimal
+    public_holding_pct: Decimal
+    total_shares: int | None = None
+    pledged_percentage: Decimal | None = None
+    source_provider: str
+    source_tier: int = 1
+
+
+class CorporateActionSnapshot(BaseModel):
+    """Normalized corporate action data from CorporateActionsProvider."""
+
+    model_config = ConfigDict(frozen=True)
+
+    action_type: CorporateActionType
+    ex_date: date | None = None
+    record_date: date | None = None
+    details: str
+    value: Decimal | None = None
+    source_provider: str
+    source_tier: int = 1
+
+
+class DiscoverGovernanceSourcesInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    company_name: str
+    nse_symbol: str | None = None
+    bse_code: str | None = None
+    observation_date: date
+    filing_types: list[str] | None = None
+    shareholding_quarters: int = Field(default=8, ge=1, le=20)
+    corporate_action_years: int = Field(default=5, ge=1, le=10)
+
+
+class DiscoverGovernanceSourcesOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    filing_candidates: list[SourceCandidate]
+    shareholding_data: list[ShareholdingSnapshot]
+    corporate_actions: list[CorporateActionSnapshot]
+    provider_errors: list[str]
+    data_gaps: list[str]
+
+
+# ---------------------------------------------------------------------------
+# Step 3: Document Retrieval
+# ---------------------------------------------------------------------------
+
+
+class RetrievedDocument(BaseModel):
+    """A single retrieved governance document with metadata."""
+
+    model_config = ConfigDict(frozen=True)
+
+    source_id: str
+    title: str
+    content: str
+    document_date: date | None = None
+    filing_date: date | None = None
+    source_url: str | None = None
+    source_tier: int
+    content_hash: str
+
+
+class RetrieveGovernanceDocumentsInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    research_run_id: uuid.UUID
+    filing_candidates: list[SourceCandidate]
+
+
+class RetrieveGovernanceDocumentsOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    documents: list[RetrievedDocument]
+    retrieval_errors: list[str]
+    total_attempted: int = Field(ge=0)
+    total_retrieved: int = Field(ge=0)
+
+
+# ---------------------------------------------------------------------------
+# Step 5: Governance Analysis — LLM output schemas
+# ---------------------------------------------------------------------------
+
+
+class NewManagementStatement(BaseModel):
+    """A new management statement extracted by the LLM."""
+
+    model_config = ConfigDict(frozen=True)
+
+    statement: str
+    statement_date: date
+    category: str
+    expected_outcome: str | None = None
+    expected_timeframe: str | None = None
+    evidence_index: int
+
+
+class ManagementStatementUpdate(BaseModel):
+    """A proposed update to an existing ManagementStatement."""
+
+    model_config = ConfigDict(frozen=True)
+
+    statement_id: str
+    proposed_status: str
+    actual_outcome: str | None = None
+    outcome_evidence_index: int | None = None
+    resolution_detail: str | None = None
+    justification: str
+
+
+class GovernanceRedFlag(BaseModel):
+    """A governance red flag identified by the LLM."""
+
+    model_config = ConfigDict(frozen=True)
+
+    category: str
+    description: str
+    severity: str
+    justification: str
+    evidence_indices: list[int]
+
+
+class GovernanceAnalysisOutput(BaseModel):
+    """LLM structured output from governance analysis (Step 5)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    new_management_statements: list[NewManagementStatement]
+    statement_updates: list[ManagementStatementUpdate]
+    capital_allocation_findings: list[GeneratedFinding]
+    related_party_findings: list[GeneratedFinding]
+    auditor_findings: list[GeneratedFinding]
+    compensation_findings: list[GeneratedFinding]
+    subsidiary_findings: list[GeneratedFinding]
+    dilution_findings: list[GeneratedFinding]
+    governance_red_flags: list[GovernanceRedFlag]
+    general_findings: list[GeneratedFinding]
+
+
+# ---------------------------------------------------------------------------
+# Step 6: Governance Validation
+# ---------------------------------------------------------------------------
+
+
+class GovernanceValidationIssue(BaseModel):
+    """A single validation issue found during governance validation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    domain: str
+    issue_type: str
+    message: str
+    action: str
+
+
+class GovernanceValidationResult(BaseModel):
+    """Result of governance validation (Step 6)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    total_findings: int = Field(ge=0)
+    valid_count: int = Field(ge=0)
+    rejected_count: int = Field(ge=0)
+    statement_updates_valid: int = Field(ge=0)
+    statement_updates_rejected: int = Field(ge=0)
+    new_statements_valid: int = Field(ge=0)
+    new_statements_rejected: int = Field(ge=0)
+    red_flags_valid: int = Field(ge=0)
+    red_flags_rejected: int = Field(ge=0)
+    issues: list[GovernanceValidationIssue]
+
+
+# ---------------------------------------------------------------------------
+# Management & Governance Agent — step definitions
+# ---------------------------------------------------------------------------
+
+GOVERNANCE_RESEARCH_STEPS: tuple[StepDefinition, ...] = (
+    StepDefinition(
+        step_order=1,
+        step_name="company_context_load",
+        step_type=STEP_TYPE_DETERMINISTIC,
+        timeout_seconds=10,
+    ),
+    StepDefinition(
+        step_order=2,
+        step_name="governance_source_discovery",
+        step_type=STEP_TYPE_PROVIDER_CALL,
+        timeout_seconds=30,
+    ),
+    StepDefinition(
+        step_order=3,
+        step_name="document_retrieval",
+        step_type=STEP_TYPE_PROVIDER_CALL,
+        timeout_seconds=60,
+    ),
+    StepDefinition(
+        step_order=4,
+        step_name="evidence_extraction",
+        step_type=STEP_TYPE_LLM_REASONING,
+        timeout_seconds=120,
+        uses_llm=True,
+    ),
+    StepDefinition(
+        step_order=5,
+        step_name="governance_analysis",
+        step_type=STEP_TYPE_LLM_REASONING,
+        timeout_seconds=120,
+        uses_llm=True,
+    ),
+    StepDefinition(
+        step_order=6,
+        step_name="governance_validation",
+        step_type=STEP_TYPE_DETERMINISTIC,
+        timeout_seconds=10,
+    ),
+    StepDefinition(
+        step_order=7,
+        step_name="persistence",
+        step_type=STEP_TYPE_DETERMINISTIC,
+        timeout_seconds=30,
     ),
 )

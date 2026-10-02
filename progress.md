@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-02 (Phase 10.6 — Competitive Moat Integration Tests)
+**Last Updated:** 2026-10-02 (Phase 11.1 — Management & Governance Agent Contracts)
 
 ---
 
@@ -473,7 +473,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Current Phase
 
-**Current Phase:** Phase 11 — Management & Governance Agent (11.0 Architecture COMPLETE, 11.1-11.6 NOT STARTED)
+**Current Phase:** Phase 11 — Management & Governance Agent (11.0 Architecture COMPLETE, 11.1 Contracts COMPLETE, 11.2-11.6 NOT STARTED)
 
 ### Phase 9.1: ResearchRun Schema Migration — COMPLETE
 
@@ -743,6 +743,61 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 **Phase 10 COMPLETE.** Next phase: Phase 11 — Management & Governance Agent.
 Architecture document: `docs/architecture/phase-11-management-governance-agent.md`
 
+### Phase 11.0: Management & Governance Agent Architecture — COMPLETE
+
+- [x] Architecture document: `docs/architecture/phase-11-management-governance-agent.md` (426 lines added, 97 removed)
+- [x] 25 audit findings resolved (3 BLOCKER, 5 HIGH, 9 MEDIUM, 3 LOW, 5 OBSERVATION)
+- [x] Three-level timeout hierarchy documented (per-operation, step, agent deadline)
+- [x] Promise lifecycle state machine with substate semantics (resolution_detail)
+- [x] ManagementGovernanceResult contract defined (§24a)
+- [x] GOVERNANCE_FINDING_CATEGORIES (13) and GOVERNANCE_RED_FLAG_CATEGORIES (9) enumerated (§8a)
+- [x] Deterministic calculation and rounding rules (§25a)
+- [x] Cold-start behavior documented (§7)
+- [x] Token budget reassessment criteria (§33)
+- [x] expected_timeframe resolved as contract-only (no ORM migration)
+- [x] OQ-02 and OQ-06 closed
+- [x] Zero production code modified
+- [x] Commit: `1daa3dd`
+
+### Phase 11.1: Management & Governance Agent Contracts — COMPLETE
+
+- [x] `backend/app/agents/contracts.py` — All Phase 11.1 typed contracts appended (~310 lines):
+  - Constants: GOVERNANCE_AGENT_TOKEN_BUDGET=20,000, GOVERNANCE_AGENT_TOKEN_WARNING=16,000, GOVERNANCE_AGENT_NAME
+  - GOVERNANCE_FINDING_CATEGORIES frozenset (13 categories)
+  - GOVERNANCE_RED_FLAG_CATEGORIES frozenset (9 categories)
+  - ManagementGovernanceConfig (frozen) — agent configuration with defaults
+  - ManagementGovernanceResearchRequest (frozen) — agent input contract
+  - ManagementGovernanceResult (frozen) — agent output with status, counts, ID lists
+  - Step 1: ManagementStatementSummary, LoadGovernanceContextInput/Output
+  - Step 2: ShareholdingSnapshot (Decimal holdings), CorporateActionSnapshot (CorporateActionType enum), DiscoverGovernanceSourcesInput/Output
+  - Step 3: RetrievedDocument, RetrieveGovernanceDocumentsInput/Output
+  - Step 5: NewManagementStatement (contract-only expected_timeframe), ManagementStatementUpdate (resolution_detail for substates), GovernanceRedFlag, GovernanceAnalysisOutput
+  - Step 6: GovernanceValidationIssue, GovernanceValidationResult
+  - GOVERNANCE_RESEARCH_STEPS tuple (7 steps: deterministic, provider, LLM reasoning)
+- [x] `backend/tests/agents/test_governance_contracts.py` — 103 comprehensive tests:
+  - Constants, finding categories (13), red flag categories (9)
+  - Config defaults/custom/frozen/bounds, request, result (completed/failed/partial)
+  - ManagementStatementSummary (all statuses, all categories, frozen)
+  - LoadGovernanceContext contracts (input/output, with/without research)
+  - ShareholdingSnapshot (Decimal types), CorporateActionSnapshot (all action types)
+  - DiscoverGovernanceSources contracts (defaults, custom, bounds)
+  - RetrievedDocument, RetrieveGovernanceDocuments contracts
+  - NewManagementStatement, ManagementStatementUpdate (resolution_detail substates)
+  - GovernanceRedFlag (all 9 categories), GovernanceAnalysisOutput
+  - GovernanceValidation contracts (issues, valid/rejected counts)
+  - 7-step workflow definition (order, names, types, LLM/deterministic/provider)
+  - Serialization round-trips (Decimal preservation)
+  - Enum reuse verification (ManagementStatementCategory, ManagementStatementStatus, CorporateActionType, GeneratedFinding, FindingSummary, SourceCandidate)
+- [x] Imports added: CorporateActionType, ManagementStatementCategory, ManagementStatementStatus
+- [x] Module docstring updated to mention Phase 11
+- [x] Zero database schema changes, zero new ORM fields, zero migrations
+- [x] Zero modifications to backend/app/models/research.py or backend/app/models/enums.py
+- [x] expected_timeframe is contract-only (not persisted)
+- [x] Step 5a not in GOVERNANCE_RESEARCH_STEPS (shares Step 6 budget, called as method between Step 5 and Step 6)
+- [x] MAX_LLM_ATTEMPTS=2 reused from shared constant
+- [x] Quality gates: 103 tests passing, ruff clean, mypy strict clean
+- [x] Regression: 232 Phase 8/10 contract tests passing, 2473+ total backend tests passing
+
 ---
 
 ## Completed Features
@@ -864,6 +919,7 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
 
 ## Next Actions
 
-1. **Phase 10.4: Competitive Moat Agent Orchestration** — LangGraph agent implementation
+1. **Phase 11.2: Management & Governance Agent Tools** — 9 tool implementations with mocked provider/DB tests
+2. **Phase 11.3: Management & Governance Agent Prompts** — LLM prompt templates with prompt injection defense
 3. **SEBI XBRL integration** for authoritative financial data
 4. **Evaluate Celery vs Temporal** (ADR-002) for background tasks
