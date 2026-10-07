@@ -25,6 +25,10 @@ from app.agents.contracts import (
     DiscoverGovernanceSourcesOutput,
     FindingSummary,
     GeneratedFinding,
+    GetCorporateActionsInput,
+    GetCorporateActionsOutput,
+    GetShareholdingInput,
+    GetShareholdingOutput,
     GovernanceAnalysisOutput,
     GovernanceRedFlag,
     GovernanceValidationIssue,
@@ -37,6 +41,12 @@ from app.agents.contracts import (
     ManagementStatementSummary,
     ManagementStatementUpdate,
     NewManagementStatement,
+    PersistGovernanceDataInput,
+    PersistGovernanceDataOutput,
+    PersistShareholdingInput,
+    PersistShareholdingOutput,
+    PersistStatementsInput,
+    PersistStatementsOutput,
     RetrievedDocument,
     RetrieveGovernanceDocumentsInput,
     RetrieveGovernanceDocumentsOutput,
@@ -1472,3 +1482,383 @@ class TestGovernanceEnumReuse:
             data_gaps=[],
         )
         assert out.filing_candidates[0].source_tier == SourceTier.TIER_1
+
+
+# ===========================================================================
+# Tool I/O Contract Tests (Remediation for FINDING-01)
+# ===========================================================================
+
+
+class TestGetShareholdingContracts:
+
+    def test_input_valid(self) -> None:
+        inp = GetShareholdingInput(
+            company_id=COMPANY_UUID,
+            nse_symbol="RELIANCE",
+            bse_code="500325",
+            observation_date=date(2025, 6, 30),
+            quarters=8,
+        )
+        assert inp.company_id == COMPANY_UUID
+        assert inp.nse_symbol == "RELIANCE"
+        assert inp.bse_code == "500325"
+        assert inp.observation_date == date(2025, 6, 30)
+        assert inp.quarters == 8
+
+    def test_input_defaults(self) -> None:
+        inp = GetShareholdingInput(
+            company_id=COMPANY_UUID,
+            observation_date=date(2025, 6, 30),
+        )
+        assert inp.nse_symbol is None
+        assert inp.bse_code is None
+        assert inp.quarters == 8
+
+    def test_input_frozen(self) -> None:
+        inp = GetShareholdingInput(
+            company_id=COMPANY_UUID,
+            observation_date=date(2025, 6, 30),
+        )
+        with pytest.raises(ValidationError):
+            inp.quarters = 4
+
+    def test_input_quarters_bounds(self) -> None:
+        with pytest.raises(ValidationError):
+            GetShareholdingInput(
+                company_id=COMPANY_UUID,
+                observation_date=date(2025, 6, 30),
+                quarters=0,
+            )
+        with pytest.raises(ValidationError):
+            GetShareholdingInput(
+                company_id=COMPANY_UUID,
+                observation_date=date(2025, 6, 30),
+                quarters=21,
+            )
+
+    def test_output_valid(self) -> None:
+        snap = ShareholdingSnapshot(
+            as_of_date=date(2025, 3, 31),
+            quarter="Q4FY25",
+            promoter_holding_pct=Decimal("50.30"),
+            fii_holding_pct=Decimal("20.00"),
+            dii_holding_pct=Decimal("15.00"),
+            public_holding_pct=Decimal("14.70"),
+            source_provider="nse",
+        )
+        out = GetShareholdingOutput(
+            snapshots=[snap],
+            provider_errors=[],
+        )
+        assert len(out.snapshots) == 1
+        assert out.snapshots[0].promoter_holding_pct == Decimal("50.30")
+        assert out.provider_errors == []
+
+    def test_output_with_errors(self) -> None:
+        out = GetShareholdingOutput(
+            snapshots=[],
+            provider_errors=["Provider timeout"],
+        )
+        assert len(out.snapshots) == 0
+        assert out.provider_errors == ["Provider timeout"]
+
+    def test_output_frozen(self) -> None:
+        out = GetShareholdingOutput(snapshots=[], provider_errors=[])
+        with pytest.raises(ValidationError):
+            out.snapshots = []
+
+
+class TestGetCorporateActionsContracts:
+
+    def test_input_valid(self) -> None:
+        inp = GetCorporateActionsInput(
+            company_id=COMPANY_UUID,
+            nse_symbol="RELIANCE",
+            observation_date=date(2025, 6, 30),
+            years=5,
+        )
+        assert inp.company_id == COMPANY_UUID
+        assert inp.years == 5
+
+    def test_input_defaults(self) -> None:
+        inp = GetCorporateActionsInput(
+            company_id=COMPANY_UUID,
+            observation_date=date(2025, 6, 30),
+        )
+        assert inp.nse_symbol is None
+        assert inp.bse_code is None
+        assert inp.years == 5
+
+    def test_input_frozen(self) -> None:
+        inp = GetCorporateActionsInput(
+            company_id=COMPANY_UUID,
+            observation_date=date(2025, 6, 30),
+        )
+        with pytest.raises(ValidationError):
+            inp.years = 3
+
+    def test_input_years_bounds(self) -> None:
+        with pytest.raises(ValidationError):
+            GetCorporateActionsInput(
+                company_id=COMPANY_UUID,
+                observation_date=date(2025, 6, 30),
+                years=0,
+            )
+        with pytest.raises(ValidationError):
+            GetCorporateActionsInput(
+                company_id=COMPANY_UUID,
+                observation_date=date(2025, 6, 30),
+                years=11,
+            )
+
+    def test_output_valid(self) -> None:
+        action = CorporateActionSnapshot(
+            action_type=CorporateActionType.DIVIDEND,
+            ex_date=date(2025, 5, 15),
+            details="Interim dividend Rs 10",
+            value=Decimal("10.00"),
+            source_provider="bse",
+        )
+        out = GetCorporateActionsOutput(
+            actions=[action],
+            provider_errors=[],
+        )
+        assert len(out.actions) == 1
+        assert out.actions[0].action_type == CorporateActionType.DIVIDEND
+
+    def test_output_frozen(self) -> None:
+        out = GetCorporateActionsOutput(actions=[], provider_errors=[])
+        with pytest.raises(ValidationError):
+            out.actions = []
+
+
+class TestPersistStatementsContracts:
+
+    def test_input_with_new_statements(self) -> None:
+        stmt = NewManagementStatement(
+            statement="Revenue will grow 20%",
+            statement_date=date(2025, 1, 15),
+            category="revenue_guidance",
+            evidence_index=0,
+        )
+        inp = PersistStatementsInput(
+            company_id=COMPANY_UUID,
+            research_run_id=RUN_UUID,
+            new_statements=[stmt],
+        )
+        assert len(inp.new_statements) == 1
+        assert inp.statement_updates == []
+        assert inp.evidence_ids == []
+
+    def test_input_with_updates(self) -> None:
+        upd = ManagementStatementUpdate(
+            statement_id=str(STATEMENT_UUID),
+            proposed_status="MET",
+            actual_outcome="Revenue grew 22%",
+            outcome_evidence_index=0,
+            justification="Annual report confirms",
+        )
+        inp = PersistStatementsInput(
+            company_id=COMPANY_UUID,
+            research_run_id=RUN_UUID,
+            statement_updates=[upd],
+            evidence_ids=[EVIDENCE_UUID],
+        )
+        assert len(inp.statement_updates) == 1
+        assert len(inp.evidence_ids) == 1
+
+    def test_input_frozen(self) -> None:
+        inp = PersistStatementsInput(
+            company_id=COMPANY_UUID,
+            research_run_id=RUN_UUID,
+        )
+        with pytest.raises(ValidationError):
+            inp.company_id = COMPANY_UUID
+
+    def test_output_valid(self) -> None:
+        out = PersistStatementsOutput(
+            created_ids=[STATEMENT_UUID],
+            updated_ids=[],
+            rejected_count=0,
+        )
+        assert len(out.created_ids) == 1
+        assert out.rejected_count == 0
+
+    def test_output_with_rejections(self) -> None:
+        out = PersistStatementsOutput(
+            created_ids=[],
+            updated_ids=[],
+            rejected_count=2,
+        )
+        assert out.rejected_count == 2
+
+    def test_output_frozen(self) -> None:
+        out = PersistStatementsOutput(
+            created_ids=[], updated_ids=[], rejected_count=0,
+        )
+        with pytest.raises(ValidationError):
+            out.rejected_count = 1
+
+    def test_output_rejected_count_non_negative(self) -> None:
+        with pytest.raises(ValidationError):
+            PersistStatementsOutput(
+                created_ids=[], updated_ids=[], rejected_count=-1,
+            )
+
+
+class TestPersistShareholdingContracts:
+
+    def test_input_valid(self) -> None:
+        snap = ShareholdingSnapshot(
+            as_of_date=date(2025, 3, 31),
+            quarter="Q4FY25",
+            promoter_holding_pct=Decimal("50.30"),
+            fii_holding_pct=Decimal("20.00"),
+            dii_holding_pct=Decimal("15.00"),
+            public_holding_pct=Decimal("14.70"),
+            source_provider="nse",
+        )
+        inp = PersistShareholdingInput(
+            company_id=COMPANY_UUID,
+            research_run_id=RUN_UUID,
+            snapshots=[snap],
+        )
+        assert len(inp.snapshots) == 1
+
+    def test_input_requires_at_least_one_snapshot(self) -> None:
+        with pytest.raises(ValidationError):
+            PersistShareholdingInput(
+                company_id=COMPANY_UUID,
+                research_run_id=RUN_UUID,
+                snapshots=[],
+            )
+
+    def test_input_frozen(self) -> None:
+        snap = ShareholdingSnapshot(
+            as_of_date=date(2025, 3, 31),
+            quarter="Q4FY25",
+            promoter_holding_pct=Decimal("50.30"),
+            fii_holding_pct=Decimal("20.00"),
+            dii_holding_pct=Decimal("15.00"),
+            public_holding_pct=Decimal("14.70"),
+            source_provider="nse",
+        )
+        inp = PersistShareholdingInput(
+            company_id=COMPANY_UUID,
+            research_run_id=RUN_UUID,
+            snapshots=[snap],
+        )
+        with pytest.raises(ValidationError):
+            inp.company_id = COMPANY_UUID
+
+    def test_output_valid(self) -> None:
+        out = PersistShareholdingOutput(
+            persisted_ids=[COMPANY_UUID],
+            skipped_count=0,
+        )
+        assert len(out.persisted_ids) == 1
+        assert out.skipped_count == 0
+
+    def test_output_skipped_count_default(self) -> None:
+        out = PersistShareholdingOutput(persisted_ids=[])
+        assert out.skipped_count == 0
+
+    def test_output_skipped_count_non_negative(self) -> None:
+        with pytest.raises(ValidationError):
+            PersistShareholdingOutput(persisted_ids=[], skipped_count=-1)
+
+    def test_output_frozen(self) -> None:
+        out = PersistShareholdingOutput(persisted_ids=[])
+        with pytest.raises(ValidationError):
+            out.skipped_count = 1
+
+
+class TestPersistGovernanceDataContracts:
+
+    def test_input_with_both(self) -> None:
+        pledge = ShareholdingSnapshot(
+            as_of_date=date(2025, 3, 31),
+            quarter="Q4FY25",
+            promoter_holding_pct=Decimal("50.30"),
+            fii_holding_pct=Decimal("20.00"),
+            dii_holding_pct=Decimal("15.00"),
+            public_holding_pct=Decimal("14.70"),
+            pledged_percentage=Decimal("5.00"),
+            source_provider="nse",
+        )
+        action = CorporateActionSnapshot(
+            action_type=CorporateActionType.DIVIDEND,
+            details="Final dividend Rs 5",
+            value=Decimal("5.00"),
+            source_provider="bse",
+        )
+        inp = PersistGovernanceDataInput(
+            company_id=COMPANY_UUID,
+            research_run_id=RUN_UUID,
+            pledge_snapshots=[pledge],
+            corporate_actions=[action],
+        )
+        assert len(inp.pledge_snapshots) == 1
+        assert len(inp.corporate_actions) == 1
+        assert inp.pledge_snapshots[0].pledged_percentage == Decimal("5.00")
+
+    def test_input_defaults_empty_lists(self) -> None:
+        inp = PersistGovernanceDataInput(
+            company_id=COMPANY_UUID,
+            research_run_id=RUN_UUID,
+        )
+        assert inp.pledge_snapshots == []
+        assert inp.corporate_actions == []
+
+    def test_input_frozen(self) -> None:
+        inp = PersistGovernanceDataInput(
+            company_id=COMPANY_UUID,
+            research_run_id=RUN_UUID,
+        )
+        with pytest.raises(ValidationError):
+            inp.company_id = COMPANY_UUID
+
+    def test_output_valid(self) -> None:
+        out = PersistGovernanceDataOutput(
+            pledge_ids=[COMPANY_UUID],
+            corporate_action_ids=[RUN_UUID],
+        )
+        assert len(out.pledge_ids) == 1
+        assert len(out.corporate_action_ids) == 1
+
+    def test_output_frozen(self) -> None:
+        out = PersistGovernanceDataOutput(
+            pledge_ids=[], corporate_action_ids=[],
+        )
+        with pytest.raises(ValidationError):
+            out.pledge_ids = []
+
+
+class TestToolContractCompleteness:
+    """Verify all 6 tool I/O contract pairs required by Architecture §40 exist."""
+
+    REQUIRED_TOOL_CONTRACTS: list[tuple[str, str]] = [
+        ("LoadGovernanceContextInput", "LoadGovernanceContextOutput"),
+        ("GetShareholdingInput", "GetShareholdingOutput"),
+        ("GetCorporateActionsInput", "GetCorporateActionsOutput"),
+        ("PersistStatementsInput", "PersistStatementsOutput"),
+        ("PersistShareholdingInput", "PersistShareholdingOutput"),
+        ("PersistGovernanceDataInput", "PersistGovernanceDataOutput"),
+    ]
+
+    def test_all_tool_contract_pairs_importable(self) -> None:
+        import app.agents.contracts as mod
+        for input_name, output_name in self.REQUIRED_TOOL_CONTRACTS:
+            assert hasattr(mod, input_name), f"Missing: {input_name}"
+            assert hasattr(mod, output_name), f"Missing: {output_name}"
+
+    def test_all_tool_contracts_are_frozen(self) -> None:
+        import app.agents.contracts as mod
+        for input_name, output_name in self.REQUIRED_TOOL_CONTRACTS:
+            input_cls = getattr(mod, input_name)
+            output_cls = getattr(mod, output_name)
+            assert input_cls.model_config.get("frozen") is True, f"{input_name} not frozen"
+            assert output_cls.model_config.get("frozen") is True, f"{output_name} not frozen"
+
+    def test_required_count(self) -> None:
+        assert len(self.REQUIRED_TOOL_CONTRACTS) == 6

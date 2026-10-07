@@ -1462,6 +1462,94 @@ class GovernanceValidationResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Management & Governance Agent — tool I/O contracts
+# ---------------------------------------------------------------------------
+
+
+class GetShareholdingInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    nse_symbol: str | None = None
+    bse_code: str | None = None
+    observation_date: date
+    quarters: int = Field(default=8, ge=1, le=20)
+
+
+class GetShareholdingOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    snapshots: list[ShareholdingSnapshot]
+    provider_errors: list[str]
+
+
+class GetCorporateActionsInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    nse_symbol: str | None = None
+    bse_code: str | None = None
+    observation_date: date
+    years: int = Field(default=5, ge=1, le=10)
+
+
+class GetCorporateActionsOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    actions: list[CorporateActionSnapshot]
+    provider_errors: list[str]
+
+
+class PersistStatementsInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    research_run_id: uuid.UUID
+    new_statements: list[NewManagementStatement] = Field(default_factory=list)
+    statement_updates: list[ManagementStatementUpdate] = Field(default_factory=list)
+    evidence_ids: list[uuid.UUID] = Field(default_factory=list)
+
+
+class PersistStatementsOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    created_ids: list[uuid.UUID]
+    updated_ids: list[uuid.UUID]
+    rejected_count: int = Field(default=0, ge=0)
+
+
+class PersistShareholdingInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    research_run_id: uuid.UUID
+    snapshots: list[ShareholdingSnapshot] = Field(min_length=1)
+
+
+class PersistShareholdingOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    persisted_ids: list[uuid.UUID]
+    skipped_count: int = Field(default=0, ge=0)
+
+
+class PersistGovernanceDataInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    research_run_id: uuid.UUID
+    pledge_snapshots: list[ShareholdingSnapshot] = Field(default_factory=list)
+    corporate_actions: list[CorporateActionSnapshot] = Field(default_factory=list)
+
+
+class PersistGovernanceDataOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    pledge_ids: list[uuid.UUID]
+    corporate_action_ids: list[uuid.UUID]
+
+
+# ---------------------------------------------------------------------------
 # Management & Governance Agent — step definitions
 # ---------------------------------------------------------------------------
 

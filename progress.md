@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-02 (Phase 11.1 — Management & Governance Agent Contracts)
+**Last Updated:** 2026-10-07 (Phase 11.1 Remediation — Missing Tool I/O Contracts)
 
 ---
 
@@ -797,6 +797,16 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
 - [x] MAX_LLM_ATTEMPTS=2 reused from shared constant
 - [x] Quality gates: 103 tests passing, ruff clean, mypy strict clean
 - [x] Regression: 232 Phase 8/10 contract tests passing, 2473+ total backend tests passing
+- [x] **Remediation (FINDING-01)**: 5 missing tool I/O contract pairs added per Architecture §40:
+  - GetShareholdingInput/Output — wraps ShareholdingProvider (company_id, observation_date, quarters)
+  - GetCorporateActionsInput/Output — wraps CorporateActionsProvider (company_id, observation_date, years)
+  - PersistStatementsInput/Output — persist new/updated ManagementStatements (new_statements, statement_updates, evidence_ids)
+  - PersistShareholdingInput/Output — persist shareholding snapshots (min 1 snapshot, upsert skipped_count)
+  - PersistGovernanceDataInput/Output — persist pledge + corporate action data (pledge_snapshots, corporate_actions)
+  - All 10 new contracts frozen, typed, follow Phase 8/10 patterns
+  - 35 new tests across 6 test classes (including completeness check for all 6 tool I/O pairs)
+  - Quality gates: 138 governance tests, 232 regression tests, 2619 total backend tests passing
+  - ruff clean, mypy strict clean on both files
 
 ---
 
