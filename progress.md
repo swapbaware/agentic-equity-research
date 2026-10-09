@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-07 (Phase 11.1 Remediation — Missing Tool I/O Contracts)
+**Last Updated:** 2026-10-09 (Phase 11.2 — Management & Governance Agent Tools)
 
 ---
 
@@ -473,7 +473,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Current Phase
 
-**Current Phase:** Phase 11 — Management & Governance Agent (11.0 Architecture COMPLETE, 11.1 Contracts COMPLETE, 11.2-11.6 NOT STARTED)
+**Current Phase:** Phase 11 — Management & Governance Agent (11.0 Architecture COMPLETE, 11.1 Contracts COMPLETE, 11.2 Tools COMPLETE, 11.3-11.6 NOT STARTED)
 
 ### Phase 9.1: ResearchRun Schema Migration — COMPLETE
 
@@ -808,6 +808,38 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
   - Quality gates: 138 governance tests, 232 regression tests, 2619 total backend tests passing
   - ruff clean, mypy strict clean on both files
 
+### Phase 11.2: Management & Governance Agent Tools — COMPLETE
+
+- [x] `backend/app/agents/management_governance/tools.py` — ManagementGovernanceTools class (~800 lines):
+  - Constructor: `__init__(self, session, run_service, corporate_filings, shareholding, corporate_actions)`
+  - NO search or news provider dependencies (per architecture §28)
+  - Tool 1 `load_company_context`: DB lookup company + findings + ManagementStatements
+  - Tool 2 `discover_governance_sources`: CorporateFilingsProvider + ShareholdingProvider + CorporateActionsProvider with temporal filtering
+  - Tool 3 `retrieve_document`: CorporateFilingsProvider.get_filing_document with SHA-256 content hash
+  - Tool 4 `get_shareholding_data`: wraps ShareholdingProvider.get_shareholding_history, ShareholdingPattern → ShareholdingSnapshot normalization
+  - Tool 5 `get_corporate_actions`: wraps CorporateActionsProvider.get_corporate_actions, CorporateActionRecord → CorporateActionSnapshot normalization
+  - Tool 6 `persist_evidence`: uses GOVERNANCE_AGENT_NAME for extracted_by attribution
+  - Tool 7 `persist_findings`: validates against GOVERNANCE_FINDING_CATEGORIES (13 categories)
+  - Tool 8 `persist_management_statements`: INSERT new + UPDATE existing with lifecycle validation (_VALID_TRANSITIONS per §10)
+  - Tool 9 `persist_shareholding`: upsert with (company_id, as_of_date) duplicate check, first-write-wins
+  - Tool 10 `persist_governance_data`: persist PromoterPledge + CorporateAction data with upsert semantics
+  - Internal helper `create_research_document`
+  - Helper `_map_filing_type` (annual_report/quarterly_result/investor_presentation → DocumentType)
+  - Helper `_compute_start_date_for_quarters` (temporal calculation)
+  - ManagementStatement lifecycle: PENDING → MET/PARTIALLY_MET/MISSED/UNKNOWN; MET requires outcome_evidence_id
+- [x] `backend/app/agents/management_governance/exceptions.py` — CompanyNotFoundForGovernanceError (reuses AgentError)
+- [x] `backend/app/agents/management_governance/__init__.py` — Package init
+- [x] `backend/tests/agents/test_governance_tools.py` — 62 tests across 13 test classes:
+  - TestLoadCompanyContext (5), TestDiscoverGovernanceSources (8), TestRetrieveDocument (2)
+  - TestGetShareholdingData (6), TestGetCorporateActions (5), TestPersistEvidence (1)
+  - TestPersistFindings (3), TestPersistManagementStatements (9), TestPersistShareholding (3)
+  - TestPersistGovernanceData (5), TestCreateResearchDocument (1), TestHelperFunctions (8)
+  - TestToolInventoryCompleteness (4), TestExceptions (2)
+- [x] Quality gates: 62/62 Phase 11.2 tests passing, ruff clean, mypy strict clean
+- [x] Regression: 138 Phase 11.1 tests passing, 1112 total agent tests passing, 2680 total backend tests passing
+- [x] No Phase 11.1 contract modifications
+- [x] No schema changes, no migrations, no ORM model changes
+
 ---
 
 ## Completed Features
@@ -929,7 +961,7 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
 
 ## Next Actions
 
-1. **Phase 11.2: Management & Governance Agent Tools** — 9 tool implementations with mocked provider/DB tests
-2. **Phase 11.3: Management & Governance Agent Prompts** — LLM prompt templates with prompt injection defense
+1. **Phase 11.3: Management & Governance Agent Prompts** — LLM prompt templates with prompt injection defense
+2. **Phase 11.4: Management & Governance Agent Orchestration** — LangGraph workflow
 3. **SEBI XBRL integration** for authoritative financial data
 4. **Evaluate Celery vs Temporal** (ADR-002) for background tasks
