@@ -572,7 +572,7 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 
 **Subphases (from architecture document):**
 - Phase 11.1: Contracts (typed Pydantic contracts, step definitions, finding categories, tool I/O contracts) — **COMPLETE** (remediated: 5 missing tool I/O pairs added per §40)
-- Phase 11.2: Tools (9 tool implementations + 1 internal helper with 62 mocked tests) — **COMPLETE**
+- Phase 11.2: Tools (9 tool implementations + 1 internal helper with 72 mocked tests) — **COMPLETE** (remediated: D-2 terminal evidence enforcement, D-3 upsert conflict detection)
 - Phase 11.3: Prompts (LLM prompt templates with prompt injection defense)
 - Phase 11.4: Agent (ManagementGovernanceAgent orchestration, 7-step workflow)
 - Phase 11.5: Validation Tests (ManagementStatement transition rules, finding/red-flag/shareholding validation)

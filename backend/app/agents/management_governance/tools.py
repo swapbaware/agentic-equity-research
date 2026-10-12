@@ -68,6 +68,7 @@ from app.models.company import Company
 from app.models.enums import (
     CorporateActionType,
     DocumentType,
+    FindingType,
     ManagementStatementCategory,
     ManagementStatementStatus,
     ResearchRunStatus,
@@ -111,6 +112,15 @@ _VALID_TRANSITIONS: dict[ManagementStatementStatus, frozenset[ManagementStatemen
     ManagementStatementStatus.PARTIALLY_MET: frozenset(),
     ManagementStatementStatus.MISSED: frozenset(),
 }
+
+# Terminal statuses that require outcome_evidence_index per §10
+_TERMINAL_STATUSES: frozenset[ManagementStatementStatus] = frozenset(
+    {
+        ManagementStatementStatus.MET,
+        ManagementStatementStatus.PARTIALLY_MET,
+        ManagementStatementStatus.MISSED,
+    }
+)
 
 
 class ManagementGovernanceTools:
@@ -629,11 +639,12 @@ class ManagementGovernanceTools:
                 )
                 continue
 
-            # Per §10: MET requires outcome_evidence_id
-            if proposed_status == ManagementStatementStatus.MET and update.outcome_evidence_index is None:
+            # Per §10: terminal transitions require outcome_evidence_index
+            if proposed_status in _TERMINAL_STATUSES and update.outcome_evidence_index is None:
                 rejected_count += 1
                 logger.warning(
-                    "MET transition requires outcome_evidence_index for statement %s",
+                    "%s transition requires outcome_evidence_index for statement %s",
+                    proposed_status.value,
                     update.statement_id,
                 )
                 continue
@@ -680,11 +691,61 @@ class ManagementGovernanceTools:
 
             if existing is not None:
                 skipped_count += 1
-                logger.info(
-                    "Shareholding already exists for company %s on %s, skipping (first-write-wins)",
-                    inp.company_id,
-                    snapshot.as_of_date,
+                # §30: compare material fields and report conflict if different
+                has_conflict = (
+                    existing.promoter_holding_pct != snapshot.promoter_holding_pct
+                    or existing.fii_holding_pct != snapshot.fii_holding_pct
+                    or existing.dii_holding_pct != snapshot.dii_holding_pct
+                    or existing.public_holding_pct != snapshot.public_holding_pct
                 )
+                if has_conflict:
+                    logger.warning(
+                        "Shareholding data conflict for company %s on %s: "
+                        "existing [promoter=%s, fii=%s, dii=%s, public=%s] vs "
+                        "incoming [promoter=%s, fii=%s, dii=%s, public=%s]. "
+                        "Preserving existing row (first-write-wins).",
+                        inp.company_id,
+                        snapshot.as_of_date,
+                        existing.promoter_holding_pct,
+                        existing.fii_holding_pct,
+                        existing.dii_holding_pct,
+                        existing.public_holding_pct,
+                        snapshot.promoter_holding_pct,
+                        snapshot.fii_holding_pct,
+                        snapshot.dii_holding_pct,
+                        snapshot.public_holding_pct,
+                    )
+                    await self._run_service.record_findings(
+                        inp.research_run_id,
+                        None,
+                        [
+                            ResearchFindingCreate(
+                                agent_name=GOVERNANCE_AGENT_NAME,
+                                finding_type=FindingType.FACT,
+                                category="shareholding",
+                                content=(
+                                    f"Data conflict for shareholding on {snapshot.as_of_date}: "
+                                    f"existing [promoter={existing.promoter_holding_pct}, "
+                                    f"fii={existing.fii_holding_pct}, "
+                                    f"dii={existing.dii_holding_pct}, "
+                                    f"public={existing.public_holding_pct}] vs "
+                                    f"incoming [promoter={snapshot.promoter_holding_pct}, "
+                                    f"fii={snapshot.fii_holding_pct}, "
+                                    f"dii={snapshot.dii_holding_pct}, "
+                                    f"public={snapshot.public_holding_pct}]. "
+                                    f"Existing row preserved (first-write-wins)."
+                                ),
+                                confidence="LOW",
+                                observation_date=snapshot.as_of_date,
+                            ),
+                        ],
+                    )
+                else:
+                    logger.info(
+                        "Shareholding already exists for company %s on %s with matching data, skipping",
+                        inp.company_id,
+                        snapshot.as_of_date,
+                    )
                 continue
 
             record = Shareholding(
@@ -725,11 +786,43 @@ class ManagementGovernanceTools:
             existing = result.scalar_one_or_none()
 
             if existing is not None:
-                logger.info(
-                    "PromoterPledge already exists for company %s on %s, skipping",
-                    inp.company_id,
-                    snap.as_of_date,
-                )
+                # §30: compare material fields and report conflict if different
+                incoming_pledge_pct = snap.pledged_percentage if snap.pledged_percentage is not None else Decimal("0")
+                if existing.pledge_pct != incoming_pledge_pct:
+                    logger.warning(
+                        "PromoterPledge data conflict for company %s on %s: "
+                        "existing pledge_pct=%s vs incoming pledge_pct=%s. "
+                        "Preserving existing row (first-write-wins).",
+                        inp.company_id,
+                        snap.as_of_date,
+                        existing.pledge_pct,
+                        incoming_pledge_pct,
+                    )
+                    await self._run_service.record_findings(
+                        inp.research_run_id,
+                        None,
+                        [
+                            ResearchFindingCreate(
+                                agent_name=GOVERNANCE_AGENT_NAME,
+                                finding_type=FindingType.FACT,
+                                category="promoter_pledge",
+                                content=(
+                                    f"Data conflict for promoter pledge on {snap.as_of_date}: "
+                                    f"existing pledge_pct={existing.pledge_pct} vs "
+                                    f"incoming pledge_pct={incoming_pledge_pct}. "
+                                    f"Existing row preserved (first-write-wins)."
+                                ),
+                                confidence="LOW",
+                                observation_date=snap.as_of_date,
+                            ),
+                        ],
+                    )
+                else:
+                    logger.info(
+                        "PromoterPledge already exists for company %s on %s with matching data, skipping",
+                        inp.company_id,
+                        snap.as_of_date,
+                    )
                 continue
 
             pledge_pct = snap.pledged_percentage if snap.pledged_percentage is not None else Decimal("0")

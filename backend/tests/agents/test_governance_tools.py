@@ -1231,6 +1231,130 @@ class TestPersistManagementStatements:
         assert existing.status == ManagementStatementStatus.MET
 
     @pytest.mark.asyncio
+    async def test_partially_met_without_evidence_rejected(self) -> None:
+        stmt_id = uuid.uuid4()
+        existing = MockManagementStatement(
+            id=stmt_id,
+            status=ManagementStatementStatus.PENDING,
+        )
+        session = AsyncMock()
+        session.get = AsyncMock(return_value=existing)
+        tools = _build_tools(session=session)
+
+        inp = PersistStatementsInput(
+            company_id=uuid.uuid4(),
+            research_run_id=uuid.uuid4(),
+            statement_updates=[
+                ManagementStatementUpdate(
+                    statement_id=str(stmt_id),
+                    proposed_status="PARTIALLY_MET",
+                    justification="Contradictory evidence",
+                ),
+            ],
+        )
+        result = await tools.persist_management_statements(inp)
+
+        assert result.updated_ids == []
+        assert result.rejected_count == 1
+        assert existing.status == ManagementStatementStatus.PENDING
+
+    @pytest.mark.asyncio
+    async def test_missed_without_evidence_rejected(self) -> None:
+        stmt_id = uuid.uuid4()
+        existing = MockManagementStatement(
+            id=stmt_id,
+            status=ManagementStatementStatus.PENDING,
+        )
+        session = AsyncMock()
+        session.get = AsyncMock(return_value=existing)
+        tools = _build_tools(session=session)
+
+        inp = PersistStatementsInput(
+            company_id=uuid.uuid4(),
+            research_run_id=uuid.uuid4(),
+            statement_updates=[
+                ManagementStatementUpdate(
+                    statement_id=str(stmt_id),
+                    proposed_status="MISSED",
+                    justification="Revenue fell short",
+                ),
+            ],
+        )
+        result = await tools.persist_management_statements(inp)
+
+        assert result.updated_ids == []
+        assert result.rejected_count == 1
+        assert existing.status == ManagementStatementStatus.PENDING
+
+    @pytest.mark.asyncio
+    async def test_partially_met_with_evidence_succeeds(self) -> None:
+        stmt_id = uuid.uuid4()
+        existing = MockManagementStatement(
+            id=stmt_id,
+            status=ManagementStatementStatus.PENDING,
+        )
+        session = AsyncMock()
+        session.get = AsyncMock(return_value=existing)
+        session.flush = AsyncMock()
+        tools = _build_tools(session=session)
+
+        evidence_id = uuid.uuid4()
+        inp = PersistStatementsInput(
+            company_id=uuid.uuid4(),
+            research_run_id=uuid.uuid4(),
+            statement_updates=[
+                ManagementStatementUpdate(
+                    statement_id=str(stmt_id),
+                    proposed_status="PARTIALLY_MET",
+                    actual_outcome="Revenue target met via acquisition, not organic",
+                    outcome_evidence_index=0,
+                    justification="Contradictory evidence",
+                ),
+            ],
+            evidence_ids=[evidence_id],
+        )
+        result = await tools.persist_management_statements(inp)
+
+        assert len(result.updated_ids) == 1
+        assert result.rejected_count == 0
+        assert existing.status == ManagementStatementStatus.PARTIALLY_MET
+        assert existing.outcome_evidence_id == evidence_id
+
+    @pytest.mark.asyncio
+    async def test_missed_with_evidence_succeeds(self) -> None:
+        stmt_id = uuid.uuid4()
+        existing = MockManagementStatement(
+            id=stmt_id,
+            status=ManagementStatementStatus.PENDING,
+        )
+        session = AsyncMock()
+        session.get = AsyncMock(return_value=existing)
+        session.flush = AsyncMock()
+        tools = _build_tools(session=session)
+
+        evidence_id = uuid.uuid4()
+        inp = PersistStatementsInput(
+            company_id=uuid.uuid4(),
+            research_run_id=uuid.uuid4(),
+            statement_updates=[
+                ManagementStatementUpdate(
+                    statement_id=str(stmt_id),
+                    proposed_status="MISSED",
+                    actual_outcome="Revenue declined 5%",
+                    outcome_evidence_index=0,
+                    justification="Q4 results confirm miss",
+                ),
+            ],
+            evidence_ids=[evidence_id],
+        )
+        result = await tools.persist_management_statements(inp)
+
+        assert len(result.updated_ids) == 1
+        assert result.rejected_count == 0
+        assert existing.status == ManagementStatementStatus.MISSED
+        assert existing.outcome_evidence_id == evidence_id
+
+    @pytest.mark.asyncio
     async def test_mixed_creates_and_updates(self) -> None:
         stmt_id = uuid.uuid4()
         existing = MockManagementStatement(
@@ -1259,6 +1383,8 @@ class TestPersistManagementStatements:
                 ManagementStatementUpdate(
                     statement_id=str(stmt_id),
                     proposed_status="MISSED",
+                    actual_outcome="Revenue fell short of target",
+                    outcome_evidence_index=0,
                     justification="Revenue fell short",
                 ),
             ],
@@ -1308,15 +1434,20 @@ class TestPersistShareholding:
         assert result.skipped_count == 0
 
     @pytest.mark.asyncio
-    async def test_duplicate_skipped(self) -> None:
+    async def test_duplicate_with_matching_data_skipped(self) -> None:
         existing_record = MagicMock()
         existing_record.id = uuid.uuid4()
+        existing_record.promoter_holding_pct = Decimal("50.49")
+        existing_record.fii_holding_pct = Decimal("23.34")
+        existing_record.dii_holding_pct = Decimal("13.12")
+        existing_record.public_holding_pct = Decimal("13.05")
 
         session = AsyncMock()
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = existing_record
         session.execute = AsyncMock(return_value=mock_result)
-        tools = _build_tools(session=session)
+        run_service = MockRunService()
+        tools = _build_tools(session=session, run_service=run_service)
 
         snapshot = ShareholdingSnapshot(
             as_of_date=date(2024, 6, 30),
@@ -1337,9 +1468,132 @@ class TestPersistShareholding:
 
         assert result.persisted_ids == []
         assert result.skipped_count == 1
+        run_service.record_findings.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_conflict_detected_on_different_values(self) -> None:
+        existing_record = MagicMock()
+        existing_record.id = uuid.uuid4()
+        existing_record.promoter_holding_pct = Decimal("51.00")
+        existing_record.fii_holding_pct = Decimal("22.00")
+        existing_record.dii_holding_pct = Decimal("14.00")
+        existing_record.public_holding_pct = Decimal("13.00")
+
+        session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_record
+        session.execute = AsyncMock(return_value=mock_result)
+        run_service = MockRunService()
+        tools = _build_tools(session=session, run_service=run_service)
+
+        snapshot = ShareholdingSnapshot(
+            as_of_date=date(2024, 6, 30),
+            quarter="Q1FY2025",
+            promoter_holding_pct=Decimal("50.49"),
+            fii_holding_pct=Decimal("23.34"),
+            dii_holding_pct=Decimal("13.12"),
+            public_holding_pct=Decimal("13.05"),
+            source_provider="shareholding",
+        )
+
+        inp = PersistShareholdingInput(
+            company_id=uuid.uuid4(),
+            research_run_id=uuid.uuid4(),
+            snapshots=[snapshot],
+        )
+        result = await tools.persist_shareholding(inp)
+
+        assert result.persisted_ids == []
+        assert result.skipped_count == 1
+        run_service.record_findings.assert_called_once()
+        finding_defs = run_service.record_findings.call_args[0][2]
+        assert len(finding_defs) == 1
+        assert finding_defs[0].category == "shareholding"
+        assert "conflict" in finding_defs[0].content.lower()
+
+    @pytest.mark.asyncio
+    async def test_conflict_preserves_existing_row(self) -> None:
+        existing_record = MagicMock()
+        existing_record.id = uuid.uuid4()
+        existing_record.promoter_holding_pct = Decimal("51.00")
+        existing_record.fii_holding_pct = Decimal("22.00")
+        existing_record.dii_holding_pct = Decimal("14.00")
+        existing_record.public_holding_pct = Decimal("13.00")
+
+        session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_record
+        session.execute = AsyncMock(return_value=mock_result)
+        run_service = MockRunService()
+        tools = _build_tools(session=session, run_service=run_service)
+
+        snapshot = ShareholdingSnapshot(
+            as_of_date=date(2024, 6, 30),
+            quarter="Q1FY2025",
+            promoter_holding_pct=Decimal("50.49"),
+            fii_holding_pct=Decimal("23.34"),
+            dii_holding_pct=Decimal("13.12"),
+            public_holding_pct=Decimal("13.05"),
+            source_provider="shareholding",
+        )
+
+        inp = PersistShareholdingInput(
+            company_id=uuid.uuid4(),
+            research_run_id=uuid.uuid4(),
+            snapshots=[snapshot],
+        )
+        await tools.persist_shareholding(inp)
+
+        assert existing_record.promoter_holding_pct == Decimal("51.00")
+        assert existing_record.fii_holding_pct == Decimal("22.00")
+        session.add.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_conflict_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        existing_record = MagicMock()
+        existing_record.id = uuid.uuid4()
+        existing_record.promoter_holding_pct = Decimal("51.00")
+        existing_record.fii_holding_pct = Decimal("22.00")
+        existing_record.dii_holding_pct = Decimal("14.00")
+        existing_record.public_holding_pct = Decimal("13.00")
+
+        session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_record
+        session.execute = AsyncMock(return_value=mock_result)
+        run_service = MockRunService()
+        tools = _build_tools(session=session, run_service=run_service)
+
+        snapshot = ShareholdingSnapshot(
+            as_of_date=date(2024, 6, 30),
+            quarter="Q1FY2025",
+            promoter_holding_pct=Decimal("50.49"),
+            fii_holding_pct=Decimal("23.34"),
+            dii_holding_pct=Decimal("13.12"),
+            public_holding_pct=Decimal("13.05"),
+            source_provider="shareholding",
+        )
+
+        inp = PersistShareholdingInput(
+            company_id=uuid.uuid4(),
+            research_run_id=uuid.uuid4(),
+            snapshots=[snapshot],
+        )
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="app.agents.management_governance.tools"):
+            await tools.persist_shareholding(inp)
+
+        assert any("data conflict" in r.message.lower() for r in caplog.records if r.levelno >= logging.WARNING)
 
     @pytest.mark.asyncio
     async def test_mixed_new_and_duplicate(self) -> None:
+        existing_record = MagicMock()
+        existing_record.id = uuid.uuid4()
+        existing_record.promoter_holding_pct = Decimal("50.50")
+        existing_record.fii_holding_pct = Decimal("23.30")
+        existing_record.dii_holding_pct = Decimal("13.10")
+        existing_record.public_holding_pct = Decimal("13.10")
         call_count = 0
 
         def mock_scalar(*_args: Any, **_kwargs: Any) -> Any:
@@ -1347,7 +1601,7 @@ class TestPersistShareholding:
             call_count += 1
             if call_count == 1:
                 return None
-            return MagicMock(id=uuid.uuid4())
+            return existing_record
 
         session = AsyncMock()
         mock_result = MagicMock()
@@ -1493,15 +1747,17 @@ class TestPersistGovernanceData:
         assert len(result.corporate_action_ids) == 1
 
     @pytest.mark.asyncio
-    async def test_pledge_duplicate_skipped(self) -> None:
+    async def test_pledge_duplicate_with_matching_data_skipped(self) -> None:
         existing_record = MagicMock()
         existing_record.id = uuid.uuid4()
+        existing_record.pledge_pct = Decimal("5.20")
 
         session = AsyncMock()
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = existing_record
         session.execute = AsyncMock(return_value=mock_result)
-        tools = _build_tools(session=session)
+        run_service = MockRunService()
+        tools = _build_tools(session=session, run_service=run_service)
 
         pledge_snap = ShareholdingSnapshot(
             as_of_date=date(2024, 6, 30),
@@ -1522,6 +1778,116 @@ class TestPersistGovernanceData:
         result = await tools.persist_governance_data(inp)
 
         assert result.pledge_ids == []
+        run_service.record_findings.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_pledge_conflict_detected_on_different_values(self) -> None:
+        existing_record = MagicMock()
+        existing_record.id = uuid.uuid4()
+        existing_record.pledge_pct = Decimal("3.50")
+
+        session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_record
+        session.execute = AsyncMock(return_value=mock_result)
+        run_service = MockRunService()
+        tools = _build_tools(session=session, run_service=run_service)
+
+        pledge_snap = ShareholdingSnapshot(
+            as_of_date=date(2024, 6, 30),
+            quarter="Q1FY2025",
+            promoter_holding_pct=Decimal("50.49"),
+            fii_holding_pct=Decimal("23.34"),
+            dii_holding_pct=Decimal("13.12"),
+            public_holding_pct=Decimal("13.05"),
+            pledged_percentage=Decimal("5.20"),
+            source_provider="shareholding",
+        )
+
+        inp = PersistGovernanceDataInput(
+            company_id=uuid.uuid4(),
+            research_run_id=uuid.uuid4(),
+            pledge_snapshots=[pledge_snap],
+        )
+        result = await tools.persist_governance_data(inp)
+
+        assert result.pledge_ids == []
+        run_service.record_findings.assert_called_once()
+        finding_defs = run_service.record_findings.call_args[0][2]
+        assert len(finding_defs) == 1
+        assert finding_defs[0].category == "promoter_pledge"
+        assert "conflict" in finding_defs[0].content.lower()
+        assert existing_record.pledge_pct == Decimal("3.50")
+
+    @pytest.mark.asyncio
+    async def test_pledge_conflict_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        existing_record = MagicMock()
+        existing_record.id = uuid.uuid4()
+        existing_record.pledge_pct = Decimal("3.50")
+
+        session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_record
+        session.execute = AsyncMock(return_value=mock_result)
+        run_service = MockRunService()
+        tools = _build_tools(session=session, run_service=run_service)
+
+        pledge_snap = ShareholdingSnapshot(
+            as_of_date=date(2024, 6, 30),
+            quarter="Q1FY2025",
+            promoter_holding_pct=Decimal("50.49"),
+            fii_holding_pct=Decimal("23.34"),
+            dii_holding_pct=Decimal("13.12"),
+            public_holding_pct=Decimal("13.05"),
+            pledged_percentage=Decimal("5.20"),
+            source_provider="shareholding",
+        )
+
+        inp = PersistGovernanceDataInput(
+            company_id=uuid.uuid4(),
+            research_run_id=uuid.uuid4(),
+            pledge_snapshots=[pledge_snap],
+        )
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="app.agents.management_governance.tools"):
+            await tools.persist_governance_data(inp)
+
+        assert any("data conflict" in r.message.lower() for r in caplog.records if r.levelno >= logging.WARNING)
+
+    @pytest.mark.asyncio
+    async def test_pledge_nullable_pledged_percentage_compared_as_zero(self) -> None:
+        existing_record = MagicMock()
+        existing_record.id = uuid.uuid4()
+        existing_record.pledge_pct = Decimal("0")
+
+        session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_record
+        session.execute = AsyncMock(return_value=mock_result)
+        run_service = MockRunService()
+        tools = _build_tools(session=session, run_service=run_service)
+
+        pledge_snap = ShareholdingSnapshot(
+            as_of_date=date(2024, 6, 30),
+            quarter="Q1FY2025",
+            promoter_holding_pct=Decimal("50.49"),
+            fii_holding_pct=Decimal("23.34"),
+            dii_holding_pct=Decimal("13.12"),
+            public_holding_pct=Decimal("13.05"),
+            pledged_percentage=None,
+            source_provider="shareholding",
+        )
+
+        inp = PersistGovernanceDataInput(
+            company_id=uuid.uuid4(),
+            research_run_id=uuid.uuid4(),
+            pledge_snapshots=[pledge_snap],
+        )
+        result = await tools.persist_governance_data(inp)
+
+        assert result.pledge_ids == []
+        run_service.record_findings.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_empty_inputs(self) -> None:

@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-09 (Phase 11.2 — Management & Governance Agent Tools)
+**Last Updated:** 2026-10-12 (Phase 11.2 Remediation — Governance Evidence & Conflict Detection)
 
 ---
 
@@ -826,19 +826,25 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
   - Internal helper `create_research_document`
   - Helper `_map_filing_type` (annual_report/quarterly_result/investor_presentation → DocumentType)
   - Helper `_compute_start_date_for_quarters` (temporal calculation)
-  - ManagementStatement lifecycle: PENDING → MET/PARTIALLY_MET/MISSED/UNKNOWN; MET requires outcome_evidence_id
+  - ManagementStatement lifecycle: PENDING → MET/PARTIALLY_MET/MISSED/UNKNOWN; all terminal transitions (MET/PARTIALLY_MET/MISSED) require outcome_evidence_index (§10)
 - [x] `backend/app/agents/management_governance/exceptions.py` — CompanyNotFoundForGovernanceError (reuses AgentError)
 - [x] `backend/app/agents/management_governance/__init__.py` — Package init
-- [x] `backend/tests/agents/test_governance_tools.py` — 62 tests across 13 test classes:
+- [x] `backend/tests/agents/test_governance_tools.py` — 72 tests across 13 test classes:
   - TestLoadCompanyContext (5), TestDiscoverGovernanceSources (8), TestRetrieveDocument (2)
   - TestGetShareholdingData (6), TestGetCorporateActions (5), TestPersistEvidence (1)
-  - TestPersistFindings (3), TestPersistManagementStatements (9), TestPersistShareholding (3)
-  - TestPersistGovernanceData (5), TestCreateResearchDocument (1), TestHelperFunctions (8)
+  - TestPersistFindings (3), TestPersistManagementStatements (13), TestPersistShareholding (7)
+  - TestPersistGovernanceData (9), TestCreateResearchDocument (1), TestHelperFunctions (8)
   - TestToolInventoryCompleteness (4), TestExceptions (2)
-- [x] Quality gates: 62/62 Phase 11.2 tests passing, ruff clean, mypy strict clean
-- [x] Regression: 138 Phase 11.1 tests passing, 1112 total agent tests passing, 2680 total backend tests passing
+- [x] Quality gates: 72/72 Phase 11.2 tests passing, ruff clean, mypy strict clean
+- [x] Regression: 126 Phase 11.1 tests passing, 2690 total backend tests passing
 - [x] No Phase 11.1 contract modifications
 - [x] No schema changes, no migrations, no ORM model changes
+- [x] **Audit remediation (2026-10-12):**
+  - D-2 CRITICAL fixed: outcome_evidence_index now enforced for MET, PARTIALLY_MET, and MISSED (was MET-only)
+  - D-3 MAJOR fixed: shareholding and promoter-pledge upsert now compares material field values; data conflicts logged at WARNING and persisted as governance findings via record_findings
+  - D-4 resolved: 4 new tests for terminal transition evidence enforcement
+  - D-5 resolved: 6 new tests for conflict detection (shareholding + pledge, matching/conflicting/nullable)
+  - D-1 noted: discover_governance_sources is a combined discovery facade; documented as acceptable addition
 
 ---
 
