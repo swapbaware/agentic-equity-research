@@ -846,6 +846,28 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
   - D-5 resolved: 6 new tests for conflict detection (shareholding + pledge, matching/conflicting/nullable)
   - D-1 noted: discover_governance_sources is a combined discovery facade; documented as acceptable addition
 
+### Phase 11.3: Management & Governance Agent Prompts — COMPLETE
+
+- [x] `backend/app/agents/management_governance/prompts.py` — 3 public exports + 1 private helper:
+  - `GOVERNANCE_SYSTEM_PREAMBLE` — module constant, prompt-injection defense with `<retrieved_document>` tag boundary (§32)
+  - `_wrap_document(content, source_id, title)` — wraps content in `<retrieved_document>` XML tags (local copy per established pattern)
+  - `governance_evidence_extraction_prompt()` — Step 4 LLM prompt targeting `EvidenceExtractionOutput`, covers all 9 governance domains (management claims, promise tracking, shareholding, promoter pledge, capital allocation, RPT, auditor qualifications, executive compensation, subsidiary complexity, ESOP/dilution)
+  - `governance_analysis_prompt()` — Step 5 LLM prompt targeting `GovernanceAnalysisOutput` with 10 output fields, includes ManagementStatement lifecycle rules (§10 transition table), finding type classification (7 types), all 13 GOVERNANCE_FINDING_CATEGORIES, all 9 GOVERNANCE_RED_FLAG_CATEGORIES, temporal rules, anti-hallucination instructions
+- [x] `backend/tests/agents/test_governance_prompts.py` — 111 tests across 8 test classes:
+  - TestGovernanceSystemPreamble (11): type, non-empty, retrieved_document defense, DATA/NOT instructions, governance/management domain, JSON, Indian companies, no secrets
+  - TestWrapDocument (7): XML wrapping, content, source_id, title, newlines, empty content, special chars
+  - TestGovernanceEvidenceExtractionPrompt (25): preamble, company/industry/date, document wrapping, all 9+1 domains, evidence types (5), confidence levels, schema keys, anti-hallucination, temporal rules, date fabrication prohibition, no secrets, pure function
+  - TestGovernanceAnalysisPrompt (41): preamble, company/industry/date, evidence/statements/shareholding/corporate actions inclusion, all 5 ManagementStatement statuses, transition rules (terminal, evidence requirement, resolution_detail), 4 substates, 6 statement categories, NewManagementStatement schema keys, ManagementStatementUpdate schema keys, all 7 FindingType values, management-claim-not-fact rule, all 13 finding categories, all 6 domain coverages, all 9 red flag categories, red flag schema, shareholding exclusion, output schema references (GovernanceAnalysisOutput, GeneratedFinding), all 10 output fields, evidence indices, anti-hallucination, conservative defaults, temporal rules, date fabrication, no secrets, pure function, empty inputs
+  - TestCrossCuttingProperties (9 parametrized): preamble in all prompts, no secrets in all, deterministic, returns strings, document wrapping only in extraction
+  - TestTemporalAwareness (7): observation_date in both prompts, temporal rules, date variation, date fabrication prohibition
+  - TestDateFabricationProhibition (2 parametrized): both prompts prohibit date invention
+- [x] Quality gates: 111/111 Phase 11.3 tests passing, ruff clean, mypy strict clean
+- [x] Regression: 2794 total backend tests passing (111 prompts + 138 contracts + 72 tools + 2473 prior)
+- [x] No Phase 11.1 contract modifications
+- [x] No Phase 11.2 tool modifications
+- [x] No schema changes, no migrations, no ORM model changes
+- [x] Acceptance criteria satisfied: AC-01 through AC-20
+
 ---
 
 ## Completed Features
