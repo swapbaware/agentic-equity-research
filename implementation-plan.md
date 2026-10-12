@@ -566,7 +566,7 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - Shareholding analysis with mock data
 - Output schema validation
 
-**Status:** Phase 11.0 (Architecture) COMPLETE. Phase 11.1 (Contracts) COMPLETE. Phase 11.2 (Tools) COMPLETE. Phase 11.3 (Prompts) COMPLETE. Phase 11.4-11.6 NOT STARTED.
+**Status:** Phase 11.0 (Architecture) COMPLETE. Phase 11.1 (Contracts) COMPLETE. Phase 11.2 (Tools) COMPLETE. Phase 11.3 (Prompts) COMPLETE. Phase 11.4 (Agent) COMPLETE. Phase 11.5-11.6 NOT STARTED.
 
 **Architecture Document:** `docs/architecture/phase-11-management-governance-agent.md`
 
@@ -574,7 +574,7 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - Phase 11.1: Contracts (typed Pydantic contracts, step definitions, finding categories, tool I/O contracts) — **COMPLETE** (remediated: 5 missing tool I/O pairs added per §40)
 - Phase 11.2: Tools (9 tool implementations + 1 internal helper with 72 mocked tests) — **COMPLETE** (remediated: D-2 terminal evidence enforcement, D-3 upsert conflict detection)
 - Phase 11.3: Prompts (LLM prompt templates with prompt injection defense) — **COMPLETE** (GOVERNANCE_SYSTEM_PREAMBLE, evidence extraction prompt, governance analysis prompt, 111 tests)
-- Phase 11.4: Agent (ManagementGovernanceAgent orchestration, 7-step workflow)
+- Phase 11.4: Agent (ManagementGovernanceAgent orchestration, 7-step workflow, 69 tests) — **COMPLETE**
 - Phase 11.5: Validation Tests (ManagementStatement transition rules, finding/red-flag/shareholding validation)
 - Phase 11.6: Integration Tests (end-to-end pipeline, regression, lint, mypy)
 

@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-12 (Phase 11.2 Remediation — Governance Evidence & Conflict Detection)
+**Last Updated:** 2026-10-12 (Phase 11.4 — Management & Governance Agent Orchestration)
 
 ---
 
@@ -473,7 +473,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Current Phase
 
-**Current Phase:** Phase 11 — Management & Governance Agent (11.0 Architecture COMPLETE, 11.1 Contracts COMPLETE, 11.2 Tools COMPLETE, 11.3-11.6 NOT STARTED)
+**Current Phase:** Phase 11 — Management & Governance Agent (11.0 Architecture COMPLETE, 11.1 Contracts COMPLETE, 11.2 Tools COMPLETE, 11.3 Prompts COMPLETE, 11.4 Agent COMPLETE, 11.5-11.6 NOT STARTED)
 
 ### Phase 9.1: ResearchRun Schema Migration — COMPLETE
 
@@ -868,6 +868,53 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
 - [x] No schema changes, no migrations, no ORM model changes
 - [x] Acceptance criteria satisfied: AC-01 through AC-20
 
+### Phase 11.4: Management & Governance Agent Orchestration — COMPLETE
+
+- [x] `backend/app/agents/management_governance/agent.py` — ManagementGovernanceAgent class (~740 lines):
+  - Constructor: `__init__(session, run_service, corporate_filings, shareholding, corporate_actions, llm)`, creates `ManagementGovernanceTools` internally
+  - `execute(request: ManagementGovernanceResearchRequest) -> ManagementGovernanceResult` — main entry point, creates ResearchRun, executes 7-step sequential workflow
+  - `_run_step_deterministic(step, coro)` — wraps deterministic steps with start/complete/fail lifecycle via RunService
+  - `_run_step_llm(step, run_id, token_budget, config, fn, model_name)` — wraps LLM steps with retry loop (MAX_LLM_ATTEMPTS=2), AgentExecution tracking, token budget recording
+  - Step 1: `_step_company_context_load` — loads company context and existing management statements via tools
+  - Step 2: `_step_source_discovery` — discovers governance-relevant filing sources and retrieves shareholding/corporate action data
+  - Step 3: `_step_document_retrieval` — concurrent document retrieval with ProviderError resilience, creates research documents
+  - Step 4: `_step_evidence_extraction` — LLM-driven evidence extraction from retrieved documents with budget enforcement
+  - Step 5: `_step_governance_analysis` — LLM-driven governance analysis generating GovernanceAnalysisOutput (10 output fields)
+  - Step 5a: `_generate_shareholding_findings` — deterministic FACT findings per category per snapshot, CALCULATION trend findings across snapshots
+  - Step 5a: `_generate_pledge_findings` — deterministic FACT pledge findings per snapshot (when pledged_percentage is not None), CALCULATION pledge trend findings
+  - `_compute_trend_direction` — helper determining INCREASING/DECREASING/STABLE from Decimal values
+  - Step 6: `_step_governance_validation` — calls `_validate_governance_output` (6 validation domains: statement transitions, new statements, finding types, finding categories, red flags, shareholding consistency)
+  - `_validate_shareholding_consistency` — checks shareholding category percentages sum ≈ 100% (tolerance 2.0)
+  - Step 7: `_step_persistence` — persists evidence, findings, management statements, shareholding snapshots, and governance data
+  - Module-level parsers: `_parse_evidence_extraction_response`, `_parse_governance_analysis_response` — JSON extraction with LLMParsingError on failure
+  - Error handling: TokenBudgetExhaustedError → PARTIAL; StepFailedError (≥5 steps completed → PARTIAL, <5 → FAILED); Exception → FAILED
+  - run_type = "management_governance", GOVERNANCE_AGENT_NAME = "management_governance_agent"
+  - Token budget: 20,000 total, 16,000 warning threshold
+- [x] `backend/tests/agents/test_management_governance_agent.py` — 69 tests across 16 test classes:
+  - TestAgentConstruction (9): creates tools, stores LLM/run_service, frozen result, name constant, budget constants, step count/order, steps 4+5 use LLM
+  - TestHappyPath (3): full execution completes, creates 7 steps, run_type is management_governance
+  - TestDeterministicStepRunner (2): step succeeds, step failure raises StepFailedError
+  - TestLLMStepRunner (5): succeeds first attempt, retries on parsing error, fails after max attempts, skips when budget exhausted before start, propagates TokenBudgetExhaustedError during execution
+  - TestTokenBudget (3): default budget values, budget tracking, max LLM attempts default
+  - TestStep1CompanyContextLoad (2): loads context, includes existing statements
+  - TestStep2SourceDiscovery (1): returns candidates and data
+  - TestStep3DocumentRetrieval (2): retrieves documents, continues on ProviderError
+  - TestStep4EvidenceExtraction (2): extracts evidence, stops on budget exhaustion
+  - TestStep5GovernanceAnalysis (1): analyzes governance
+  - TestStep5aShareholdingFindings (9): FACT findings per category, trend findings with multiple quarters, no trend with single snapshot, empty snapshots, trend directions (increasing/decreasing/stable), all findings use shareholding category, all findings have high confidence
+  - TestStep5aPledgeFindings (4): pledge fact findings, no findings when pledged is None, pledge trend with multiple snapshots, all use promoter_pledge category
+  - TestStep6GovernanceValidation (16): valid output passes, invalid statement ID rejected, terminal transition without evidence rejected, terminal re-transition rejected, UNKNOWN without resolution_detail rejected, valid statement update passes, new statement invalid category rejected, new statement invalid evidence index rejected, finding invalid category rejected, FACT without evidence warning, temporal violation warning, red flag invalid category rejected, red flag without evidence rejected, valid red flag passes, shareholding sum mismatch warning, shareholding sum within tolerance no warning
+  - TestStep7Persistence (1): persists all data types
+  - TestErrorHandling (3): token budget exhaustion returns PARTIAL, early step failure returns FAILED, late step failure returns PARTIAL
+  - TestLLMResponseParsing (6): parse evidence extraction valid/invalid JSON/invalid schema, parse governance analysis valid/invalid JSON/missing fields
+- [x] Quality gates: 69/69 Phase 11.4 tests passing, ruff clean, mypy strict clean
+- [x] Regression: 252 Phase 11 tests passing (69 agent + 111 prompts + 72 tools), no regressions
+- [x] No Phase 11.1 contract modifications
+- [x] No Phase 11.2 tool modifications
+- [x] No Phase 11.3 prompt modifications
+- [x] No schema changes, no migrations, no ORM model changes
+- [x] Acceptance criteria satisfied: AC-14 through AC-20
+
 ---
 
 ## Completed Features
@@ -989,7 +1036,7 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
 
 ## Next Actions
 
-1. **Phase 11.3: Management & Governance Agent Prompts** — LLM prompt templates with prompt injection defense
-2. **Phase 11.4: Management & Governance Agent Orchestration** — LangGraph workflow
+1. **Phase 11.5: Management & Governance Agent Validation Tests** — ManagementStatement transition rules, finding/red-flag/shareholding validation
+2. **Phase 11.6: Management & Governance Agent Integration Tests** — end-to-end pipeline, regression, lint, mypy
 3. **SEBI XBRL integration** for authoritative financial data
 4. **Evaluate Celery vs Temporal** (ADR-002) for background tasks
