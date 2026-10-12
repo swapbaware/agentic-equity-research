@@ -1050,6 +1050,42 @@ def _validate_governance_output(
             )
             rejected = True
 
+        if update.resolution_detail == "NOT_DUE" and sid in existing_by_id:
+            existing_ms_status = existing_by_id[sid].status.value
+            if proposed != existing_ms_status:
+                issues.append(
+                    GovernanceValidationIssue(
+                        domain="management_statement",
+                        issue_type="not_due_with_transition",
+                        message=(
+                            f"NOT_DUE update for statement {sid} must not propose "
+                            f"a status transition (proposed: {proposed})"
+                        ),
+                        action="rejected",
+                    )
+                )
+                rejected = True
+
+        # Architecture §24 Step 6 rule 1.8: REVISED updates require a
+        # corresponding NewManagementStatement.  The contract has no
+        # linking field (e.g. replaces_statement_id), so 1:1 matching
+        # cannot be verified — only the existence of at least one new
+        # statement is checked.  See architecture §10 handling rule 4.
+        if update.resolution_detail == "REVISED" and not analysis_output.new_management_statements:
+            issues.append(
+                GovernanceValidationIssue(
+                    domain="management_statement",
+                    issue_type="revised_without_replacement",
+                    message=(
+                        f"REVISED update for statement {sid} requires a "
+                        f"corresponding NewManagementStatement for the "
+                        f"revised guidance, but none exist"
+                    ),
+                    action="rejected",
+                )
+            )
+            rejected = True
+
         if rejected:
             stmt_updates_rejected += 1
         else:
@@ -1136,6 +1172,16 @@ def _validate_governance_output(
                 )
             )
 
+        if f.finding_type == FindingType.MANAGEMENT_CLAIM and not f.evidence_indices:
+            issues.append(
+                GovernanceValidationIssue(
+                    domain="finding",
+                    issue_type="management_claim_without_citation",
+                    message=f"MANAGEMENT_CLAIM finding {i} has no source citation (evidence_indices)",
+                    action="warning",
+                )
+            )
+
         if f.source_publication_date and f.source_publication_date > observation_date:
             issues.append(
                 GovernanceValidationIssue(
@@ -1195,6 +1241,17 @@ def _validate_governance_output(
                     domain="red_flag",
                     issue_type="missing_evidence",
                     message=f"Red flag '{rf.category}' has no evidence indices",
+                    action="rejected",
+                )
+            )
+            rejected = True
+
+        if not rf.justification or not rf.justification.strip():
+            issues.append(
+                GovernanceValidationIssue(
+                    domain="red_flag",
+                    issue_type="empty_justification",
+                    message=f"Red flag '{rf.category}' has empty justification",
                     action="rejected",
                 )
             )

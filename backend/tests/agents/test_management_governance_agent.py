@@ -1768,6 +1768,225 @@ class TestStep6GovernanceValidation:
         assert result.red_flags_valid == 1
         assert result.red_flags_rejected == 0
 
+    # -- F-01: NOT_DUE with status transition ----------------------------------
+
+    def test_not_due_with_transition_rejected(self) -> None:
+        stmts = [
+            ManagementStatementSummary(
+                id=STMT_UUID_1,
+                statement_date=date(2025, 4, 15),
+                statement="Revenue growth 20% by FY26",
+                category=ManagementStatementCategory.REVENUE_GUIDANCE,
+                status=ManagementStatementStatus.PENDING,
+            ),
+        ]
+        analysis = self._make_minimal_analysis(
+            statement_updates=[
+                {
+                    "statement_id": str(STMT_UUID_1),
+                    "proposed_status": "MET",
+                    "actual_outcome": None,
+                    "outcome_evidence_index": 0,
+                    "resolution_detail": "NOT_DUE",
+                    "justification": "Timeframe not elapsed but marking met",
+                }
+            ],
+        )
+        evidence = [
+            ExtractedEvidence(
+                evidence_type=EvidenceType.FACT,
+                claim="Revenue grew 22%",
+                confidence=ConfidenceLevel.HIGH,
+            ),
+        ]
+        result = _validate_governance_output(analysis, [], evidence, [uuid.uuid4()], stmts, OBSERVATION_DATE)
+        assert result.statement_updates_rejected == 1
+        issue_types = [i.issue_type for i in result.issues]
+        assert "not_due_with_transition" in issue_types
+
+    def test_not_due_without_transition_passes(self) -> None:
+        stmts = [
+            ManagementStatementSummary(
+                id=STMT_UUID_1,
+                statement_date=date(2025, 4, 15),
+                statement="Revenue growth 20% by FY26",
+                category=ManagementStatementCategory.REVENUE_GUIDANCE,
+                status=ManagementStatementStatus.PENDING,
+            ),
+        ]
+        analysis = self._make_minimal_analysis(
+            statement_updates=[
+                {
+                    "statement_id": str(STMT_UUID_1),
+                    "proposed_status": "PENDING",
+                    "actual_outcome": None,
+                    "outcome_evidence_index": None,
+                    "resolution_detail": "NOT_DUE",
+                    "justification": "Timeframe not elapsed",
+                }
+            ],
+        )
+        result = _validate_governance_output(analysis, [], [], [], stmts, OBSERVATION_DATE)
+        assert result.statement_updates_valid == 1
+        assert result.statement_updates_rejected == 0
+        issue_types = [i.issue_type for i in result.issues]
+        assert "not_due_with_transition" not in issue_types
+
+    # -- F-02: REVISED without replacement statement ----------------------------
+
+    def test_revised_without_replacement_statement_rejected(self) -> None:
+        stmts = [
+            ManagementStatementSummary(
+                id=STMT_UUID_1,
+                statement_date=date(2025, 4, 15),
+                statement="Revenue growth 20%",
+                category=ManagementStatementCategory.REVENUE_GUIDANCE,
+                status=ManagementStatementStatus.PENDING,
+            ),
+        ]
+        analysis = self._make_minimal_analysis(
+            statement_updates=[
+                {
+                    "statement_id": str(STMT_UUID_1),
+                    "proposed_status": "MISSED",
+                    "actual_outcome": "Revised: original target superseded",
+                    "outcome_evidence_index": 0,
+                    "resolution_detail": "REVISED",
+                    "justification": "Management revised guidance",
+                }
+            ],
+            new_statements=[],
+        )
+        evidence = [
+            ExtractedEvidence(
+                evidence_type=EvidenceType.FACT,
+                claim="Management revised growth target",
+                confidence=ConfidenceLevel.HIGH,
+            ),
+        ]
+        result = _validate_governance_output(analysis, [], evidence, [uuid.uuid4()], stmts, OBSERVATION_DATE)
+        assert result.statement_updates_rejected == 1
+        issue_types = [i.issue_type for i in result.issues]
+        assert "revised_without_replacement" in issue_types
+
+    def test_revised_with_replacement_statement_passes(self) -> None:
+        stmts = [
+            ManagementStatementSummary(
+                id=STMT_UUID_1,
+                statement_date=date(2025, 4, 15),
+                statement="Revenue growth 20%",
+                category=ManagementStatementCategory.REVENUE_GUIDANCE,
+                status=ManagementStatementStatus.PENDING,
+            ),
+        ]
+        analysis = self._make_minimal_analysis(
+            statement_updates=[
+                {
+                    "statement_id": str(STMT_UUID_1),
+                    "proposed_status": "MISSED",
+                    "actual_outcome": "Revised: original 20% superseded by 15%",
+                    "outcome_evidence_index": 0,
+                    "resolution_detail": "REVISED",
+                    "justification": "Management revised guidance downward",
+                }
+            ],
+            new_statements=[
+                {
+                    "statement": "Revenue growth 15% revised guidance",
+                    "statement_date": "2025-09-30",
+                    "category": "REVENUE_GUIDANCE",
+                    "expected_outcome": "15% revenue growth FY26",
+                    "expected_timeframe": "FY26",
+                    "evidence_index": 0,
+                }
+            ],
+        )
+        evidence = [
+            ExtractedEvidence(
+                evidence_type=EvidenceType.MANAGEMENT_STATEMENT,
+                claim="Management revised growth target to 15%",
+                confidence=ConfidenceLevel.HIGH,
+            ),
+        ]
+        result = _validate_governance_output(analysis, [], evidence, [uuid.uuid4()], stmts, OBSERVATION_DATE)
+        assert result.statement_updates_valid == 1
+        assert result.statement_updates_rejected == 0
+        issue_types = [i.issue_type for i in result.issues]
+        assert "revised_without_replacement" not in issue_types
+
+    # -- F-03: MANAGEMENT_CLAIM without source citation -------------------------
+
+    def test_management_claim_without_evidence_warning(self) -> None:
+        analysis = self._make_minimal_analysis(
+            capital_allocation=[
+                {
+                    "finding_type": "MANAGEMENT_CLAIM",
+                    "category": "capital_allocation",
+                    "content": "Management claims 25% ROCE target",
+                    "confidence": "MEDIUM",
+                    "source_publication_date": None,
+                    "evidence_indices": None,
+                }
+            ],
+        )
+        result = _validate_governance_output(analysis, [], [], [], [], OBSERVATION_DATE)
+        issue_types = [i.issue_type for i in result.issues]
+        assert "management_claim_without_citation" in issue_types
+        matching = [i for i in result.issues if i.issue_type == "management_claim_without_citation"]
+        assert matching[0].action == "warning"
+
+    def test_management_claim_with_evidence_no_warning(self) -> None:
+        analysis = self._make_minimal_analysis(
+            capital_allocation=[
+                {
+                    "finding_type": "MANAGEMENT_CLAIM",
+                    "category": "capital_allocation",
+                    "content": "Management claims 25% ROCE target",
+                    "confidence": "MEDIUM",
+                    "source_publication_date": None,
+                    "evidence_indices": [0],
+                }
+            ],
+        )
+        evidence = [
+            ExtractedEvidence(
+                evidence_type=EvidenceType.MANAGEMENT_STATEMENT,
+                claim="ROCE target 25%",
+                confidence=ConfidenceLevel.MEDIUM,
+            ),
+        ]
+        result = _validate_governance_output(analysis, [], evidence, [uuid.uuid4()], [], OBSERVATION_DATE)
+        issue_types = [i.issue_type for i in result.issues]
+        assert "management_claim_without_citation" not in issue_types
+
+    # -- F-04: Red flag empty justification -------------------------------------
+
+    def test_red_flag_empty_justification_rejected(self) -> None:
+        analysis = self._make_minimal_analysis(
+            red_flags=[
+                {
+                    "category": "promoter_pledge_elevation",
+                    "description": "Pledge is high",
+                    "severity": "HIGH",
+                    "justification": "",
+                    "evidence_indices": [0],
+                }
+            ],
+        )
+        evidence = [
+            ExtractedEvidence(
+                evidence_type=EvidenceType.FACT,
+                claim="Pledge at 15%",
+                confidence=ConfidenceLevel.HIGH,
+            ),
+        ]
+        result = _validate_governance_output(analysis, [], evidence, [uuid.uuid4()], [], OBSERVATION_DATE)
+        assert result.red_flags_rejected == 1
+        issue_types = [i.issue_type for i in result.issues]
+        assert "empty_justification" in issue_types
+
+    # -- Existing shareholding tests -------------------------------------------
+
     def test_shareholding_sum_mismatch_warning(self) -> None:
         bad_snapshots = [
             _make_shareholding_snapshot(

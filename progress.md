@@ -884,7 +884,7 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
   - Step 5a: `_generate_pledge_findings` — deterministic FACT pledge findings per snapshot (when pledged_percentage is not None), CALCULATION pledge trend findings
   - `_compute_trend_direction` — helper determining INCREASING/DECREASING/STABLE from Decimal values
   - Step 6: `_step_governance_validation` — calls `_validate_governance_output` (6 validation domains: statement transitions, new statements, finding types, finding categories, red flags, shareholding consistency)
-  - `_validate_shareholding_consistency` — checks shareholding category percentages sum ≈ 100% (tolerance 2.0)
+  - `_validate_shareholding_consistency` — checks shareholding category percentages sum ≈ 100% (tolerance 0.5%)
   - Step 7: `_step_persistence` — persists evidence, findings, management statements, shareholding snapshots, and governance data
   - Module-level parsers: `_parse_evidence_extraction_response`, `_parse_governance_analysis_response` — JSON extraction with LLMParsingError on failure
   - Error handling: TokenBudgetExhaustedError → PARTIAL; StepFailedError (≥5 steps completed → PARTIAL, <5 → FAILED); Exception → FAILED
@@ -903,12 +903,19 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
   - TestStep5GovernanceAnalysis (1): analyzes governance
   - TestStep5aShareholdingFindings (9): FACT findings per category, trend findings with multiple quarters, no trend with single snapshot, empty snapshots, trend directions (increasing/decreasing/stable), all findings use shareholding category, all findings have high confidence
   - TestStep5aPledgeFindings (4): pledge fact findings, no findings when pledged is None, pledge trend with multiple snapshots, all use promoter_pledge category
-  - TestStep6GovernanceValidation (16): valid output passes, invalid statement ID rejected, terminal transition without evidence rejected, terminal re-transition rejected, UNKNOWN without resolution_detail rejected, valid statement update passes, new statement invalid category rejected, new statement invalid evidence index rejected, finding invalid category rejected, FACT without evidence warning, temporal violation warning, red flag invalid category rejected, red flag without evidence rejected, valid red flag passes, shareholding sum mismatch warning, shareholding sum within tolerance no warning
+  - TestStep6GovernanceValidation (23): valid output passes, invalid statement ID rejected, terminal transition without evidence rejected, terminal re-transition rejected, UNKNOWN without resolution_detail rejected, valid statement update passes, new statement invalid category rejected, new statement invalid evidence index rejected, finding invalid category rejected, FACT without evidence warning, temporal violation warning, red flag invalid category rejected, red flag without evidence rejected, valid red flag passes, NOT_DUE with transition rejected, NOT_DUE without transition passes, REVISED without replacement statement rejected, REVISED with replacement statement passes, MANAGEMENT_CLAIM without evidence warning, MANAGEMENT_CLAIM with evidence no warning, red flag empty justification rejected, shareholding sum mismatch warning, shareholding sum within tolerance no warning
   - TestStep7Persistence (1): persists all data types
   - TestErrorHandling (3): token budget exhaustion returns PARTIAL, early step failure returns FAILED, late step failure returns PARTIAL
   - TestLLMResponseParsing (6): parse evidence extraction valid/invalid JSON/invalid schema, parse governance analysis valid/invalid JSON/missing fields
-- [x] Quality gates: 69/69 Phase 11.4 tests passing, ruff clean, mypy strict clean
-- [x] Regression: 252 Phase 11 tests passing (69 agent + 111 prompts + 72 tools), no regressions
+- [x] Audit remediation (F-01 through F-06):
+  - F-01: Step 6 validates NOT_DUE updates reject status transitions
+  - F-02: Step 6 validates REVISED updates require at least one NewManagementStatement (1:1 matching ambiguity documented — contract lacks linking field)
+  - F-03: Step 6 warns on MANAGEMENT_CLAIM findings with empty/missing evidence_indices
+  - F-04: Step 6 rejects red flags with empty justification (Pydantic schema does not enforce non-empty `str`)
+  - F-05: progress.md shareholding tolerance corrected from "2.0" to "0.5%"
+  - F-06: Recorded as TD-16 (token usage reporting uses cumulative values, cosmetic only)
+- [x] Quality gates: 76/76 Phase 11.4 tests passing, ruff clean, mypy strict clean
+- [x] Regression: 259 Phase 11 tests passing (76 agent + 111 prompts + 72 tools), no regressions
 - [x] No Phase 11.1 contract modifications
 - [x] No Phase 11.2 tool modifications
 - [x] No Phase 11.3 prompt modifications
@@ -1031,6 +1038,7 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
 | TD-13 | ~~Service layer and repositories assume `company_id` is always non-null~~ | Phase 9.1 | **RESOLVED** — Phase 9.2: `get_by_industry()`, `get_active_industry_run()`, `initiate_run()` branches on target_type |
 | TD-14 | ~~`retrieve_industry_document` returns `content_type="text/plain"` for search snippets — provenance unclear~~ | Phase 9.3a | **RESOLVED** — Phase 9.3a remediation: returns `"text/snippet"` |
 | TD-15 | ~~`discover_industry_sources` fabricates `observation_date` as `publication_date` for search results~~ | Phase 9.3a | **RESOLVED** — Phase 9.3a remediation: `SourceCandidate.publication_date` now `date | None = None`, search results use `None` |
+| TD-16 | Token usage reporting in `_run_step_llm` uses cumulative `token_budget.total_tokens` for `AgentExecution.input_tokens`/`output_tokens`, not per-invocation deltas. Pre-existing pattern inherited from CompetitiveMoatAgent (Phase 10.4). Cosmetic only — no budget or workflow impact. | Phase 11.4 | Address when per-invocation token tracking is needed for cost dashboards or per-step analytics |
 
 ---
 
