@@ -1334,25 +1334,16 @@ def _validate_governance_output(
                 GovernanceValidationIssue(
                     domain="shareholding",
                     issue_type="negative_percentage",
-                    message=(
-                        f"Shareholding snapshot {snap.quarter} "
-                        f"has negative percentage"
-                    ),
+                    message=(f"Shareholding snapshot {snap.quarter} has negative percentage"),
                     action="rejected",
                 )
             )
-        if (
-            snap.pledged_percentage is not None
-            and snap.pledged_percentage > Decimal("100")
-        ):
+        if snap.pledged_percentage is not None and snap.pledged_percentage > Decimal("100"):
             issues.append(
                 GovernanceValidationIssue(
                     domain="shareholding",
                     issue_type="pledge_exceeds_100",
-                    message=(
-                        f"Shareholding snapshot {snap.quarter} "
-                        f"has pledge {snap.pledged_percentage}% > 100%"
-                    ),
+                    message=(f"Shareholding snapshot {snap.quarter} has pledge {snap.pledged_percentage}% > 100%"),
                     action="rejected",
                 )
             )
