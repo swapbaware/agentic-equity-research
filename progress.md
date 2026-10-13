@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-12 (Phase 11.4 — Management & Governance Agent Orchestration)
+**Last Updated:** 2026-10-13 (Phase 11.5 — Management & Governance Agent Validation Tests)
 
 ---
 
@@ -473,7 +473,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Current Phase
 
-**Current Phase:** Phase 11 — Management & Governance Agent (11.0 Architecture COMPLETE, 11.1 Contracts COMPLETE, 11.2 Tools COMPLETE, 11.3 Prompts COMPLETE, 11.4 Agent COMPLETE, 11.5-11.6 NOT STARTED)
+**Current Phase:** Phase 11 — Management & Governance Agent (11.0 Architecture COMPLETE, 11.1 Contracts COMPLETE, 11.2 Tools COMPLETE, 11.3 Prompts COMPLETE, 11.4 Agent COMPLETE, 11.5 Validation Tests COMPLETE, 11.6 NOT STARTED)
 
 ### Phase 9.1: ResearchRun Schema Migration — COMPLETE
 
@@ -922,6 +922,41 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
 - [x] No schema changes, no migrations, no ORM model changes
 - [x] Acceptance criteria satisfied: AC-14 through AC-20
 
+### Phase 11.5: Management & Governance Agent Validation Tests — COMPLETE
+
+- [x] Gap analysis: mapped all 24 architecture-defined validation rules (MSV-01–08, FV-01–07, RF-01–05, SV-01–04) against existing implementation
+- [x] 7 missing validation rules implemented in `agent.py`:
+  - FV-05: CALCULATION without evidence → warning
+  - FV-06: AI_INFERENCE for governance_red_flag without evidence → rejected
+  - FV-07: ANALYST_OPINION → rejected (not applicable to this agent)
+  - RF-05: Red flag evidence index validity → rejected on out-of-range
+  - SV-02: Negative shareholding percentages → rejected
+  - SV-03: Pledged percentage > 100% → rejected
+  - SV-04: Future snapshot date → rejected
+- [x] `_validate_governance_output` signature extended with `shareholding_snapshots: list[ShareholdingSnapshot] | None = None`
+- [x] `_step_governance_validation` and `execute()` call site updated to thread shareholding data
+- [x] Comprehensive validation test file: `backend/tests/agents/test_governance_validation.py` (~1000 lines)
+- [x] 29 test classes, 95 individual test methods covering:
+  - MSV-01 through MSV-08 (management statement validation rules)
+  - NOT_DUE transition semantics (3 tests)
+  - REVISED correspondence with existence-only check (3 tests)
+  - Multiple statement updates (1 test)
+  - FV-01 through FV-07 (finding validation rules)
+  - Finding temporal validation (3 tests)
+  - Finding empty content validation (1 test)
+  - RF-01 through RF-05 (red flag validation rules)
+  - Multiple red flag error counting (1 test)
+  - SV-01 through SV-04 (shareholding validation rules, 19 tests)
+  - Cross-domain validation independence (4 tests)
+  - Edge cases (5 tests)
+- [x] Quality gates: 95/95 Phase 11.5 tests passing, ruff clean, ruff format clean
+- [x] Regression: 76 Phase 11.4 agent tests passing, 2972 total backend tests passing (1 pre-existing failure: test_health.py)
+- [x] No Phase 11.1 contract modifications
+- [x] No Phase 11.2 tool modifications
+- [x] No Phase 11.3 prompt modifications
+- [x] mypy strict: clean on agent.py (1 pre-existing warning in unrelated yahoo_finance.py)
+- [x] Acceptance criteria satisfied: AC-21 through AC-27
+
 ---
 
 ## Completed Features
@@ -951,12 +986,13 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
 - Industry Research Agent Skeleton (Phase 9.3b.1): 7-step sequential orchestrator (industry_validation → source_discovery → document_retrieval → evidence_extraction[stub] → industry_analysis[stub] → finding_validation → gap_contradiction[stub]), token budget enforcement (20K hard/16K warning), three-tier error handling, ResearchRun lifecycle (target_type="industry"), LLM steps as stub boundaries; 46 tests
 - Industry Research Agent LLM Reasoning (Phase 9.3b.2): LLM stubs replaced with real implementations — evidence extraction (per-document LLM calls with budget checks), industry analysis (finding generation with evidence linking via indices), gap/contradiction detection, finding validation enhanced to 4 criteria (category, content, FACT-evidence, temporal), prompt injection defense, structured output parsing; 76 tests
 - Competitive Moat Agent (Phase 10): contracts (10.1), tools (10.2), prompts (10.3), orchestration (10.4), validation tests (10.5), integration tests (10.6) — 7-step sequential workflow, 16 moat types, 9 deterministic validation checks, token budget enforcement, partial completion semantics, adversarial durability challenge; 379 tests
+- Management & Governance Agent (Phase 11, through 11.5): contracts (11.1), tools (11.2), prompts (11.3), orchestration (11.4), validation tests (11.5) — 7-step sequential workflow, 24 validation rules (MSV/FV/RF/SV), shareholding analysis, management statement tracking, governance red flags, token budget enforcement; 282 tests (76 agent + 111 prompts + 72 tools + 23 inline validation)
 
 ---
 
 ## Failing Tests
 
-- `test_health.py::TestReadinessEndpoint::test_ready_returns_200` — pre-existing, requires running PostgreSQL with migrations applied. This is an integration test that validates the readiness endpoint checks Alembic migration state against a live database. Cannot pass without PostgreSQL. 1706 other backend tests pass (including 17 Phase 9.1 migration tests). 5 frontend tests pass. 7 tests skipped (6 integration tests requiring PostgreSQL, 1 provider test requiring API key).
+- `test_health.py::TestReadinessEndpoint::test_ready_returns_200` — pre-existing, requires running PostgreSQL with migrations applied. This is an integration test that validates the readiness endpoint checks Alembic migration state against a live database. Cannot pass without PostgreSQL. 2972 other backend tests pass. 5 frontend tests pass. 7 tests skipped (6 integration tests requiring PostgreSQL, 1 provider test requiring API key).
 
 ---
 
@@ -1044,7 +1080,7 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
 
 ## Next Actions
 
-1. **Phase 11.5: Management & Governance Agent Validation Tests** — ManagementStatement transition rules, finding/red-flag/shareholding validation
-2. **Phase 11.6: Management & Governance Agent Integration Tests** — end-to-end pipeline, regression, lint, mypy
+1. **Phase 11.6: Management & Governance Agent Integration Tests** — end-to-end pipeline, regression, lint, mypy
+2. **Phase 12: Future Growth & Optionality Agent**
 3. **SEBI XBRL integration** for authoritative financial data
 4. **Evaluate Celery vs Temporal** (ADR-002) for background tasks

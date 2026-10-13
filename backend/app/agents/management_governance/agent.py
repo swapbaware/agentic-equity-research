@@ -281,6 +281,7 @@ class ManagementGovernanceAgent:
                     all_evidence_ids,
                     context.existing_statements,
                     request.observation_date,
+                    shareholding_snapshots=discovery.shareholding_data,
                 ),
             )
             steps_completed += 1
@@ -722,6 +723,7 @@ class ManagementGovernanceAgent:
         all_evidence_ids: list[uuid.UUID],
         existing_statements: list[ManagementStatementSummary],
         observation_date: date,
+        shareholding_snapshots: list[ShareholdingSnapshot] | None = None,
     ) -> GovernanceValidationResult:
         return _validate_governance_output(
             analysis_output,
@@ -730,6 +732,7 @@ class ManagementGovernanceAgent:
             all_evidence_ids,
             existing_statements,
             observation_date,
+            shareholding_snapshots=shareholding_snapshots or [],
         )
 
     async def _step_persistence(
@@ -976,6 +979,8 @@ def _validate_governance_output(
     all_evidence_ids: list[uuid.UUID],
     existing_statements: list[ManagementStatementSummary],
     observation_date: date,
+    *,
+    shareholding_snapshots: list[ShareholdingSnapshot] | None = None,
 ) -> GovernanceValidationResult:
     issues: list[GovernanceValidationIssue] = []
     existing_by_id: dict[str, ManagementStatementSummary] = {str(ms.id): ms for ms in existing_statements}
@@ -1182,6 +1187,44 @@ def _validate_governance_output(
                 )
             )
 
+        if f.finding_type == FindingType.CALCULATION and not f.evidence_indices:
+            issues.append(
+                GovernanceValidationIssue(
+                    domain="finding",
+                    issue_type="calculation_without_evidence",
+                    message=f"CALCULATION finding {i} has no evidence indices",
+                    action="warning",
+                )
+            )
+
+        if (
+            f.finding_type == FindingType.AI_INFERENCE
+            and f.category == "governance_red_flag"
+            and not f.evidence_indices
+        ):
+            issues.append(
+                GovernanceValidationIssue(
+                    domain="finding",
+                    issue_type="ai_inference_red_flag_without_evidence",
+                    message=f"AI_INFERENCE finding {i} for governance_red_flag requires evidence indices",
+                    action="rejected",
+                )
+            )
+            findings_rejected += 1
+            continue
+
+        if f.finding_type == FindingType.ANALYST_OPINION:
+            issues.append(
+                GovernanceValidationIssue(
+                    domain="finding",
+                    issue_type="analyst_opinion_not_allowed",
+                    message=f"Finding {i} uses ANALYST_OPINION which is not applicable to this agent",
+                    action="rejected",
+                )
+            )
+            findings_rejected += 1
+            continue
+
         if f.source_publication_date and f.source_publication_date > observation_date:
             issues.append(
                 GovernanceValidationIssue(
@@ -1257,6 +1300,19 @@ def _validate_governance_output(
             )
             rejected = True
 
+        for idx in rf.evidence_indices:
+            if idx < 0 or idx >= len(all_evidence):
+                issues.append(
+                    GovernanceValidationIssue(
+                        domain="red_flag",
+                        issue_type="invalid_evidence_index",
+                        message=f"Red flag '{rf.category}' references invalid evidence index {idx}",
+                        action="rejected",
+                    )
+                )
+                rejected = True
+                break
+
         if rejected:
             red_flags_rejected += 1
         else:
@@ -1264,6 +1320,55 @@ def _validate_governance_output(
 
     # -- 6. Shareholding consistency ------------------------------------------
     _validate_shareholding_consistency(shareholding_findings, issues)
+
+    # -- 7. Shareholding snapshot validation (SV-02, SV-03, SV-04) -----------
+    for snap in shareholding_snapshots or []:
+        pcts = [
+            snap.promoter_holding_pct,
+            snap.fii_holding_pct,
+            snap.dii_holding_pct,
+            snap.public_holding_pct,
+        ]
+        if any(p < 0 for p in pcts):
+            issues.append(
+                GovernanceValidationIssue(
+                    domain="shareholding",
+                    issue_type="negative_percentage",
+                    message=(
+                        f"Shareholding snapshot {snap.quarter} "
+                        f"has negative percentage"
+                    ),
+                    action="rejected",
+                )
+            )
+        if (
+            snap.pledged_percentage is not None
+            and snap.pledged_percentage > Decimal("100")
+        ):
+            issues.append(
+                GovernanceValidationIssue(
+                    domain="shareholding",
+                    issue_type="pledge_exceeds_100",
+                    message=(
+                        f"Shareholding snapshot {snap.quarter} "
+                        f"has pledge {snap.pledged_percentage}% > 100%"
+                    ),
+                    action="rejected",
+                )
+            )
+        if snap.as_of_date > observation_date:
+            issues.append(
+                GovernanceValidationIssue(
+                    domain="shareholding",
+                    issue_type="future_snapshot",
+                    message=(
+                        f"Shareholding snapshot {snap.quarter} "
+                        f"as_of_date {snap.as_of_date} is after "
+                        f"observation_date {observation_date}"
+                    ),
+                    action="rejected",
+                )
+            )
 
     valid_count = total_findings - findings_rejected
 
