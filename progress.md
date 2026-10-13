@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-13 (Phase 12.2 — Tools Implementation COMPLETE)
+**Last Updated:** 2026-10-13 (Phase 12.2 — Remediation COMPLETE, awaiting audit)
 
 ---
 
@@ -1123,7 +1123,7 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
   - Tool 4 `persist_evidence`: Evidence records with extracted_by=GROWTH_AGENT_NAME
   - Tool 5 `persist_findings`: validates against GROWTH_FINDING_CATEGORIES (14), rejects invalid categories
   - Tool 6 `persist_growth_opportunities`: GrowthCategory/GrowthMaturity enum validation, duplicate check by (company_id, research_run_id, opportunity_name), risks JSON with tam_methodology/tam_low/tam_high/risk_factors, evidence junction table linking, invalid confidence defaults to LOW
-  - Tool 7 `persist_scores`: persists as ResearchFinding records with JSON content {dimension, score, components}, labeled AI_INFERENCE, one call per ScoreDimension (GROWTH_QUALITY + FUTURE_OPTIONALITY)
+  - Tool 7 `persist_scores`: persists as CompanyScore records in thesis.company_score with sub_scores JSONB and explanation, one per ScoreDimension (GROWTH_QUALITY + FUTURE_OPTIONALITY), idempotent via unique constraint
   - Tool 8 `create_research_document`: internal helper for document registration
   - Helper functions: `_classify_growth_source`, `_tier_from_url`, `_map_filing_type`
 - [x] `backend/tests/agents/test_growth_tools.py` — 79 tests across 14 test classes:
@@ -1133,7 +1133,7 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
   - TestPersistEvidence (4): happy path, extracted_by, multiple, empty rejected by contract
   - TestPersistFindings (5): happy path, invalid rejected, all 14 categories, mixed valid/invalid, empty rejected by contract
   - TestPersistGrowthOpportunities (10): happy path, evidence junction, invalid category/maturity, duplicate detection, risks JSON, confidence defaults, evidence out-of-range, Decimal preserved, output shape
-  - TestPersistScores (6): happy path, two dimensions, AI_INFERENCE labeled, agent name, components serialized, output shape
+  - TestPersistScores (13): happy path, two CompanyScore records, correct associations, correct values, sub_scores JSONB, explanation from rationale, explanation fallback, boundary scores, out-of-range rejected, idempotency, transaction safety, no ResearchFinding records, output shape
   - TestCreateResearchDocument (2): happy path, publication date preserved
   - TestClassifyGrowthSource (10), TestTierFromUrl (7), TestMapFilingType (5)
   - TestFutureGrowthToolsConstructor (3): providers accepted, all methods exist, tool count == 8
@@ -1143,13 +1143,15 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
 - [x] GrowthOpportunity INSERT with evidence junction (AC-06)
 - [x] Two independent dimension scores: GROWTH_QUALITY + FUTURE_OPTIONALITY (AC-07)
 - [x] Conservative defaults: SPECULATIVE maturity, 0 scores, evidence required to upgrade
-- [x] Quality gates: 79/79 Phase 12.2 tests passing
-- [x] Regression: 117 Phase 12.1 contract tests passing, 1648 total agent tests passing, zero regressions
+- [x] Quality gates: 86/86 Phase 12.2 tests passing (was 79 before remediation)
+- [x] Regression: 117 Phase 12.1 contract tests passing, 1655 total agent tests, 3224 total backend tests, zero regressions
 - [x] ruff check clean, ruff format clean on both implementation and test files
 - [x] mypy strict clean on implementation (3 source files)
 - [x] No Phase 12.1 contract modifications
 - [x] No schema changes, no migrations, no ORM model changes
 - [x] No new dependencies
+- [x] **Remediation (F-01):** Rewrote persist_scores to use CompanyScore ORM (thesis.company_score) instead of ResearchFinding
+- [x] **Remediation (F-02):** Corrected all DimensionScore/dimension_score references in architecture doc to CompanyScore/company_score
 
 ---
 

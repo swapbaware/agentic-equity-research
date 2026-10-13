@@ -610,7 +610,7 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 **Implementation Subphases:**
 - Phase 12.0: Architecture & Planning — **COMPLETE**
 - Phase 12.1: Contracts and Constants — **COMPLETE**
-- Phase 12.2: Tools Implementation — **COMPLETE** (79 tests, ruff clean, mypy clean)
+- Phase 12.2: Tools Implementation — **COMPLETE + REMEDIATED** (86 tests, ruff clean, mypy clean; F-01/F-02 fixed: CompanyScore persistence, architecture doc corrected)
 - Phase 12.3: Prompts — NOT STARTED
 - Phase 12.4: Agent Implementation — NOT STARTED
 - Phase 12.5: Validation Tests — NOT STARTED

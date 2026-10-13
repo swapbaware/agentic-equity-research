@@ -168,7 +168,7 @@ This agent follows the same architectural pattern as Phases 8-11:
 | `ResearchFinding` | `backend/app/models/research.py` | EXISTS | Finding persistence |
 | `Evidence` | `backend/app/models/research.py` | EXISTS | Evidence persistence |
 | `ResearchDocument` | `backend/app/models/research.py` | EXISTS | Document registration |
-| `DimensionScore` | `backend/app/models/research.py` | EXISTS | Score persistence |
+| `CompanyScore` | `backend/app/models/thesis.py` | EXISTS | Score persistence |
 | `ConfidenceLevel` | `backend/app/models/enums.py` | EXISTS | HIGH, MEDIUM, LOW |
 | `FindingType` | `backend/app/models/enums.py` | EXISTS | 7-type classification |
 
@@ -893,7 +893,7 @@ Same as Phases 8-11:
 | `research.research_finding` | `research` | 20-40 per run (typical) | Analytical findings and scoring rationale |
 | `research.evidence` | `research` | 10-30 per run (typical) | Source evidence records |
 | `research.research_document` | `research` | 5-10 per run (typical) | Retrieved document registrations |
-| `research.dimension_score` | `research` | 2 per run | Growth Quality + Future Optionality scores |
+| `thesis.company_score` | `thesis` | 2 per run | Growth Quality + Future Optionality scores |
 | `research.research_run` | `research` | 1 per run | Run metadata and status |
 | `research.research_run_step` | `research` | 7 per run | Step execution records |
 
@@ -1101,7 +1101,7 @@ This agent must pass the following quality gates before publication:
 | AC-04 | load_company_context loads Phase 8/9/10/11 findings | Unit test: correct agent_name filters |
 | AC-05 | discover_growth_sources queries SearchProvider + NewsProvider + CorporateFilingsProvider | Unit test: mock providers called with correct args |
 | AC-06 | persist_growth_opportunities handles INSERT with evidence junction | Unit test: new opportunity, evidence links |
-| AC-07 | persist_scores writes Growth Quality and Future Optionality dimension scores | Unit test: two DimensionScore records |
+| AC-07 | persist_scores writes Growth Quality and Future Optionality dimension scores | Unit test: two CompanyScore records |
 | AC-08 | All financial values use Decimal (never float) | Unit test: addressable_market Decimal validation |
 
 ### Prompt Acceptance (Phase 12.3)
@@ -1147,8 +1147,8 @@ This agent must pass the following quality gates before publication:
 |----|-----------|-------------|
 | AC-31 | End-to-end pipeline produces GrowthOpportunity records with correct fields | Integration test |
 | AC-32 | GrowthOpportunity evidence links via junction table | Integration test |
-| AC-33 | Growth Quality score persisted to dimension_score table | Integration test |
-| AC-34 | Future Optionality score persisted to dimension_score table | Integration test |
+| AC-33 | Growth Quality score persisted to company_score table | Integration test |
+| AC-34 | Future Optionality score persisted to company_score table | Integration test |
 | AC-35 | Token budget exhaustion produces partial result | Integration test |
 | AC-36 | Provider failure produces partial result with UNCERTAINTY findings | Integration test |
 | AC-37 | Quality Gate 7 (Management-Claim Separation) passes | Integration test |
@@ -1197,7 +1197,7 @@ This agent must pass the following quality gates before publication:
 - `persist_evidence` — evidence persistence (reuse pattern from Phase 8/9/10/11)
 - `persist_findings` — finding persistence with growth category validation
 - `persist_growth_opportunities` — GrowthOpportunity persistence with evidence junction table linking
-- `persist_scores` — DimensionScore persistence for GROWTH_QUALITY and FUTURE_OPTIONALITY
+- `persist_scores` — CompanyScore persistence for GROWTH_QUALITY and FUTURE_OPTIONALITY
 - `create_research_document` — document registration helper
 
 **Acceptance Criteria**: AC-03, AC-04, AC-05, AC-06, AC-07

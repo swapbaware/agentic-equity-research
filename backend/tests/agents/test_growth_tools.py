@@ -19,7 +19,6 @@ Acceptance criteria: AC-03, AC-04, AC-05, AC-06, AC-07
 from __future__ import annotations
 
 import hashlib
-import json
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -1446,16 +1445,37 @@ class TestPersistGrowthOpportunities:
 
 class TestPersistScores:
     """AC-07: persist_scores writes Growth Quality and Future Optionality
-    dimension scores."""
+    dimension scores as CompanyScore records in thesis.company_score."""
+
+    def _setup_session_for_scores(self) -> tuple[AsyncMock, list[Any]]:
+        """Return a session mock that tracks added CompanyScore records."""
+        session = _make_session_mock()
+        added_records: list[Any] = []
+
+        gq_id = uuid.uuid4()
+        fo_id = uuid.uuid4()
+        refresh_ids = iter([gq_id, fo_id])
+
+        def track_add(record: Any) -> None:
+            added_records.append(record)
+
+        async def mock_refresh(record: Any) -> None:
+            record.id = next(refresh_ids)
+
+        session.add = track_add
+        session.refresh = mock_refresh
+
+        # Default: no existing score (idempotency check returns None)
+        no_existing = MagicMock()
+        no_existing.scalar_one_or_none.return_value = None
+        session.execute = AsyncMock(return_value=no_existing)
+
+        return session, added_records
 
     @pytest.mark.asyncio
     async def test_happy_path(self) -> None:
-        run_service = _make_run_service_mock()
-        gq_finding = MockPersistedFinding()
-        fo_finding = MockPersistedFinding()
-        run_service.record_findings = AsyncMock(side_effect=[[gq_finding], [fo_finding]])
-
-        tools = _make_tools(run_service=run_service)
+        session, added = self._setup_session_for_scores()
+        tools = _make_tools(session=session)
         inp = PersistGrowthScoresInput(
             company_id=COMPANY_ID,
             research_run_id=RUN_ID,
@@ -1478,17 +1498,16 @@ class TestPersistScores:
         )
         result = await tools.persist_scores(inp)
 
-        assert result.growth_quality_score_id == gq_finding.id
-        assert result.future_optionality_score_id == fo_finding.id
-        assert run_service.record_findings.call_count == 2
+        assert result.growth_quality_score_id is not None
+        assert result.future_optionality_score_id is not None
+        assert result.growth_quality_score_id != result.future_optionality_score_id
+        assert len(added) == 2
 
     @pytest.mark.asyncio
-    async def test_two_dimension_scores_persisted(self) -> None:
-        """Exactly 2 calls to record_findings — one for GQ, one for FO."""
-        run_service = _make_run_service_mock()
-        run_service.record_findings = AsyncMock(side_effect=[[MockPersistedFinding()], [MockPersistedFinding()]])
-
-        tools = _make_tools(run_service=run_service)
+    async def test_two_company_score_records_created(self) -> None:
+        """Exactly 2 CompanyScore records — one for GQ, one for FO."""
+        session, added = self._setup_session_for_scores()
+        tools = _make_tools(session=session)
         inp = PersistGrowthScoresInput(
             company_id=COMPANY_ID,
             research_run_id=RUN_ID,
@@ -1497,27 +1516,18 @@ class TestPersistScores:
         )
         await tools.persist_scores(inp)
 
-        assert run_service.record_findings.call_count == 2
+        from app.models.thesis import CompanyScore
 
-        # Verify score content contains dimension info
-        first_call_findings = run_service.record_findings.call_args_list[0][0][2]
-        second_call_findings = run_service.record_findings.call_args_list[1][0][2]
+        assert len(added) == 2
+        assert all(isinstance(r, CompanyScore) for r in added)
 
-        first_content = json.loads(first_call_findings[0].content)
-        second_content = json.loads(second_call_findings[0].content)
-
-        assert first_content["dimension"] == ScoreDimension.GROWTH_QUALITY.value
-        assert first_content["score"] == 50
-        assert second_content["dimension"] == ScoreDimension.FUTURE_OPTIONALITY.value
-        assert second_content["score"] == 30
+        dimensions = {r.dimension for r in added}
+        assert dimensions == {ScoreDimension.GROWTH_QUALITY, ScoreDimension.FUTURE_OPTIONALITY}
 
     @pytest.mark.asyncio
-    async def test_scores_labeled_ai_inference(self) -> None:
-        """Scores are labeled AI_INFERENCE per scoring rules §13."""
-        run_service = _make_run_service_mock()
-        run_service.record_findings = AsyncMock(side_effect=[[MockPersistedFinding()], [MockPersistedFinding()]])
-
-        tools = _make_tools(run_service=run_service)
+    async def test_correct_company_and_run_associations(self) -> None:
+        session, added = self._setup_session_for_scores()
+        tools = _make_tools(session=session)
         inp = PersistGrowthScoresInput(
             company_id=COMPANY_ID,
             research_run_id=RUN_ID,
@@ -1526,34 +1536,32 @@ class TestPersistScores:
         )
         await tools.persist_scores(inp)
 
-        for call in run_service.record_findings.call_args_list:
-            finding_def = call[0][2][0]
-            assert finding_def.finding_type == FindingType.AI_INFERENCE
+        for record in added:
+            assert record.company_id == COMPANY_ID
+            assert record.research_run_id == RUN_ID
 
     @pytest.mark.asyncio
-    async def test_agent_name_is_growth_agent(self) -> None:
-        run_service = _make_run_service_mock()
-        run_service.record_findings = AsyncMock(side_effect=[[MockPersistedFinding()], [MockPersistedFinding()]])
-
-        tools = _make_tools(run_service=run_service)
+    async def test_correct_score_values(self) -> None:
+        session, added = self._setup_session_for_scores()
+        tools = _make_tools(session=session)
         inp = PersistGrowthScoresInput(
             company_id=COMPANY_ID,
             research_run_id=RUN_ID,
-            growth_quality_score=50,
-            future_optionality_score=30,
+            growth_quality_score=65,
+            future_optionality_score=42,
         )
         await tools.persist_scores(inp)
 
-        for call in run_service.record_findings.call_args_list:
-            finding_def = call[0][2][0]
-            assert finding_def.agent_name == GROWTH_AGENT_NAME
+        gq = next(r for r in added if r.dimension == ScoreDimension.GROWTH_QUALITY)
+        fo = next(r for r in added if r.dimension == ScoreDimension.FUTURE_OPTIONALITY)
+        assert gq.score == 65
+        assert fo.score == 42
 
     @pytest.mark.asyncio
-    async def test_components_serialized_in_content(self) -> None:
-        run_service = _make_run_service_mock()
-        run_service.record_findings = AsyncMock(side_effect=[[MockPersistedFinding()], [MockPersistedFinding()]])
-
-        tools = _make_tools(run_service=run_service)
+    async def test_components_in_sub_scores(self) -> None:
+        """Component scores stored in CompanyScore.sub_scores JSONB."""
+        session, added = self._setup_session_for_scores()
+        tools = _make_tools(session=session)
         inp = PersistGrowthScoresInput(
             company_id=COMPANY_ID,
             research_run_id=RUN_ID,
@@ -1566,17 +1574,161 @@ class TestPersistScores:
         )
         await tools.persist_scores(inp)
 
-        gq_content = json.loads(run_service.record_findings.call_args_list[0][0][2][0].content)
-        assert len(gq_content["components"]) == 2
-        assert gq_content["components"][0]["name"] == "Revenue CAGR"
-        assert gq_content["components"][0]["score"] == 70
+        gq = next(r for r in added if r.dimension == ScoreDimension.GROWTH_QUALITY)
+        assert gq.sub_scores is not None
+        assert len(gq.sub_scores["components"]) == 2
+        assert gq.sub_scores["components"][0]["name"] == "Revenue CAGR"
+        assert gq.sub_scores["components"][0]["score"] == 70
+        assert gq.sub_scores["components"][0]["rationale"] == "Good"
+
+    @pytest.mark.asyncio
+    async def test_explanation_from_rationale(self) -> None:
+        """CompanyScore.explanation built from component rationales."""
+        session, added = self._setup_session_for_scores()
+        tools = _make_tools(session=session)
+        inp = PersistGrowthScoresInput(
+            company_id=COMPANY_ID,
+            research_run_id=RUN_ID,
+            growth_quality_score=65,
+            future_optionality_score=42,
+            growth_quality_components=[
+                GrowthScoreComponent(component_name="Revenue CAGR", score=70, rationale="Strong"),
+            ],
+            future_optionality_components=[
+                GrowthScoreComponent(component_name="Opportunity Count", score=50, rationale="3 identified"),
+            ],
+        )
+        await tools.persist_scores(inp)
+
+        gq = next(r for r in added if r.dimension == ScoreDimension.GROWTH_QUALITY)
+        fo = next(r for r in added if r.dimension == ScoreDimension.FUTURE_OPTIONALITY)
+        assert "Revenue CAGR" in gq.explanation
+        assert "Strong" in gq.explanation
+        assert "Opportunity Count" in fo.explanation
+
+    @pytest.mark.asyncio
+    async def test_explanation_fallback_without_components(self) -> None:
+        """When no components are provided, a default explanation is generated."""
+        session, added = self._setup_session_for_scores()
+        tools = _make_tools(session=session)
+        inp = PersistGrowthScoresInput(
+            company_id=COMPANY_ID,
+            research_run_id=RUN_ID,
+            growth_quality_score=50,
+            future_optionality_score=30,
+        )
+        await tools.persist_scores(inp)
+
+        gq = next(r for r in added if r.dimension == ScoreDimension.GROWTH_QUALITY)
+        fo = next(r for r in added if r.dimension == ScoreDimension.FUTURE_OPTIONALITY)
+        assert gq.explanation != ""
+        assert fo.explanation != ""
+        assert "50" in gq.explanation
+        assert "30" in fo.explanation
+
+    @pytest.mark.asyncio
+    async def test_score_bounds_zero_and_hundred(self) -> None:
+        """Boundary values 0 and 100 are accepted by contract and persisted."""
+        session, added = self._setup_session_for_scores()
+        tools = _make_tools(session=session)
+        inp = PersistGrowthScoresInput(
+            company_id=COMPANY_ID,
+            research_run_id=RUN_ID,
+            growth_quality_score=0,
+            future_optionality_score=100,
+        )
+        await tools.persist_scores(inp)
+
+        gq = next(r for r in added if r.dimension == ScoreDimension.GROWTH_QUALITY)
+        fo = next(r for r in added if r.dimension == ScoreDimension.FUTURE_OPTIONALITY)
+        assert gq.score == 0
+        assert fo.score == 100
+
+    def test_score_out_of_range_rejected_by_contract(self) -> None:
+        """Contract Field(ge=0, le=100) rejects out-of-range scores."""
+        with pytest.raises(ValueError):
+            PersistGrowthScoresInput(
+                company_id=COMPANY_ID,
+                research_run_id=RUN_ID,
+                growth_quality_score=-1,
+                future_optionality_score=50,
+            )
+        with pytest.raises(ValueError):
+            PersistGrowthScoresInput(
+                company_id=COMPANY_ID,
+                research_run_id=RUN_ID,
+                growth_quality_score=50,
+                future_optionality_score=101,
+            )
+
+    @pytest.mark.asyncio
+    async def test_idempotency_existing_scores_returned(self) -> None:
+        """When scores already exist for (company, run, dimension), return existing IDs."""
+        session = _make_session_mock()
+        existing_gq_id = uuid.uuid4()
+        existing_fo_id = uuid.uuid4()
+
+        existing_result = MagicMock()
+        existing_result.scalar_one_or_none.side_effect = [existing_gq_id, existing_fo_id]
+        session.execute = AsyncMock(return_value=existing_result)
+
+        tools = _make_tools(session=session)
+        inp = PersistGrowthScoresInput(
+            company_id=COMPANY_ID,
+            research_run_id=RUN_ID,
+            growth_quality_score=50,
+            future_optionality_score=30,
+        )
+        result = await tools.persist_scores(inp)
+
+        assert result.growth_quality_score_id == existing_gq_id
+        assert result.future_optionality_score_id == existing_fo_id
+        session.add.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_second_dimension_not_persisted_when_first_fails(self) -> None:
+        """If the first score write raises, the second is not attempted."""
+        session = _make_session_mock()
+
+        no_existing = MagicMock()
+        no_existing.scalar_one_or_none.return_value = None
+        session.execute = AsyncMock(return_value=no_existing)
+        session.flush = AsyncMock(side_effect=Exception("DB write failed"))
+        session.add = MagicMock()
+
+        tools = _make_tools(session=session)
+        inp = PersistGrowthScoresInput(
+            company_id=COMPANY_ID,
+            research_run_id=RUN_ID,
+            growth_quality_score=50,
+            future_optionality_score=30,
+        )
+        with pytest.raises(Exception, match="DB write failed"):
+            await tools.persist_scores(inp)
+
+        # Only 1 add call — the second dimension was not attempted
+        assert session.add.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_no_research_finding_records_created(self) -> None:
+        """Scores must use CompanyScore, not ResearchFinding via record_findings."""
+        session, added = self._setup_session_for_scores()
+        run_service = _make_run_service_mock()
+        tools = _make_tools(session=session, run_service=run_service)
+        inp = PersistGrowthScoresInput(
+            company_id=COMPANY_ID,
+            research_run_id=RUN_ID,
+            growth_quality_score=50,
+            future_optionality_score=30,
+        )
+        await tools.persist_scores(inp)
+
+        run_service.record_findings.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_output_contract_shape(self) -> None:
-        run_service = _make_run_service_mock()
-        run_service.record_findings = AsyncMock(side_effect=[[MockPersistedFinding()], [MockPersistedFinding()]])
-
-        tools = _make_tools(run_service=run_service)
+        session, _ = self._setup_session_for_scores()
+        tools = _make_tools(session=session)
         inp = PersistGrowthScoresInput(
             company_id=COMPANY_ID,
             research_run_id=RUN_ID,

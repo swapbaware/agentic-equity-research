@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 
@@ -54,7 +55,6 @@ from app.models.company import Company
 from app.models.enums import (
     ConfidenceLevel,
     DocumentType,
-    FindingType,
     GrowthCategory,
     GrowthMaturity,
     ManagementStatementCategory,
@@ -63,6 +63,7 @@ from app.models.enums import (
     SourceTier,
 )
 from app.models.research import Evidence, ManagementStatement, ResearchDocument, ResearchFinding
+from app.models.thesis import CompanyScore
 from app.providers.errors import ProviderError
 from app.providers.interfaces import (
     CorporateFilingsProvider,
@@ -578,73 +579,88 @@ class FutureGrowthTools:
     ) -> PersistGrowthScoresOutput:
         """Persist Growth Quality and Future Optionality dimension scores.
 
-        Scores are stored as research findings with score metadata in the
-        content field, following the established pattern. Each score produces
-        a finding with category 'growth_score_rationale' or
-        'optionality_score_rationale' and a structured content block.
+        Scores are stored as CompanyScore records in thesis.company_score,
+        with sub-score components in the JSONB sub_scores column and a
+        combined rationale in the explanation column.  The table's unique
+        constraint (company_id, research_run_id, dimension) prevents
+        duplicate scores; on conflict the existing record is returned.
         """
-        import json
+        gq_record = await self._persist_single_score(
+            company_id=inp.company_id,
+            research_run_id=inp.research_run_id,
+            dimension=ScoreDimension.GROWTH_QUALITY,
+            score=inp.growth_quality_score,
+            components=inp.growth_quality_components,
+        )
 
-        # Growth Quality score finding
-        gq_components = [
-            {"name": c.component_name, "score": c.score, "rationale": c.rationale}
-            for c in inp.growth_quality_components
-        ]
-        gq_content = json.dumps(
-            {
-                "dimension": ScoreDimension.GROWTH_QUALITY.value,
-                "score": inp.growth_quality_score,
-                "components": gq_components,
-            }
+        fo_record = await self._persist_single_score(
+            company_id=inp.company_id,
+            research_run_id=inp.research_run_id,
+            dimension=ScoreDimension.FUTURE_OPTIONALITY,
+            score=inp.future_optionality_score,
+            components=inp.future_optionality_components,
         )
-        gq_findings = await self._run_service.record_findings(
-            inp.research_run_id,
-            None,
-            [
-                ResearchFindingCreate(
-                    agent_name=GROWTH_AGENT_NAME,
-                    finding_type=FindingType.AI_INFERENCE,
-                    category="growth_score_rationale",
-                    content=gq_content,
-                    confidence=ConfidenceLevel.MEDIUM,
-                    observation_date=None,
-                ),
-            ],
-        )
-        gq_score_id = gq_findings[0].id
-
-        # Future Optionality score finding
-        fo_components = [
-            {"name": c.component_name, "score": c.score, "rationale": c.rationale}
-            for c in inp.future_optionality_components
-        ]
-        fo_content = json.dumps(
-            {
-                "dimension": ScoreDimension.FUTURE_OPTIONALITY.value,
-                "score": inp.future_optionality_score,
-                "components": fo_components,
-            }
-        )
-        fo_findings = await self._run_service.record_findings(
-            inp.research_run_id,
-            None,
-            [
-                ResearchFindingCreate(
-                    agent_name=GROWTH_AGENT_NAME,
-                    finding_type=FindingType.AI_INFERENCE,
-                    category="optionality_score_rationale",
-                    content=fo_content,
-                    confidence=ConfidenceLevel.MEDIUM,
-                    observation_date=None,
-                ),
-            ],
-        )
-        fo_score_id = fo_findings[0].id
 
         return PersistGrowthScoresOutput(
-            growth_quality_score_id=gq_score_id,
-            future_optionality_score_id=fo_score_id,
+            growth_quality_score_id=gq_record,
+            future_optionality_score_id=fo_record,
         )
+
+    async def _persist_single_score(
+        self,
+        *,
+        company_id: uuid.UUID,
+        research_run_id: uuid.UUID,
+        dimension: ScoreDimension,
+        score: int,
+        components: Sequence[object],
+    ) -> uuid.UUID:
+        """Persist one CompanyScore, returning its id.
+
+        If a record for the same (company, run, dimension) already exists
+        (unique constraint), the existing id is returned without overwriting.
+        """
+        from app.agents.contracts import GrowthScoreComponent
+
+        # Check for existing score (idempotency)
+        existing_stmt = sa.select(CompanyScore.id).where(
+            CompanyScore.company_id == company_id,
+            CompanyScore.research_run_id == research_run_id,
+            CompanyScore.dimension == dimension,
+        )
+        existing_result = await self._session.execute(existing_stmt)
+        existing_id = existing_result.scalar_one_or_none()
+        if existing_id is not None:
+            return existing_id
+
+        # Build sub_scores JSONB from components
+        sub_scores: dict[str, object] | None = None
+        typed_components: list[GrowthScoreComponent] = [c for c in components if isinstance(c, GrowthScoreComponent)]
+        if typed_components:
+            sub_scores = {
+                "components": [
+                    {"name": c.component_name, "score": c.score, "rationale": c.rationale} for c in typed_components
+                ],
+            }
+
+        # Build explanation from component rationales
+        if typed_components:
+            explanation = "; ".join(f"{c.component_name}: {c.rationale}" for c in typed_components)
+        else:
+            explanation = f"{dimension.value} score: {score}"
+
+        record = CompanyScore(
+            company_id=company_id,
+            research_run_id=research_run_id,
+            dimension=dimension,
+            score=score,
+            sub_scores=sub_scores,
+            explanation=explanation,
+        )
+        self._session.add(record)
+        await self._session.flush()
+        await self._session.refresh(record)
+        return record.id
 
     # -- Tool 8: create_research_document (internal helper) --------------------
 
