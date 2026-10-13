@@ -603,13 +603,13 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - Source attribution
 - Output schema validation
 
-**Status:** IN PROGRESS — Architecture & Planning COMPLETE (Phase 12.0)
+**Status:** IN PROGRESS — Contracts and Constants COMPLETE (Phase 12.1)
 
 **Architecture Document:** `docs/architecture/phase-12-future-growth-optionality-agent.md`
 
 **Implementation Subphases:**
 - Phase 12.0: Architecture & Planning — **COMPLETE**
-- Phase 12.1: Contracts and Constants — NOT STARTED
+- Phase 12.1: Contracts and Constants — **COMPLETE**
 - Phase 12.2: Tools Implementation — NOT STARTED
 - Phase 12.3: Prompts — NOT STARTED
 - Phase 12.4: Agent Implementation — NOT STARTED

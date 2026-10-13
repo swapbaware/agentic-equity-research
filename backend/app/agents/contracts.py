@@ -11,6 +11,7 @@ Defines Pydantic v2 frozen models for:
 - Finding category constants
 - Competitive Moat Agent contracts (Phase 10)
 - Management & Governance Agent contracts (Phase 11)
+- Future Growth & Optionality Agent contracts (Phase 12)
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from app.models.enums import (
     DocumentType,
     EvidenceType,
     FindingType,
+    GrowthCategory,
     ManagementStatementCategory,
     ManagementStatementStatus,
     MoatStrength,
@@ -1600,5 +1602,353 @@ GOVERNANCE_RESEARCH_STEPS: tuple[StepDefinition, ...] = (
         step_name="persistence",
         step_type=STEP_TYPE_DETERMINISTIC,
         timeout_seconds=30,
+    ),
+)
+
+
+# ===========================================================================
+# Future Growth & Optionality Agent — constants and contracts (Phase 12)
+# ===========================================================================
+
+GROWTH_AGENT_TOKEN_BUDGET: int = 20_000
+GROWTH_AGENT_TOKEN_WARNING: int = 16_000
+GROWTH_AGENT_NAME: str = "future_growth_agent"
+GROWTH_AGENT_RUN_TYPE: str = "future_growth"
+
+GROWTH_FINDING_CATEGORIES: frozenset[str] = frozenset(
+    {
+        "growth_opportunity",
+        "growth_quality",
+        "future_optionality",
+        "tam_estimate",
+        "growth_trajectory",
+        "theme_alignment",
+        "management_growth_claim",
+        "growth_risk",
+        "growth_challenge",
+        "maturity_classification",
+        "growth_score_rationale",
+        "optionality_score_rationale",
+        "research_gap",
+        "contradiction",
+    }
+)
+
+INDIA_STRUCTURAL_THEMES: tuple[str, ...] = (
+    "artificial_intelligence",
+    "data_centres",
+    "semiconductors",
+    "defence_indigenisation",
+    "electric_vehicles",
+    "renewable_energy",
+    "pharma_innovation",
+    "digital_payments",
+    "manufacturing_pli",
+    "infrastructure",
+)
+
+GROWTH_CATEGORY_TO_FINDING_CATEGORY: dict[GrowthCategory, str] = {
+    GrowthCategory.NEW_PRODUCT: "growth_opportunity",
+    GrowthCategory.NEW_MARKET: "growth_opportunity",
+    GrowthCategory.ACQUISITION: "growth_opportunity",
+    GrowthCategory.PARTNERSHIP: "growth_opportunity",
+    GrowthCategory.GOVERNMENT_INCENTIVE: "growth_opportunity",
+    GrowthCategory.TECHNOLOGY: "growth_opportunity",
+    GrowthCategory.EXPANSION: "growth_opportunity",
+}
+
+
+# ---------------------------------------------------------------------------
+# Future Growth Agent — request / config / result contracts
+# ---------------------------------------------------------------------------
+
+
+class FutureGrowthConfig(BaseModel):
+    """Agent-level configuration for a Future Growth & Optionality Agent run."""
+
+    model_config = ConfigDict(frozen=True)
+
+    token_budget: int = Field(default=GROWTH_AGENT_TOKEN_BUDGET, gt=0)
+    token_warning_threshold: int = Field(default=GROWTH_AGENT_TOKEN_WARNING, gt=0)
+    max_llm_attempts: int = Field(default=MAX_LLM_ATTEMPTS, ge=1, le=3)
+    source_limit: int = Field(default=20, ge=1, le=100)
+    max_documents: int = Field(default=8, ge=1, le=30)
+    concurrent_retrievals: int = Field(default=5, ge=1, le=20)
+    max_opportunities: int = Field(default=15, ge=1, le=50)
+    extraction_model: str | None = None
+    analysis_model: str | None = None
+    challenge_model: str | None = None
+
+
+class FutureGrowthResearchRequest(BaseModel):
+    """Input contract for initiating a Future Growth & Optionality Agent run."""
+
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    observation_date: date
+    initiated_by: str = Field(min_length=1, max_length=200)
+    configuration: FutureGrowthConfig | None = None
+
+
+class FutureGrowthResult(BaseModel):
+    """Output contract returned by FutureGrowthAgent.execute()."""
+
+    model_config = ConfigDict(frozen=True)
+
+    status: str = Field(min_length=1, max_length=20)
+    run_id: uuid.UUID
+    opportunities: list[uuid.UUID] = Field(default_factory=list)
+    findings_count: int = Field(default=0, ge=0)
+    evidence_count: int = Field(default=0, ge=0)
+    growth_quality_score: int | None = None
+    future_optionality_score: int | None = None
+    validation_result: GrowthValidationResult | None = None
+    steps_completed: int = Field(default=0, ge=0)
+    steps_total: int = Field(default=7, ge=1)
+    token_usage: TokenBudget | None = None
+    errors: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Step 1: Company Context Load
+# ---------------------------------------------------------------------------
+
+
+class LoadGrowthContextInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    research_run_id: uuid.UUID
+    observation_date: date
+
+
+class LoadGrowthContextOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_name: str
+    industry_name: str | None = None
+    nse_symbol: str | None = None
+    bse_code: str | None = None
+    company_findings: list[FindingSummary] = Field(default_factory=list)
+    industry_findings: list[FindingSummary] = Field(default_factory=list)
+    moat_context: str | None = None
+    management_statements: list[ManagementStatementSummary] = Field(default_factory=list)
+    existing_opportunities: list[uuid.UUID] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Step 2: Growth Source Discovery
+# ---------------------------------------------------------------------------
+
+
+class DiscoverGrowthSourcesInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_name: str
+    industry_name: str | None = None
+    nse_symbol: str | None = None
+    observation_date: date
+    search_themes: list[str] = Field(default_factory=list)
+
+
+class DiscoverGrowthSourcesOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    sources: list[SourceCandidate] = Field(default_factory=list)
+    provider_errors: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Step 5: Growth Analysis — LLM output schemas
+# ---------------------------------------------------------------------------
+
+
+class GrowthOpportunityDraft(BaseModel):
+    """LLM-produced draft of a single growth opportunity (Step 5 output)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    opportunity_name: str = Field(max_length=500)
+    category: str
+    maturity: str
+    addressable_market: Decimal | None = None
+    tam_methodology: str | None = None
+    tam_low: Decimal | None = None
+    tam_high: Decimal | None = None
+    timeline_years: int | None = None
+    confidence: str
+    evidence_indices: list[int] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    rationale: str
+
+
+class GrowthScoreComponent(BaseModel):
+    """A single sub-score component for Growth Quality or Future Optionality."""
+
+    model_config = ConfigDict(frozen=True)
+
+    component_name: str
+    score: int = Field(ge=0, le=100)
+    rationale: str
+    evidence_indices: list[int] = Field(default_factory=list)
+
+
+class GrowthAnalysisOutput(BaseModel):
+    """LLM structured output from growth analysis (Step 5)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    opportunities: list[GrowthOpportunityDraft] = Field(default_factory=list)
+    growth_quality_scores: list[GrowthScoreComponent] = Field(default_factory=list)
+    future_optionality_scores: list[GrowthScoreComponent] = Field(default_factory=list)
+    growth_vs_optionality_separation: str
+    themes_identified: list[str] = Field(default_factory=list)
+    findings: list[FindingItem] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Step 6: Growth Validation
+# ---------------------------------------------------------------------------
+
+
+class GrowthValidationIssue(BaseModel):
+    """A single validation issue found during growth validation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    check_id: str
+    severity: str
+    opportunity_name: str | None = None
+    message: str
+
+
+class GrowthValidationResult(BaseModel):
+    """Result of growth validation (Step 6)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    passed: bool
+    issues: list[GrowthValidationIssue] = Field(default_factory=list)
+    downgraded_maturities: list[tuple[str, str, str]] = Field(default_factory=list)
+    nullified_tams: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Step 7: Growth Challenge — LLM output schema
+# ---------------------------------------------------------------------------
+
+
+class GrowthChallengeItem(BaseModel):
+    """LLM-produced challenge for a single growth opportunity (Step 7 output)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    opportunity_name: str
+    challenge: str
+    tam_challenge: str | None = None
+    competitive_risk: str | None = None
+    execution_risk: str | None = None
+    revised_confidence: str | None = None
+    evidence_indices: list[int] = Field(default_factory=list)
+
+
+class GrowthChallengeOutput(BaseModel):
+    """LLM structured output from growth challenge (Step 7)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    challenges: list[GrowthChallengeItem] = Field(default_factory=list)
+    overall_optimism_assessment: str
+    findings: list[FindingItem] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Growth Agent — tool I/O contracts
+# ---------------------------------------------------------------------------
+
+
+class PersistGrowthOpportunitiesInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    research_run_id: uuid.UUID
+    opportunities: list[GrowthOpportunityDraft] = Field(min_length=1)
+    evidence_ids: list[uuid.UUID] = Field(default_factory=list)
+
+
+class PersistGrowthOpportunitiesOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    opportunity_ids: list[uuid.UUID]
+
+
+class PersistGrowthScoresInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    research_run_id: uuid.UUID
+    growth_quality_score: int = Field(ge=0, le=100)
+    future_optionality_score: int = Field(ge=0, le=100)
+    growth_quality_components: list[GrowthScoreComponent] = Field(default_factory=list)
+    future_optionality_components: list[GrowthScoreComponent] = Field(default_factory=list)
+
+
+class PersistGrowthScoresOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    growth_quality_score_id: uuid.UUID
+    future_optionality_score_id: uuid.UUID
+
+
+# ---------------------------------------------------------------------------
+# Future Growth Agent — step definitions
+# ---------------------------------------------------------------------------
+
+GROWTH_RESEARCH_STEPS: tuple[StepDefinition, ...] = (
+    StepDefinition(
+        step_order=1,
+        step_name="context_load",
+        step_type=STEP_TYPE_DETERMINISTIC,
+        timeout_seconds=10,
+    ),
+    StepDefinition(
+        step_order=2,
+        step_name="source_discovery",
+        step_type=STEP_TYPE_PROVIDER_CALL,
+        timeout_seconds=30,
+    ),
+    StepDefinition(
+        step_order=3,
+        step_name="document_retrieval",
+        step_type=STEP_TYPE_PROVIDER_CALL,
+        timeout_seconds=60,
+    ),
+    StepDefinition(
+        step_order=4,
+        step_name="evidence_extraction",
+        step_type=STEP_TYPE_LLM_REASONING,
+        timeout_seconds=120,
+        uses_llm=True,
+    ),
+    StepDefinition(
+        step_order=5,
+        step_name="growth_analysis",
+        step_type=STEP_TYPE_LLM_REASONING,
+        timeout_seconds=120,
+        uses_llm=True,
+    ),
+    StepDefinition(
+        step_order=6,
+        step_name="growth_validation",
+        step_type=STEP_TYPE_DETERMINISTIC,
+        timeout_seconds=10,
+    ),
+    StepDefinition(
+        step_order=7,
+        step_name="growth_challenge",
+        step_type=STEP_TYPE_LLM_REASONING,
+        timeout_seconds=120,
+        uses_llm=True,
     ),
 )

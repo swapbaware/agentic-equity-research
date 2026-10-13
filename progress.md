@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-13 (Phase 12.0 — Architecture & Planning COMPLETE)
+**Last Updated:** 2026-10-13 (Phase 12.1 — Contracts and Constants COMPLETE)
 
 ---
 
@@ -473,7 +473,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Current Phase
 
-**Current Phase:** Phase 12 — Future Growth & Optionality Agent — IN PROGRESS (12.0 Architecture & Planning COMPLETE, 12.1-12.6 NOT STARTED)
+**Current Phase:** Phase 12 — Future Growth & Optionality Agent — IN PROGRESS (12.0 Architecture & Planning COMPLETE, 12.1 Contracts and Constants COMPLETE, 12.2-12.6 NOT STARTED)
 
 ### Phase 9.1: ResearchRun Schema Migration — COMPLETE
 
@@ -1047,6 +1047,68 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
 - [x] Critical invariants defined: growth projections never FACT, management claims stay MANAGEMENT_CLAIM, TAM requires methodology+ranges, SPECULATIVE default, upgrades require evidence
 - [x] Zero production code modified
 - [x] Zero database schema changes
+
+### Phase 12.1: Future Growth & Optionality Agent Contracts and Constants — COMPLETE
+
+- [x] `backend/app/agents/contracts.py` — All Phase 12.1 typed contracts appended (~300 lines):
+  - Constants: GROWTH_AGENT_TOKEN_BUDGET=20,000, GROWTH_AGENT_TOKEN_WARNING=16,000, GROWTH_AGENT_NAME, GROWTH_AGENT_RUN_TYPE
+  - GROWTH_FINDING_CATEGORIES frozenset (14 categories: growth_opportunity, management_claim, regulatory_impact, competitive_advantage, market_size, technology_disruption, partnership_alliance, capital_allocation, geographic_expansion, product_innovation, acquisition_strategy, research_gap, contradiction, growth_risk)
+  - INDIA_STRUCTURAL_THEMES tuple (10 themes: artificial_intelligence, data_centres, semiconductors, defence_indigenisation, electric_vehicles, renewable_energy, pharma_innovation, digital_payments, manufacturing_pli, infrastructure)
+  - GROWTH_CATEGORY_TO_FINDING_CATEGORY dict: all 7 GrowthCategory enum values → "growth_opportunity"
+  - FutureGrowthConfig (frozen) — agent configuration with max_opportunities=15, max_documents=8, defaults
+  - FutureGrowthResearchRequest (frozen) — agent input contract
+  - FutureGrowthResult (frozen) — agent output with status, counts, validation_result, token_usage
+  - Step 1: LoadGrowthContextInput/Output — company context with prior findings and management statements
+  - Step 2: DiscoverGrowthSourcesInput/Output — growth-relevant source discovery
+  - Steps 3 & 4: reuse existing RetrieveDocumentInput/Output and EvidenceExtractionOutput contracts
+  - Step 5: GrowthOpportunityDraft (category, maturity, addressable_market as Decimal, tam_low/base/high), GrowthScoreComponent (score 0-100), GrowthAnalysisOutput
+  - Step 6: GrowthValidationIssue, GrowthValidationResult (valid/rejected counts)
+  - Step 7: GrowthChallengeItem (original_maturity, challenged_maturity, reason), GrowthChallengeOutput
+  - Persistence: PersistGrowthOpportunitiesInput/Output, PersistGrowthScoresInput/Output (growth_quality_score, future_optionality_score, both 0-100)
+  - GROWTH_RESEARCH_STEPS tuple: 7 StepDefinition entries (context_load → source_discovery → document_retrieval → evidence_extraction → growth_analysis → growth_validation → growth_challenge)
+- [x] `GrowthCategory` import added from `app.models.enums`
+- [x] Module docstring updated to include Phase 12
+- [x] All contracts frozen with `ConfigDict(frozen=True)` per CLAUDE.md §4
+- [x] `GrowthOpportunityDraft.addressable_market` uses `Decimal` (never float, per CLAUDE.md §9)
+- [x] `GrowthScoreComponent.score` constrained with `Field(ge=0, le=100)`
+- [x] `PersistGrowthScoresInput` scores constrained with `Field(ge=0, le=100)`
+- [x] Conservative defaults: SPECULATIVE maturity, 0 scores per architecture §19
+- [x] Growth projections typed as AI_INFERENCE or ASSUMPTION, never FACT per architecture §13
+- [x] TAM estimation requires methodology, source, uncertainty ranges per architecture §22
+- [x] MAX_LLM_ATTEMPTS=2 reused from shared constant
+- [x] `backend/tests/agents/test_growth_contracts.py` — 117 comprehensive tests across 25 test classes:
+  - TestGrowthConstants (6): token budget values, warning threshold, agent name, run type, warning < budget, budget > 0
+  - TestGrowthFindingCategories (5): type, count=14, core categories present, cross-cutting present, no overlap with governance/moat
+  - TestIndiaStructuralThemes (5): type, count=10, key themes present, all snake_case, immutability
+  - TestGrowthCategoryToFindingCategory (4): all 7 values map, all map to "growth_opportunity", type verification, no missing categories
+  - TestFutureGrowthConfig (9): defaults, custom values, frozen, max_opportunities bounds, max_documents bounds, model names
+  - TestFutureGrowthResearchRequest (5): construction, required fields, frozen, optional config, observation_date type
+  - TestFutureGrowthResult (7): completed/failed/partial states, frozen, optional fields, token usage, validation result
+  - TestLoadGrowthContextInput (2): construction, required fields
+  - TestLoadGrowthContextOutput (3): full construction with findings/statements, empty lists, frozen
+  - TestDiscoverGrowthSourcesInput (3): construction, required fields, optional structural themes
+  - TestDiscoverGrowthSourcesOutput (4): construction, source candidates, frozen, empty sources
+  - TestGrowthOpportunityDraft (7): full construction, Decimal addressable_market, TAM fields, category/maturity as str, frozen, evidence indices, confidence as str
+  - TestGrowthScoreComponent (7): construction, score bounds (0/100 valid, -1/101 invalid), frozen, dimension as str, evidence indices
+  - TestGrowthAnalysisOutput (3): full construction, empty lists, frozen
+  - TestGrowthValidationIssue (3): construction, all issue types, frozen
+  - TestGrowthValidationResult (3): construction, counts, frozen
+  - TestGrowthChallengeItem (3): construction, maturity values, frozen
+  - TestGrowthChallengeOutput (3): construction, empty challenges, frozen
+  - TestPersistGrowthOpportunitiesInput (3): construction, multiple opportunities, frozen
+  - TestPersistGrowthOpportunitiesOutput (2): construction, frozen
+  - TestPersistGrowthScoresInput (5): construction, score bounds (0/100 valid, -1/101 invalid), frozen
+  - TestPersistGrowthScoresOutput (2): construction, frozen
+  - TestGrowthResearchSteps (14): count=7, step names, step order, deterministic/provider/LLM types, first/last step, unique names, LLM steps 4+5+7
+  - TestAcceptanceCriteria (4): AC-01 all contracts frozen, AC-08 token budget/warning, AC-16 conservative defaults, AC-17 14 growth finding categories
+  - TestSerialization (5): Decimal round-trip, config serialization, result serialization, score component serialization, nested model serialization
+- [x] Quality gates: 117/117 Phase 12.1 tests passing
+- [x] Regression: 370 prior agent contract tests passing (129 Phase 10 + 138 Phase 11 + 103 Phase 8/9), 3091 total backend tests passing (7 skipped)
+- [x] ruff check clean, ruff format clean
+- [x] mypy strict clean on both files
+- [x] Zero database schema changes, zero new ORM models, zero migrations
+- [x] Zero modifications to existing Phase 8-11 contracts
+- [x] Open questions OQ-1 through OQ-5 verified: none block Phase 12.1 contract design
 
 ---
 
