@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-13 (Phase 12.1 — Contracts and Constants COMPLETE)
+**Last Updated:** 2026-10-13 (Phase 12.2 — Tools Implementation COMPLETE)
 
 ---
 
@@ -473,7 +473,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Current Phase
 
-**Current Phase:** Phase 12 — Future Growth & Optionality Agent — IN PROGRESS (12.0 Architecture & Planning COMPLETE, 12.1 Contracts and Constants COMPLETE, 12.2-12.6 NOT STARTED)
+**Current Phase:** Phase 12 — Future Growth & Optionality Agent — IN PROGRESS (12.0 Architecture & Planning COMPLETE, 12.1 Contracts and Constants COMPLETE, 12.2 Tools Implementation COMPLETE, 12.3-12.6 NOT STARTED)
 
 ### Phase 9.1: ResearchRun Schema Migration — COMPLETE
 
@@ -1109,6 +1109,47 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
 - [x] Zero database schema changes, zero new ORM models, zero migrations
 - [x] Zero modifications to existing Phase 8-11 contracts
 - [x] Open questions OQ-1 through OQ-5 verified: none block Phase 12.1 contract design
+
+### Phase 12.2: Future Growth & Optionality Agent Tools — COMPLETE
+
+- [x] `backend/app/agents/future_growth/__init__.py` — Package init (Phase 12 marker)
+- [x] `backend/app/agents/future_growth/exceptions.py` — CompanyNotFoundForGrowthError(AgentError)
+- [x] `backend/app/agents/future_growth/tools.py` — FutureGrowthTools class (~700 lines):
+  - Constructor: `__init__(self, session, run_service, search, news, corporate_filings)`
+  - NO LLMProvider dependency (belongs at agent layer, Phase 12.4)
+  - Tool 1 `load_company_context`: DB lookup company + Phase 8/9 findings via ResearchRunService + Phase 10 moat via direct query on ResearchFinding (agent_name='competitive_moat_agent') + Phase 11 management statements filtered by growth-related categories + existing GrowthOpportunity IDs
+  - Tool 2 `discover_growth_sources`: SearchProvider (base + industry + theme queries), NewsProvider (observation_date bounded), CorporateFilingsProvider (NSE filings), URL dedup, source tier classification, graceful provider degradation with error accumulation
+  - Tool 3 `retrieve_document`: routes corporate_filings vs search, SHA-256 content hashing
+  - Tool 4 `persist_evidence`: Evidence records with extracted_by=GROWTH_AGENT_NAME
+  - Tool 5 `persist_findings`: validates against GROWTH_FINDING_CATEGORIES (14), rejects invalid categories
+  - Tool 6 `persist_growth_opportunities`: GrowthCategory/GrowthMaturity enum validation, duplicate check by (company_id, research_run_id, opportunity_name), risks JSON with tam_methodology/tam_low/tam_high/risk_factors, evidence junction table linking, invalid confidence defaults to LOW
+  - Tool 7 `persist_scores`: persists as ResearchFinding records with JSON content {dimension, score, components}, labeled AI_INFERENCE, one call per ScoreDimension (GROWTH_QUALITY + FUTURE_OPTIONALITY)
+  - Tool 8 `create_research_document`: internal helper for document registration
+  - Helper functions: `_classify_growth_source`, `_tier_from_url`, `_map_filing_type`
+- [x] `backend/tests/agents/test_growth_tools.py` — 79 tests across 14 test classes:
+  - TestLoadCompanyContext (6): not found, happy path, no upstream, optional failure resilience, correct agent filters, output shape
+  - TestDiscoverGrowthSources (12): happy path all providers, temporal filtering, deduplication, search/news/filings provider failures, all fail, empty, filing date exclusion, output shape, theme queries, NSE skip, source tiers
+  - TestRetrieveDocument (4): corporate filings, search provider, empty, output shape
+  - TestPersistEvidence (4): happy path, extracted_by, multiple, empty rejected by contract
+  - TestPersistFindings (5): happy path, invalid rejected, all 14 categories, mixed valid/invalid, empty rejected by contract
+  - TestPersistGrowthOpportunities (10): happy path, evidence junction, invalid category/maturity, duplicate detection, risks JSON, confidence defaults, evidence out-of-range, Decimal preserved, output shape
+  - TestPersistScores (6): happy path, two dimensions, AI_INFERENCE labeled, agent name, components serialized, output shape
+  - TestCreateResearchDocument (2): happy path, publication date preserved
+  - TestClassifyGrowthSource (10), TestTierFromUrl (7), TestMapFilingType (5)
+  - TestFutureGrowthToolsConstructor (3): providers accepted, all methods exist, tool count == 8
+  - TestProvenanceIntegrity (4): source metadata, filing provenance, observation_date to news/filings
+- [x] Provider dependencies: SearchProvider, NewsProvider, CorporateFilingsProvider only (AC-05)
+- [x] Loads Phase 8/9/10/11 findings (AC-04)
+- [x] GrowthOpportunity INSERT with evidence junction (AC-06)
+- [x] Two independent dimension scores: GROWTH_QUALITY + FUTURE_OPTIONALITY (AC-07)
+- [x] Conservative defaults: SPECULATIVE maturity, 0 scores, evidence required to upgrade
+- [x] Quality gates: 79/79 Phase 12.2 tests passing
+- [x] Regression: 117 Phase 12.1 contract tests passing, 1648 total agent tests passing, zero regressions
+- [x] ruff check clean, ruff format clean on both implementation and test files
+- [x] mypy strict clean on implementation (3 source files)
+- [x] No Phase 12.1 contract modifications
+- [x] No schema changes, no migrations, no ORM model changes
+- [x] No new dependencies
 
 ---
 
