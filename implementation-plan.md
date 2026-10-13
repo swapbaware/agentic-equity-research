@@ -566,7 +566,7 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - Shareholding analysis with mock data
 - Output schema validation
 
-**Status:** Phase 11.0 (Architecture) COMPLETE. Phase 11.1 (Contracts) COMPLETE. Phase 11.2 (Tools) COMPLETE. Phase 11.3 (Prompts) COMPLETE. Phase 11.4 (Agent) COMPLETE. Phase 11.5 (Validation Tests) COMPLETE — AUDIT APPROVED (commits `103841d`, `bf3ae67`). Phase 11.6 (Integration Tests) IMPLEMENTED — awaiting audit.
+**Status:** COMPLETE — All sub-phases (11.0–11.6) AUDIT APPROVED. Implementation commit `aee9f55`, remediation commit `bb87517`. Phase 11.5 commits `103841d`, `bf3ae67`.
 
 **Architecture Document:** `docs/architecture/phase-11-management-governance-agent.md`
 
@@ -576,7 +576,7 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - Phase 11.3: Prompts (LLM prompt templates with prompt injection defense) — **COMPLETE** (GOVERNANCE_SYSTEM_PREAMBLE, evidence extraction prompt, governance analysis prompt, 111 tests)
 - Phase 11.4: Agent (ManagementGovernanceAgent orchestration, 7-step workflow, 76 tests incl. audit remediation F-01–F-06) — **COMPLETE**
 - Phase 11.5: Validation Tests (MSV-01–08, FV-01–07, RF-01–05, SV-01–04; 7 missing rules implemented, 95 tests, AC-21–AC-27) — **COMPLETE**
-- Phase 11.6: Integration Tests (47 tests, 17 classes, AC-28–AC-38, end-to-end pipeline, regression safety, Quality Gate 7) — **IMPLEMENTED** (awaiting audit)
+- Phase 11.6: Integration Tests (48 tests, 18 classes, AC-28–AC-40, end-to-end pipeline, regression safety, Quality Gate 7) — **COMPLETE** (audit approved, remediation commit `bb87517`)
 
 ---
 
