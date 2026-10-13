@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-13 (Phase 11.6 — COMPLETE, AUDIT APPROVED)
+**Last Updated:** 2026-10-13 (Phase 12.0 — Architecture & Planning COMPLETE)
 
 ---
 
@@ -473,7 +473,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Current Phase
 
-**Current Phase:** Phase 11 — Management & Governance Agent — COMPLETE (11.0 Architecture COMPLETE, 11.1 Contracts COMPLETE, 11.2 Tools COMPLETE, 11.3 Prompts COMPLETE, 11.4 Agent COMPLETE, 11.5 Validation Tests COMPLETE — AUDIT APPROVED, 11.6 Integration Tests COMPLETE — AUDIT APPROVED)
+**Current Phase:** Phase 12 — Future Growth & Optionality Agent — IN PROGRESS (12.0 Architecture & Planning COMPLETE, 12.1-12.6 NOT STARTED)
 
 ### Phase 9.1: ResearchRun Schema Migration — COMPLETE
 
@@ -1021,6 +1021,32 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
   - AC-28 through AC-40 traceability matrix: all PASS
   - Quality gates: 48 integration tests passed, 76 agent tests passed, 416 validation/contracts/tools/prompts tests passed, 3021 full backend suite passed, ruff lint clean, ruff format clean, mypy strict clean
   - No files modified during audit, no push, no history rewrite, Phase 12 not started
+
+### Phase 12.0: Future Growth & Optionality Agent Architecture — COMPLETE
+
+- [x] Architecture document: `docs/architecture/phase-12-future-growth-optionality-agent.md` (34 sections)
+- [x] Comprehensive architecture/planning review covering:
+  1. Business purpose: growth quality vs future optionality separation, 5-tier maturity classification
+  2. Data inputs: Phase 8 company findings, Phase 9 industry findings, optional Phase 10/11 context
+  3. Key metrics: 7 GrowthCategory values, 5 GrowthMaturity tiers, Growth Quality and Future Optionality scores (0-100)
+  4. 7-step sequential workflow: context_load → source_discovery → document_retrieval → evidence_extraction → growth_analysis → growth_validation → growth_challenge
+  5. Tool inventory: 8 tools (load_company_context, discover_growth_sources, retrieve_document, persist_evidence, persist_findings, persist_growth_opportunities, persist_scores, create_research_document)
+  6. Step-by-step contracts: LoadGrowthContextInput/Output, DiscoverGrowthSourcesInput/Output, GrowthOpportunityDraft, GrowthScoreComponent, GrowthAnalysisOutput, GrowthValidationIssue/Result, GrowthChallengeItem/Output
+  7. Evidence model: 7 FindingType categories with growth-specific distribution
+  8. Uncertainty handling: SPECULATIVE default, management claims never promoted to FACT, TAM with methodology and ranges
+  9. 10 deterministic validation checks (MV-01 through MV-10): evidence sufficiency, maturity requirements, TAM validation, finding type correction
+  10. Persistence model: GrowthOpportunity (existing ORM), junction table, DimensionScore, ResearchFinding — no new migrations
+  11. Token budget: 20,000 total, 16,000 warning (per agent-architecture.md)
+  12. Test strategy: 175-225 estimated tests across 6 layers (contracts, tools, prompts, agent, validation, integration)
+  13. Dependencies: Phase 7/8/9 required, Phase 10/11 optional context
+- [x] Existing infrastructure identified: GrowthOpportunity ORM, GrowthCategory/GrowthMaturity enums, junction table, ScoreDimension.GROWTH_QUALITY/FUTURE_OPTIONALITY — all pre-existing from Phase 3
+- [x] 6 implementation subphases defined: 12.1 Contracts (1d), 12.2 Tools (2d), 12.3 Prompts (1d), 12.4 Agent (3d), 12.5 Validation Tests (1d), 12.6 Integration Tests (2d) — 10 days total
+- [x] 41 acceptance criteria defined (AC-01 through AC-41) across 5 categories
+- [x] 5 open questions documented (OQ-1 through OQ-5)
+- [x] 6 technical debt items documented (TD-30 through TD-35)
+- [x] Critical invariants defined: growth projections never FACT, management claims stay MANAGEMENT_CLAIM, TAM requires methodology+ranges, SPECULATIVE default, upgrades require evidence
+- [x] Zero production code modified
+- [x] Zero database schema changes
 
 ---
 
