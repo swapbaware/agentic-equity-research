@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-13 (Phase 12.2 — Remediation COMPLETE, awaiting audit)
+**Last Updated:** 2026-10-13 (Phase 12.2 — FORMALLY CLOSED, audit APPROVED)
 
 ---
 
@@ -473,7 +473,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Current Phase
 
-**Current Phase:** Phase 12 — Future Growth & Optionality Agent — IN PROGRESS (12.0 Architecture & Planning COMPLETE, 12.1 Contracts and Constants COMPLETE, 12.2 Tools Implementation COMPLETE, 12.3-12.6 NOT STARTED)
+**Current Phase:** Phase 12 — Future Growth & Optionality Agent — IN PROGRESS (12.0 Architecture & Planning COMPLETE, 12.1 Contracts and Constants COMPLETE, 12.2 Tools Implementation COMPLETE + AUDIT APPROVED, 12.3 Prompts IN PROGRESS, 12.4-12.6 NOT STARTED)
 
 ### Phase 9.1: ResearchRun Schema Migration — COMPLETE
 
@@ -1152,6 +1152,13 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
 - [x] No new dependencies
 - [x] **Remediation (F-01):** Rewrote persist_scores to use CompanyScore ORM (thesis.company_score) instead of ResearchFinding
 - [x] **Remediation (F-02):** Corrected all DimensionScore/dimension_score references in architecture doc to CompanyScore/company_score
+- [x] **Independent audit verdict: APPROVED** (2026-10-13)
+  - Audit commit: `8acdbdb308047e2f0a4c9e568a0ba02f6e8eb25c`
+  - F-01 verified: 10-point CompanyScore persistence checklist — all PASS
+  - F-02 verified: zero residual DimensionScore/dimension_score references
+  - Transaction safety: correct (no commit/rollback in tool, caller-managed session pattern)
+  - Quality gates: 3224 passed, 7 skipped, 0 failed, ruff clean, mypy strict clean
+  - Non-blocking observations carried forward (see TD-17, TD-18, TD-19 below)
 
 ---
 
@@ -1271,6 +1278,9 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
 | TD-14 | ~~`retrieve_industry_document` returns `content_type="text/plain"` for search snippets — provenance unclear~~ | Phase 9.3a | **RESOLVED** — Phase 9.3a remediation: returns `"text/snippet"` |
 | TD-15 | ~~`discover_industry_sources` fabricates `observation_date` as `publication_date` for search results~~ | Phase 9.3a | **RESOLVED** — Phase 9.3a remediation: `SourceCandidate.publication_date` now `date | None = None`, search results use `None` |
 | TD-16 | Token usage reporting in `_run_step_llm` uses cumulative `token_budget.total_tokens` for `AgentExecution.input_tokens`/`output_tokens`, not per-invocation deltas. Pre-existing pattern inherited from CompetitiveMoatAgent (Phase 10.4). Cosmetic only — no budget or workflow impact. | Phase 11.4 | Address when per-invocation token tracking is needed for cost dashboards or per-step analytics |
+| TD-17 | `GrowthScoreComponent.evidence_indices` not serialized into `CompanyScore.sub_scores` or linked via `company_score_evidence` junction table. Tool layer lacks access to resolved evidence UUIDs — resolution belongs at agent layer. | Phase 12.2 audit O-1 | Defer to Phase 12.4 (agent layer) or Phase 12.6 (integration) when evidence UUIDs are resolvable |
+| TD-18 | `_persist_single_score` accepts `Sequence[object]` with isinstance filtering — correct mypy covariance workaround, defensive beyond what the Pydantic contract allows. No data loss possible given contract constraints. | Phase 12.2 audit O-2 | Acceptable as-is. Contract guarantees only `GrowthScoreComponent` objects |
+| TD-19 | `test_second_dimension_not_persisted_when_first_fails` verifies method-call sequencing, not actual DB transaction rollback. Appropriate for unit tests with mocked sessions. | Phase 12.2 audit O-3 | True transactional verification belongs in Phase 12.6 integration tests (AC-33, AC-34) |
 
 ---
 
