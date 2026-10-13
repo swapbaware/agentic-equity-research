@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-13 (Phase 11.5 — Management & Governance Agent Validation Tests — AUDIT APPROVED)
+**Last Updated:** 2026-10-13 (Phase 11.6 — Management & Governance Agent Integration Tests — IMPLEMENTED)
 
 ---
 
@@ -473,7 +473,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Current Phase
 
-**Current Phase:** Phase 11 — Management & Governance Agent (11.0 Architecture COMPLETE, 11.1 Contracts COMPLETE, 11.2 Tools COMPLETE, 11.3 Prompts COMPLETE, 11.4 Agent COMPLETE, 11.5 Validation Tests COMPLETE — AUDIT APPROVED, 11.6 NOT STARTED)
+**Current Phase:** Phase 11 — Management & Governance Agent (11.0 Architecture COMPLETE, 11.1 Contracts COMPLETE, 11.2 Tools COMPLETE, 11.3 Prompts COMPLETE, 11.4 Agent COMPLETE, 11.5 Validation Tests COMPLETE — AUDIT APPROVED, 11.6 Integration Tests IMPLEMENTED — awaiting audit)
 
 ### Phase 9.1: ResearchRun Schema Migration — COMPLETE
 
@@ -966,6 +966,39 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
     1. FV-03/FV-04/FV-05 use "warning" action where §26 says "reject" — pre-existing Phase 11.4 deviation
     2. MSV-02 does not reject negative evidence index — pre-existing, documented limitation
 
+### Phase 11.6: Management & Governance Agent Integration Tests — IMPLEMENTED (awaiting audit)
+
+- [x] Integration test file: `backend/tests/agents/test_governance_integration.py` (~1800 lines after formatting)
+- [x] 47 tests across 17 test classes covering AC-28 through AC-38:
+  - TestAC28EndToEndPipeline (4 tests): full 7-step pipeline, finding categories, run metadata, execution records
+  - TestAC29StatementLifecycleMet (1 test): PENDING → MET with evidence linkage
+  - TestAC30StatementLifecycleRejection (1 test): MET without evidence passed to persistence, validation flags issue
+  - TestAC31ShareholdingPersistence (1 test): shareholding snapshot persistence
+  - TestAC32PledgePersistence (1 test): pledge data persistence
+  - TestAC33CorporateActionPersistence (1 test): corporate action persistence
+  - TestAC34RedFlagEvidenceLinkage (3 tests): red flags with evidence, without evidence rejected, invalid category rejected
+  - TestAC35TokenBudgetExhaustion (3 tests): exhaustion at step 4, exhaustion at step 5, token accumulation
+  - TestAC36ProviderFailure (6 tests): all-attempts failure, recovery, step5 FAILED, step1 FAILED, doc retrieval graceful, persistence PARTIAL
+  - TestAC37QualityGate7 (5 tests): system preamble, retrieved_document tags, claim type separation, extraction prompt, validation flagging
+  - TestAC38RegressionSafety (3 tests): agent name disjoint, step names safe overlap, finding categories disjoint
+  - TestContractToolAgentIntegration (7 tests): request contract, config defaults, frozen result, step definitions, finding categories, red flag categories, tool methods
+  - TestPromptBuilderIntegration (2 tests): evidence prompt content, prompts used in execution
+  - TestResearchRunLifecycle (3 tests): created → completed, created → failed, created → partial
+  - TestLLMRetryIntegration (2 tests): parsing error then success, both attempts fail
+  - TestMultiDomainFindings (1 test): multiple finding domains produced
+  - TestPersistenceIntegrity (2 tests): foreign key chain, source access recorded
+  - TestToolBoundaryIntegration (1 test): all 9 tools invoked
+- [x] Follows Phase 10.6 patterns: MockRunService, _build_agent, _patch_tools_happy_path (9 tool patches vs moat's 8)
+- [x] Quality gates: 47/47 integration tests passing
+- [x] Regression: 76 Phase 11.4 agent tests passing, 95 Phase 11.5 validation tests passing
+- [x] Moat regression: 568 moat tests passing (Phases 8/9/10)
+- [x] Industry research regression: 140 tests passing
+- [x] ruff lint: clean
+- [x] ruff format: clean
+- [x] mypy strict: clean on new file (1 pre-existing warning in unrelated yahoo_finance.py)
+- [x] No Phase 11.1–11.5 modifications
+- [x] No contract, tool, prompt, or agent changes
+
 ---
 
 ## Completed Features
@@ -995,7 +1028,7 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
 - Industry Research Agent Skeleton (Phase 9.3b.1): 7-step sequential orchestrator (industry_validation → source_discovery → document_retrieval → evidence_extraction[stub] → industry_analysis[stub] → finding_validation → gap_contradiction[stub]), token budget enforcement (20K hard/16K warning), three-tier error handling, ResearchRun lifecycle (target_type="industry"), LLM steps as stub boundaries; 46 tests
 - Industry Research Agent LLM Reasoning (Phase 9.3b.2): LLM stubs replaced with real implementations — evidence extraction (per-document LLM calls with budget checks), industry analysis (finding generation with evidence linking via indices), gap/contradiction detection, finding validation enhanced to 4 criteria (category, content, FACT-evidence, temporal), prompt injection defense, structured output parsing; 76 tests
 - Competitive Moat Agent (Phase 10): contracts (10.1), tools (10.2), prompts (10.3), orchestration (10.4), validation tests (10.5), integration tests (10.6) — 7-step sequential workflow, 16 moat types, 9 deterministic validation checks, token budget enforcement, partial completion semantics, adversarial durability challenge; 379 tests
-- Management & Governance Agent (Phase 11, through 11.5 — audit approved): contracts (11.1), tools (11.2), prompts (11.3), orchestration (11.4), validation tests (11.5) — 7-step sequential workflow, 24 validation rules (MSV/FV/RF/SV), shareholding analysis, management statement tracking, governance red flags, token budget enforcement; 354 tests (95 validation + 76 agent + 111 prompts + 72 tools)
+- Management & Governance Agent (Phase 11, through 11.6): contracts (11.1), tools (11.2), prompts (11.3), orchestration (11.4), validation tests (11.5 — audit approved), integration tests (11.6 — awaiting audit) — 7-step sequential workflow, 24 validation rules (MSV/FV/RF/SV), shareholding analysis, management statement tracking, governance red flags, token budget enforcement; 401 tests (95 validation + 76 agent + 111 prompts + 72 tools + 47 integration)
 
 ---
 
@@ -1089,7 +1122,7 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
 
 ## Next Actions
 
-1. **Phase 11.6: Management & Governance Agent Integration Tests** — end-to-end pipeline, regression, lint, mypy
+1. **Phase 11.6 Audit** — independent audit of integration tests before marking AUDIT APPROVED
 2. **Phase 12: Future Growth & Optionality Agent**
 3. **SEBI XBRL integration** for authoritative financial data
 4. **Evaluate Celery vs Temporal** (ADR-002) for background tasks
