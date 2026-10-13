@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-13 (Phase 12.2 — FORMALLY CLOSED, audit APPROVED)
+**Last Updated:** 2026-10-13 (Phase 12.3 — Prompts COMPLETE, awaiting audit)
 
 ---
 
@@ -473,7 +473,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Current Phase
 
-**Current Phase:** Phase 12 — Future Growth & Optionality Agent — IN PROGRESS (12.0 Architecture & Planning COMPLETE, 12.1 Contracts and Constants COMPLETE, 12.2 Tools Implementation COMPLETE + AUDIT APPROVED, 12.3 Prompts IN PROGRESS, 12.4-12.6 NOT STARTED)
+**Current Phase:** Phase 12 — Future Growth & Optionality Agent — IN PROGRESS (12.0 Architecture & Planning COMPLETE, 12.1 Contracts and Constants COMPLETE, 12.2 Tools Implementation COMPLETE + AUDIT APPROVED, 12.3 Prompts COMPLETE — awaiting audit, 12.4-12.6 NOT STARTED)
 
 ### Phase 9.1: ResearchRun Schema Migration — COMPLETE
 
@@ -1159,6 +1159,33 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
   - Transaction safety: correct (no commit/rollback in tool, caller-managed session pattern)
   - Quality gates: 3224 passed, 7 skipped, 0 failed, ruff clean, mypy strict clean
   - Non-blocking observations carried forward (see TD-17, TD-18, TD-19 below)
+
+### Phase 12.3: Future Growth & Optionality Agent Prompts — COMPLETE (awaiting audit)
+
+- [x] `backend/app/agents/future_growth/prompts.py` — All Phase 12.3 prompt builders:
+  - `GROWTH_SYSTEM_PREAMBLE` — prompt injection defense with `<retrieved_document>` XML tag declaration, DATA-not-instructions mandate, growth/optionality domain scope, Indian listed companies, structured JSON output
+  - `_wrap_document(content, source_id, title)` — XML wrapping helper for prompt injection defense
+  - `growth_evidence_extraction_prompt(company_name, industry_name, document_content, source_id, document_title, observation_date: date)` — Step 4 prompt covering 8 growth domains (capacity expansion, new products/services, new markets/geographic expansion, partnerships/alliances, TAM, government incentives, technology adoption, revenue from new initiatives), 5 evidence types, 3 confidence levels, temporal rules, anti-hallucination rules
+  - `growth_analysis_prompt(company_name, industry_name, evidence_summaries, company_context, industry_context, observation_date: date)` — Step 5 prompt with 7 GrowthCategory values, 5 GrowthMaturity tiers with upgrade rules (SPECULATIVE default, PROVEN requires FACT evidence), TAM estimation rules (methodology + uncertainty ranges required), dual scoring (Growth Quality vs Future Optionality), 10 India structural themes, 14 finding categories, 7 finding types with FACT prohibition for projections
+  - `growth_challenge_prompt(company_name, opportunities_summary, evidence_summaries)` — Step 7 adversarial challenge prompt with 5 challenge areas (materialisation risk, TAM challenge, competitive risk, execution risk, over-optimism assessment), conservative defaults, research gap and contradiction detection
+- [x] `backend/tests/agents/test_growth_prompts.py` — 132 tests across 8 test classes:
+  - `TestGrowthSystemPreamble` (11 tests): preamble content, XML tag defense, domain scope, no secrets
+  - `TestWrapDocument` (7 tests): XML wrapping, attributes, newlines, edge cases
+  - `TestGrowthEvidenceExtractionPrompt` (21 tests): system preamble, company/industry, XML wrapping, 8 growth domains, evidence types, confidence, FACT prohibition, anti-hallucination, purity
+  - `TestGrowthAnalysisPrompt` (32 tests): 7 categories, 5 maturity tiers, maturity rules, TAM rules, dual scoring, 10 India themes, 7 finding types, 14 finding categories, FACT prohibition for projections, anti-hallucination, output format, purity
+  - `TestGrowthChallengePrompt` (22 tests): 5 challenge areas, adversarial mandate, challenge rules, research gaps, contradictions, output format, purity
+  - `TestCrossCuttingProperties` (15 tests): preamble in all prompts, no secrets, deterministic, returns strings, XML wrapping scope
+  - `TestTemporalAwareness` (10 tests): observation_date parameter, date in prompts, temporal rules, date type distinction, post-observation exclusion, uncertainty preservation
+  - `TestDateFabricationProhibition` (3 tests): date fabrication prohibited in all 3 prompts
+- [x] Quality gates: 132/132 Phase 12.3 tests passing
+- [x] Regression: 3356 total backend tests passing (3224 prior + 132 new), 7 skipped, 0 failures
+- [x] Ruff lint: clean (both files)
+- [x] Ruff format: clean (both files)
+- [x] mypy strict: clean (`prompts.py`)
+- [x] All functions pure (no I/O, no side effects, deterministic)
+- [x] Pattern follows established Phases 10.3 and 11.3 prompt builder conventions
+- [x] No Phase 12.1 or 12.2 modifications
+- [x] No new dependencies
 
 ---
 
