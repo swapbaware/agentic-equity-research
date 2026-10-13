@@ -1459,6 +1459,9 @@ class GovernanceValidationResult(BaseModel):
     red_flags_valid: int = Field(ge=0)
     red_flags_rejected: int = Field(ge=0)
     issues: list[GovernanceValidationIssue]
+    rejected_statement_update_indices: frozenset[int] = Field(default_factory=frozenset)
+    rejected_new_statement_indices: frozenset[int] = Field(default_factory=frozenset)
+    rejected_red_flag_indices: frozenset[int] = Field(default_factory=frozenset)
 
 
 # ---------------------------------------------------------------------------

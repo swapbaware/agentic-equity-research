@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-13 (Phase 11.6 — Management & Governance Agent Integration Tests — IMPLEMENTED)
+**Last Updated:** 2026-10-13 (Phase 11.6 — Audit Remediation F-01/F-02/F-03 COMPLETE)
 
 ---
 
@@ -473,7 +473,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Current Phase
 
-**Current Phase:** Phase 11 — Management & Governance Agent (11.0 Architecture COMPLETE, 11.1 Contracts COMPLETE, 11.2 Tools COMPLETE, 11.3 Prompts COMPLETE, 11.4 Agent COMPLETE, 11.5 Validation Tests COMPLETE — AUDIT APPROVED, 11.6 Integration Tests IMPLEMENTED — awaiting audit)
+**Current Phase:** Phase 11 — Management & Governance Agent (11.0 Architecture COMPLETE, 11.1 Contracts COMPLETE, 11.2 Tools COMPLETE, 11.3 Prompts COMPLETE, 11.4 Agent COMPLETE, 11.5 Validation Tests COMPLETE — AUDIT APPROVED, 11.6 Integration Tests IMPLEMENTED — AUDIT APPROVED WITH REMEDIATION — Remediation COMPLETE)
 
 ### Phase 9.1: ResearchRun Schema Migration — COMPLETE
 
@@ -966,19 +966,20 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
     1. FV-03/FV-04/FV-05 use "warning" action where §26 says "reject" — pre-existing Phase 11.4 deviation
     2. MSV-02 does not reject negative evidence index — pre-existing, documented limitation
 
-### Phase 11.6: Management & Governance Agent Integration Tests — IMPLEMENTED (awaiting audit)
+### Phase 11.6: Management & Governance Agent Integration Tests — AUDIT APPROVED, Remediation COMPLETE
 
-- [x] Integration test file: `backend/tests/agents/test_governance_integration.py` (~1800 lines after formatting)
-- [x] 47 tests across 17 test classes covering AC-28 through AC-38:
+- [x] Integration test file: `backend/tests/agents/test_governance_integration.py` (~1870 lines after formatting)
+- [x] 48 tests across 18 test classes covering AC-28 through AC-38:
   - TestAC28EndToEndPipeline (4 tests): full 7-step pipeline, finding categories, run metadata, execution records
   - TestAC29StatementLifecycleMet (1 test): PENDING → MET with evidence linkage
-  - TestAC30StatementLifecycleRejection (1 test): MET without evidence passed to persistence, validation flags issue
+  - TestAC30StatementLifecycleRejection (1 test): MET without evidence filtered before persistence
   - TestAC31ShareholdingPersistence (1 test): shareholding snapshot persistence
   - TestAC32PledgePersistence (1 test): pledge data persistence
   - TestAC33CorporateActionPersistence (1 test): corporate action persistence
-  - TestAC34RedFlagEvidenceLinkage (3 tests): red flags with evidence, without evidence rejected, invalid category rejected
+  - TestAC34RedFlagEvidenceLinkage (3 tests): red flags with evidence, without evidence excluded from count, invalid category rejected
   - TestAC35TokenBudgetExhaustion (3 tests): exhaustion at step 4, exhaustion at step 5, token accumulation
   - TestAC36ProviderFailure (6 tests): all-attempts failure, recovery, step5 FAILED, step1 FAILED, doc retrieval graceful, persistence PARTIAL
+  - TestAC36ProviderFailureUncertainty (1 test): data_gaps produce UNCERTAINTY findings with category data_gap
   - TestAC37QualityGate7 (5 tests): system preamble, retrieved_document tags, claim type separation, extraction prompt, validation flagging
   - TestAC38RegressionSafety (3 tests): agent name disjoint, step names safe overlap, finding categories disjoint
   - TestContractToolAgentIntegration (7 tests): request contract, config defaults, frozen result, step definitions, finding categories, red flag categories, tool methods
@@ -989,15 +990,27 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
   - TestPersistenceIntegrity (2 tests): foreign key chain, source access recorded
   - TestToolBoundaryIntegration (1 test): all 9 tools invoked
 - [x] Follows Phase 10.6 patterns: MockRunService, _build_agent, _patch_tools_happy_path (9 tool patches vs moat's 8)
-- [x] Quality gates: 47/47 integration tests passing
-- [x] Regression: 76 Phase 11.4 agent tests passing, 95 Phase 11.5 validation tests passing
-- [x] Moat regression: 568 moat tests passing (Phases 8/9/10)
-- [x] Industry research regression: 140 tests passing
+- [x] Quality gates: 48/48 integration tests passing
+- [x] Regression: 3021 total tests passing, 7 skipped (pre-existing)
 - [x] ruff lint: clean
 - [x] ruff format: clean
-- [x] mypy strict: clean on new file (1 pre-existing warning in unrelated yahoo_finance.py)
-- [x] No Phase 11.1–11.5 modifications
-- [x] No contract, tool, prompt, or agent changes
+- [x] mypy strict: clean on changed files (1 pre-existing warning in unrelated yahoo_finance.py, 1 pre-existing intentional frozen-write test)
+
+#### Phase 11.6 Audit Remediation (F-01, F-02, F-03)
+
+- [x] **F-01 (MEDIUM)**: Validation rejection now enforced at agent boundary before persistence
+  - `GovernanceValidationResult` extended with `rejected_statement_update_indices`, `rejected_new_statement_indices`, `rejected_red_flag_indices` (frozenset[int])
+  - `_validate_governance_output` populates rejected index sets alongside existing counts
+  - `_step_persistence` filters rejected statement updates and new statements before calling `persist_management_statements`
+  - `red_flag_count` on result uses `validation_result.red_flags_valid` instead of total count
+  - AC-30 test updated: rejected update no longer reaches persistence (asserts `len(stmt_input.statement_updates) == 0`)
+- [x] **F-02 (LOW)**: Misleading test name corrected
+  - Renamed `test_red_flag_without_evidence_rejected_during_validation` → `test_red_flag_without_evidence_excluded_from_count`
+  - Assertion updated: `red_flag_count == 0` (was `1`), reflecting F-01 enforcement
+- [x] **F-03 (LOW)**: UNCERTAINTY findings on provider failure implemented
+  - Added `_generate_data_gap_findings` helper: converts `discovery.data_gaps` to UNCERTAINTY findings with category `data_gap`
+  - Called in Step 5b between shareholding/pledge findings and Step 6 validation
+  - New test class `TestAC36ProviderFailureUncertainty` with `test_data_gaps_produce_uncertainty_findings`
 
 ---
 
@@ -1122,7 +1135,6 @@ Architecture document: `docs/architecture/phase-11-management-governance-agent.m
 
 ## Next Actions
 
-1. **Phase 11.6 Audit** — independent audit of integration tests before marking AUDIT APPROVED
-2. **Phase 12: Future Growth & Optionality Agent**
+1. **Phase 12: Future Growth & Optionality Agent**
 3. **SEBI XBRL integration** for authoritative financial data
 4. **Evaluate Celery vs Temporal** (ADR-002) for background tasks

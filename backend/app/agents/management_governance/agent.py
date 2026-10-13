@@ -174,6 +174,7 @@ class ManagementGovernanceAgent:
         all_evidence_ids: list[uuid.UUID] = []
         all_finding_ids: list[uuid.UUID] = []
         analysis_output: GovernanceAnalysisOutput | None = None
+        validation_result: GovernanceValidationResult | None = None
         shareholding_findings: list[GeneratedFinding] = []
         all_statement_created_ids: list[uuid.UUID] = []
         all_statement_updated_ids: list[uuid.UUID] = []
@@ -271,6 +272,13 @@ class ManagementGovernanceAgent:
             )
             shareholding_findings.extend(pledge_findings)
 
+            # -- Step 5b: deterministic data-gap UNCERTAINTY findings ------------
+            data_gap_findings = _generate_data_gap_findings(
+                discovery.data_gaps,
+                request.observation_date,
+            )
+            shareholding_findings.extend(data_gap_findings)
+
             # -- Step 6: governance_validation (deterministic) -------------------
             validation_result = await self._run_step_deterministic(
                 step_map["governance_validation"],
@@ -342,7 +350,9 @@ class ManagementGovernanceAgent:
             status = "FAILED"
 
         red_flag_count = 0
-        if analysis_output is not None:
+        if validation_result is not None:
+            red_flag_count = validation_result.red_flags_valid
+        elif analysis_output is not None:
             red_flag_count = len(analysis_output.governance_red_flags)
 
         return ManagementGovernanceResult(
@@ -777,13 +787,25 @@ class ManagementGovernanceAgent:
             )
             sh_finding_ids = sh_persist.finding_ids
 
-        # Persist management statements (new + updates)
+        # Filter rejected items using validation result indices
+        valid_updates = [
+            u
+            for i, u in enumerate(analysis_output.statement_updates)
+            if i not in validation_result.rejected_statement_update_indices
+        ]
+        valid_new_stmts = [
+            s
+            for i, s in enumerate(analysis_output.new_management_statements)
+            if i not in validation_result.rejected_new_statement_indices
+        ]
+
+        # Persist management statements (new + updates) — rejected items excluded
         stmt_result = await self._tools.persist_management_statements(
             PersistStatementsInput(
                 company_id=context.company_id,
                 research_run_id=run_id,
-                new_statements=analysis_output.new_management_statements,
-                statement_updates=analysis_output.statement_updates,
+                new_statements=valid_new_stmts,
+                statement_updates=valid_updates,
                 evidence_ids=all_evidence_ids,
             ),
         )
@@ -967,6 +989,24 @@ def _generate_pledge_findings(
     return findings
 
 
+def _generate_data_gap_findings(
+    data_gaps: list[str],
+    observation_date: date,
+) -> list[GeneratedFinding]:
+    findings: list[GeneratedFinding] = []
+    for gap in data_gaps:
+        findings.append(
+            GeneratedFinding(
+                finding_type=FindingType.UNCERTAINTY,
+                category="data_gap",
+                content=gap,
+                confidence=ConfidenceLevel.LOW,
+                source_publication_date=observation_date,
+            ),
+        )
+    return findings
+
+
 # ---------------------------------------------------------------------------
 # Step 6: Governance validation
 # ---------------------------------------------------------------------------
@@ -988,7 +1028,8 @@ def _validate_governance_output(
     # -- 1. ManagementStatement transition validation -------------------------
     stmt_updates_valid = 0
     stmt_updates_rejected = 0
-    for update in analysis_output.statement_updates:
+    rejected_stmt_update_idxs: set[int] = set()
+    for upd_idx, update in enumerate(analysis_output.statement_updates):
         rejected = False
         sid = update.statement_id
 
@@ -1093,13 +1134,15 @@ def _validate_governance_output(
 
         if rejected:
             stmt_updates_rejected += 1
+            rejected_stmt_update_idxs.add(upd_idx)
         else:
             stmt_updates_valid += 1
 
     # -- 2. New ManagementStatement validation --------------------------------
     new_stmts_valid = 0
     new_stmts_rejected = 0
-    for new_stmt in analysis_output.new_management_statements:
+    rejected_new_stmt_idxs: set[int] = set()
+    for ns_idx, new_stmt in enumerate(analysis_output.new_management_statements):
         rejected = False
 
         if new_stmt.category.upper() not in _VALID_MANAGEMENT_STATEMENT_CATEGORIES:
@@ -1137,6 +1180,7 @@ def _validate_governance_output(
 
         if rejected:
             new_stmts_rejected += 1
+            rejected_new_stmt_idxs.add(ns_idx)
         else:
             new_stmts_valid += 1
 
@@ -1253,7 +1297,8 @@ def _validate_governance_output(
     # -- 5. Red flag validation -----------------------------------------------
     red_flags_valid = 0
     red_flags_rejected = 0
-    for rf in analysis_output.governance_red_flags:
+    rejected_red_flag_idxs: set[int] = set()
+    for rf_idx, rf in enumerate(analysis_output.governance_red_flags):
         rejected = False
 
         if rf.category not in GOVERNANCE_RED_FLAG_CATEGORIES:
@@ -1315,6 +1360,7 @@ def _validate_governance_output(
 
         if rejected:
             red_flags_rejected += 1
+            rejected_red_flag_idxs.add(rf_idx)
         else:
             red_flags_valid += 1
 
@@ -1374,6 +1420,9 @@ def _validate_governance_output(
         red_flags_valid=red_flags_valid,
         red_flags_rejected=red_flags_rejected,
         issues=issues,
+        rejected_statement_update_indices=frozenset(rejected_stmt_update_idxs),
+        rejected_new_statement_indices=frozenset(rejected_new_stmt_idxs),
+        rejected_red_flag_indices=frozenset(rejected_red_flag_idxs),
     )
 
 

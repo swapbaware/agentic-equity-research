@@ -783,7 +783,7 @@ class TestAC30StatementLifecycleRejection:
         assert result.status == "COMPLETED"
         p_stmt.assert_awaited_once()
         stmt_input = p_stmt.call_args[0][0]
-        assert len(stmt_input.statement_updates) == 1
+        assert len(stmt_input.statement_updates) == 0
         assert result.total_statements_updated == 0
 
 
@@ -943,7 +943,7 @@ class TestAC34RedFlagEvidenceLinkage:
         assert result.red_flag_count == 1
 
     @pytest.mark.asyncio()
-    async def test_red_flag_without_evidence_rejected_during_validation(
+    async def test_red_flag_without_evidence_excluded_from_count(
         self,
     ) -> None:
         red_flags = [
@@ -973,7 +973,7 @@ class TestAC34RedFlagEvidenceLinkage:
             )
 
         assert result.status == "COMPLETED"
-        assert result.red_flag_count == 1
+        assert result.red_flag_count == 0
 
     @pytest.mark.asyncio()
     async def test_red_flag_invalid_category_rejected_end_to_end(self) -> None:
@@ -1277,6 +1277,56 @@ class TestAC36ProviderFailure:
         assert result.status == "PARTIAL"
         svc.partial_run.assert_awaited_once()
         svc.complete_run.assert_not_awaited()
+
+
+# ===========================================================================
+# AC-36 (cont.): Provider failure generates UNCERTAINTY findings (F-03)
+# ===========================================================================
+
+
+class TestAC36ProviderFailureUncertainty:
+    @pytest.mark.asyncio()
+    async def test_data_gaps_produce_uncertainty_findings(self) -> None:
+        discovery = _make_discovery()
+        discovery = DiscoverGovernanceSourcesOutput(
+            filing_candidates=discovery.filing_candidates,
+            shareholding_data=discovery.shareholding_data,
+            corporate_actions=discovery.corporate_actions,
+            provider_errors=["ShareholdingProvider: timeout"],
+            data_gaps=["Shareholding data unavailable for Q3 2025"],
+        )
+        agent, svc, _ = _build_agent(
+            llm_responses=[_evidence_response(), _analysis_response()],
+        )
+        patches = _patch_tools_happy_path(agent, discovery=discovery)
+
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5] as p_findings,
+            patches[6],
+            patches[7],
+            patches[8],
+        ):
+            result = await agent.execute(
+                ManagementGovernanceResearchRequest(
+                    company_id=COMPANY_UUID,
+                    observation_date=OBSERVATION_DATE,
+                    initiated_by="integration_test",
+                ),
+            )
+
+        assert result.status == "COMPLETED"
+        p_findings.assert_awaited()
+        sh_call = p_findings.call_args_list[-1]
+        finding_items = sh_call[0][0].findings
+        uncertainty_items = [fi for fi in finding_items if fi.finding_type == FindingType.UNCERTAINTY]
+        assert len(uncertainty_items) >= 1
+        assert uncertainty_items[0].category == "data_gap"
+        assert "Shareholding data unavailable" in uncertainty_items[0].content
 
 
 # ===========================================================================
