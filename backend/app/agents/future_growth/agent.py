@@ -282,7 +282,6 @@ class FutureGrowthAgent:
             all_opportunity_ids = validation_output[4]
             growth_quality_score = validation_output[5]
             future_optionality_score = validation_output[6]
-            all_finding_ids.extend(validation_output[7])
             steps_completed += 1
 
             # -- Step 7: growth_challenge (LLM) -------------------------------------
@@ -707,7 +706,6 @@ class FutureGrowthAgent:
         list[uuid.UUID],
         int | None,
         int | None,
-        list[uuid.UUID],
     ]:
         validated_opps, clamped_gq, clamped_fo, val_result = _validate_growth(
             draft_opportunities,
@@ -732,7 +730,6 @@ class FutureGrowthAgent:
             )
             opportunity_ids = persist_result.opportunity_ids
 
-        score_finding_ids: list[uuid.UUID] = []
         if growth_quality_score is not None and future_optionality_score is not None:
             await self._tools.persist_scores(
                 PersistGrowthScoresInput(
@@ -753,7 +750,6 @@ class FutureGrowthAgent:
             opportunity_ids,
             growth_quality_score,
             future_optionality_score,
-            score_finding_ids,
         )
 
     async def _step_growth_challenge(

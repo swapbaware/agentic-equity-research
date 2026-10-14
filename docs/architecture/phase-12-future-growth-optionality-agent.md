@@ -838,7 +838,8 @@ Each tool follows the established pattern:
 | `SearchProvider` | `search()` | Growth-related document discovery |
 | `NewsProvider` | `search_news()`, `get_company_news()` | Expansion and growth news |
 | `CorporateFilingsProvider` | `list_filings()`, `get_filing()` | Annual reports, investor presentations |
-| `MacroDataProvider` | `get_indicator()` | Government policy data (PLI, sector incentives) |
+
+> **Note (Phase 12.1 design decision):** The original architecture specified `MacroDataProvider` for government policy data (PLI, sector incentives). This was excluded during Phase 12.1 contract design because government policy information is adequately surfaced through `CorporateFilingsProvider` (annual reports referencing policy benefits) and `NewsProvider` (policy announcements). A dedicated `MacroDataProvider` interface does not exist in the provider layer. If a separate macro data source is needed in the future, it should be added as a new provider interface per the provider abstraction rules (CLAUDE.md Section 7).
 
 ### Provider Injection
 
@@ -848,14 +849,12 @@ All providers injected via constructor. No provider is imported or instantiated 
 class FutureGrowthAgent:
     def __init__(
         self,
-        *,
-        llm: LLMProvider,
+        session: AsyncSession,
+        run_service: ResearchRunService,
         search: SearchProvider,
         news: NewsProvider,
         corporate_filings: CorporateFilingsProvider,
-        macro_data: MacroDataProvider,
-        db_session: AsyncSession,
-        run_service: ResearchRunService,
+        llm: LLMProvider,
     ) -> None:
 ```
 

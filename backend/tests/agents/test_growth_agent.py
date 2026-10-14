@@ -1462,5 +1462,9 @@ class TestMultipleValidationIssues:
         ]
         opp = _make_opportunity_draft(name="Cascade", maturity="PROVEN", evidence_indices=[0])
         validated, _, _, result = _validate_growth([opp], [], [], evidence, [EVIDENCE_UUID_1])
-        assert validated[0].maturity in ("COMMERCIALIZING", "EARLY_STAGE", "SPECULATIVE")
-        assert len(result.downgraded_maturities) >= 1
+        # MV-02: PROVEN → COMMERCIALIZING (no FACT-type revenue evidence)
+        # MV-03: COMMERCIALIZING → EARLY_STAGE (no revenue keyword in claim)
+        assert validated[0].maturity == "EARLY_STAGE"
+        assert len(result.downgraded_maturities) == 2
+        assert result.downgraded_maturities[0] == ("Cascade", "PROVEN", "COMMERCIALIZING")
+        assert result.downgraded_maturities[1] == ("Cascade", "COMMERCIALIZING", "EARLY_STAGE")
