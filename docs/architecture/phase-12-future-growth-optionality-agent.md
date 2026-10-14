@@ -839,7 +839,7 @@ Each tool follows the established pattern:
 | `NewsProvider` | `search_news()`, `get_company_news()` | Expansion and growth news |
 | `CorporateFilingsProvider` | `list_filings()`, `get_filing()` | Annual reports, investor presentations |
 
-> **Note (Phase 12.1 design decision):** The original architecture specified `MacroDataProvider` for government policy data (PLI, sector incentives). This was excluded during Phase 12.1 contract design because government policy information is adequately surfaced through `CorporateFilingsProvider` (annual reports referencing policy benefits) and `NewsProvider` (policy announcements). A dedicated `MacroDataProvider` interface does not exist in the provider layer. If a separate macro data source is needed in the future, it should be added as a new provider interface per the provider abstraction rules (CLAUDE.md Section 7).
+> **Note (Phase 12.1 design decision):** The original architecture specified `MacroDataProvider` for government policy data (PLI, sector incentives). The Future Growth agent does not depend on `MacroDataProvider`. Government-policy information is adequately surfaced through `CorporateFilingsProvider` (annual reports referencing policy benefits) and `NewsProvider` (policy announcements). The shared `MacroDataProvider` Protocol interface exists in the provider layer (`backend/app/providers/interfaces.py`) for other agents (e.g., Industry Research) but is not injected into this agent's constructor.
 
 ### Provider Injection
 
