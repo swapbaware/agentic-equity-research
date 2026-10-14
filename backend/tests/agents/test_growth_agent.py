@@ -39,6 +39,7 @@ from app.agents.contracts import (
     GROWTH_AGENT_RUN_TYPE,
     GROWTH_AGENT_TOKEN_BUDGET,
     GROWTH_AGENT_TOKEN_WARNING,
+    GROWTH_FINDING_CATEGORIES,
     GROWTH_RESEARCH_STEPS,
     INDIA_STRUCTURAL_THEMES,
     DiscoverGrowthSourcesOutput,
@@ -62,6 +63,7 @@ from app.agents.contracts import (
     TokenBudget,
 )
 from app.agents.future_growth.agent import (
+    _FORWARD_LOOKING_CATEGORIES,
     FutureGrowthAgent,
     _clamp_scores,
     _compute_dimension_score,
@@ -71,6 +73,7 @@ from app.agents.future_growth.agent import (
     _parse_growth_analysis_response,
     _parse_growth_challenge_response,
     _replace_maturity,
+    _validate_findings,
     _validate_growth,
 )
 from app.models.enums import (
@@ -198,6 +201,21 @@ def _make_score_component(
         score=score,
         rationale="Based on evidence",
         evidence_indices=[0],
+    )
+
+
+def _make_finding(
+    content: str = "Revenue grew 15% YoY",
+    finding_type: FindingType = FindingType.FACT,
+    category: str = "growth_opportunity",
+    confidence: ConfidenceLevel = ConfidenceLevel.MEDIUM,
+) -> FindingItem:
+    return FindingItem(
+        agent_name=GROWTH_AGENT_NAME,
+        finding_type=finding_type,
+        category=category,
+        content=content,
+        confidence=confidence,
     )
 
 
@@ -430,7 +448,7 @@ class TestValidation:
 
     def test_mv01_no_evidence_downgrades_to_speculative(self) -> None:
         opp = _make_opportunity_draft(maturity="EARLY_STAGE", evidence_indices=[])
-        validated, _, _, result = _validate_growth([opp], [], [], [], [])
+        validated, _, _, result, _ = _validate_growth([opp], [], [], [], [])
         assert validated[0].maturity == "SPECULATIVE"
         assert not result.passed
         mv01 = [i for i in result.issues if i.check_id == "MV-01"]
@@ -439,7 +457,7 @@ class TestValidation:
 
     def test_mv01_speculative_stays_speculative(self) -> None:
         opp = _make_opportunity_draft(maturity="SPECULATIVE", evidence_indices=[])
-        validated, _, _, result = _validate_growth([opp], [], [], [], [])
+        validated, _, _, result, _ = _validate_growth([opp], [], [], [], [])
         assert validated[0].maturity == "SPECULATIVE"
         mv01 = [i for i in result.issues if i.check_id == "MV-01"]
         assert len(mv01) == 0
@@ -452,7 +470,7 @@ class TestValidation:
             ),
         ]
         opp = _make_opportunity_draft(maturity="PROVEN", evidence_indices=[0])
-        validated, _, _, result = _validate_growth([opp], [], [], evidence, [EVIDENCE_UUID_1])
+        validated, _, _, result, _ = _validate_growth([opp], [], [], evidence, [EVIDENCE_UUID_1])
         assert validated[0].maturity == "COMMERCIALIZING"
         mv02 = [i for i in result.issues if i.check_id == "MV-02"]
         assert len(mv02) == 1
@@ -465,7 +483,7 @@ class TestValidation:
             ),
         ]
         opp = _make_opportunity_draft(maturity="PROVEN", evidence_indices=[0])
-        validated, _, _, result = _validate_growth([opp], [], [], evidence, [EVIDENCE_UUID_1])
+        validated, _, _, result, _ = _validate_growth([opp], [], [], evidence, [EVIDENCE_UUID_1])
         assert validated[0].maturity == "PROVEN"
 
     def test_mv03_commercializing_without_revenue_downgrades(self) -> None:
@@ -476,7 +494,7 @@ class TestValidation:
             ),
         ]
         opp = _make_opportunity_draft(maturity="COMMERCIALIZING", evidence_indices=[0])
-        validated, _, _, result = _validate_growth([opp], [], [], evidence, [EVIDENCE_UUID_1])
+        validated, _, _, result, _ = _validate_growth([opp], [], [], evidence, [EVIDENCE_UUID_1])
         assert validated[0].maturity == "EARLY_STAGE"
         mv03 = [i for i in result.issues if i.check_id == "MV-03"]
         assert len(mv03) == 1
@@ -489,7 +507,7 @@ class TestValidation:
             ),
         ]
         opp = _make_opportunity_draft(maturity="COMMERCIALIZING", evidence_indices=[0])
-        validated, _, _, result = _validate_growth([opp], [], [], evidence, [EVIDENCE_UUID_1])
+        validated, _, _, result, _ = _validate_growth([opp], [], [], evidence, [EVIDENCE_UUID_1])
         assert validated[0].maturity == "COMMERCIALIZING"
 
     def test_mv05_tam_without_methodology_nullifies(self) -> None:
@@ -498,7 +516,7 @@ class TestValidation:
             tam_methodology=None,
             evidence_indices=[0],
         )
-        validated, _, _, result = _validate_growth([opp], [], [], [_make_evidence()], [EVIDENCE_UUID_1])
+        validated, _, _, result, _ = _validate_growth([opp], [], [], [_make_evidence()], [EVIDENCE_UUID_1])
         assert validated[0].addressable_market is None
         assert validated[0].tam_methodology is None
         mv05 = [i for i in result.issues if i.check_id == "MV-05"]
@@ -520,7 +538,7 @@ class TestValidation:
             risks=[],
             rationale="Test",
         )
-        validated, _, _, result = _validate_growth([opp], [], [], [_make_evidence()], [EVIDENCE_UUID_1])
+        validated, _, _, result, _ = _validate_growth([opp], [], [], [_make_evidence()], [EVIDENCE_UUID_1])
         assert validated[0].addressable_market is None
         mv05 = [i for i in result.issues if i.check_id == "MV-05"]
         assert len(mv05) == 1
@@ -536,7 +554,7 @@ class TestValidation:
             risks=[],
             rationale="Test",
         )
-        validated, _, _, result = _validate_growth([opp], [], [], [_make_evidence()], [EVIDENCE_UUID_1])
+        validated, _, _, result, _ = _validate_growth([opp], [], [], [_make_evidence()], [EVIDENCE_UUID_1])
         assert len(validated) == 0
         mv06 = [i for i in result.issues if i.check_id == "MV-06"]
         assert len(mv06) == 1
@@ -551,7 +569,7 @@ class TestValidation:
             risks=[],
             rationale="Test",
         )
-        validated, _, _, result = _validate_growth([opp], [], [], [_make_evidence()], [EVIDENCE_UUID_1])
+        validated, _, _, result, _ = _validate_growth([opp], [], [], [_make_evidence()], [EVIDENCE_UUID_1])
         assert len(validated) == 0
         mv07 = [i for i in result.issues if i.check_id == "MV-07"]
         assert len(mv07) == 1
@@ -599,7 +617,7 @@ class TestValidation:
             risks=[],
             rationale="Test",
         )
-        validated, _, _, result = _validate_growth([opp], [], [], [_make_evidence()], [EVIDENCE_UUID_1])
+        validated, _, _, result, _ = _validate_growth([opp], [], [], [_make_evidence()], [EVIDENCE_UUID_1])
         assert validated[0].addressable_market is None
         mv10 = [i for i in result.issues if i.check_id == "MV-10"]
         assert len(mv10) == 1
@@ -612,7 +630,7 @@ class TestValidation:
         gq = [_make_score_component(score=65)]
         fo = [_make_score_component(name="Optionality", score=50)]
 
-        validated, clamped_gq, clamped_fo, result = _validate_growth([opp], gq, fo, evidence, [EVIDENCE_UUID_1])
+        validated, clamped_gq, clamped_fo, result, _ = _validate_growth([opp], gq, fo, evidence, [EVIDENCE_UUID_1])
         assert result.passed is True
         assert len(validated) == 1
         assert len(clamped_gq) == 1
@@ -1440,7 +1458,7 @@ class TestMultipleValidationIssues:
             evidence_indices=[],
         )
 
-        validated, _, _, result = _validate_growth(
+        validated, _, _, result, _ = _validate_growth(
             [opp_good, opp_bad_category, opp_no_evidence],
             [],
             [],
@@ -1461,10 +1479,440 @@ class TestMultipleValidationIssues:
             )
         ]
         opp = _make_opportunity_draft(name="Cascade", maturity="PROVEN", evidence_indices=[0])
-        validated, _, _, result = _validate_growth([opp], [], [], evidence, [EVIDENCE_UUID_1])
+        validated, _, _, result, _ = _validate_growth([opp], [], [], evidence, [EVIDENCE_UUID_1])
         # MV-02: PROVEN → COMMERCIALIZING (no FACT-type revenue evidence)
         # MV-03: COMMERCIALIZING → EARLY_STAGE (no revenue keyword in claim)
         assert validated[0].maturity == "EARLY_STAGE"
         assert len(result.downgraded_maturities) == 2
         assert result.downgraded_maturities[0] == ("Cascade", "PROVEN", "COMMERCIALIZING")
         assert result.downgraded_maturities[1] == ("Cascade", "COMMERCIALIZING", "EARLY_STAGE")
+
+
+# ===========================================================================
+# 14. MV-04 — Forward-looking FACT → AI_INFERENCE reclassification
+# ===========================================================================
+
+
+class TestMV04ForwardLookingFactReclassification:
+    """MV-04: No forward-looking finding may have FindingType.FACT.
+    Forward-looking categories must be reclassified to AI_INFERENCE."""
+
+    def test_forward_looking_fact_reclassified_to_ai_inference(self) -> None:
+        for cat in _FORWARD_LOOKING_CATEGORIES:
+            finding = _make_finding(
+                content="TAM estimated at 5000cr",
+                finding_type=FindingType.FACT,
+                category=cat,
+            )
+            issues: list[GrowthValidationIssue] = []
+            result = _validate_findings([finding], issues)
+            assert len(result) == 1
+            assert result[0].finding_type == FindingType.AI_INFERENCE
+            assert len(issues) == 1
+            assert issues[0].check_id == "MV-04"
+            assert issues[0].severity == "ERROR"
+
+    def test_non_forward_looking_fact_unchanged(self) -> None:
+        non_forward = [c for c in GROWTH_FINDING_CATEGORIES if c not in _FORWARD_LOOKING_CATEGORIES]
+        for cat in non_forward:
+            finding = _make_finding(
+                content="Revenue was 1000cr in FY24",
+                finding_type=FindingType.FACT,
+                category=cat,
+            )
+            issues: list[GrowthValidationIssue] = []
+            result = _validate_findings([finding], issues)
+            assert result[0].finding_type == FindingType.FACT
+            assert len(issues) == 0
+
+    def test_forward_looking_ai_inference_unchanged(self) -> None:
+        finding = _make_finding(
+            content="Growth trajectory looks strong",
+            finding_type=FindingType.AI_INFERENCE,
+            category="growth_trajectory",
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        assert result[0].finding_type == FindingType.AI_INFERENCE
+        assert len(issues) == 0
+
+    def test_forward_looking_assumption_unchanged(self) -> None:
+        finding = _make_finding(
+            content="Assuming TAM grows at 10% CAGR",
+            finding_type=FindingType.ASSUMPTION,
+            category="tam_estimate",
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        assert result[0].finding_type == FindingType.ASSUMPTION
+        assert len(issues) == 0
+
+    def test_mv04_issue_records_category(self) -> None:
+        finding = _make_finding(
+            content="Theme alignment expected",
+            finding_type=FindingType.FACT,
+            category="theme_alignment",
+        )
+        issues: list[GrowthValidationIssue] = []
+        _validate_findings([finding], issues)
+        assert "theme_alignment" in issues[0].message
+
+    def test_mv04_preserves_all_fields(self) -> None:
+        finding = FindingItem(
+            agent_name="test_agent",
+            finding_type=FindingType.FACT,
+            category="growth_risk",
+            content="Risk assessment content",
+            confidence=ConfidenceLevel.HIGH,
+            observation_date=OBS_DATE,
+            source_publication_date=OBS_DATE,
+            evidence_ids=[EVIDENCE_UUID_1],
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        corrected = result[0]
+        assert corrected.finding_type == FindingType.AI_INFERENCE
+        assert corrected.agent_name == "test_agent"
+        assert corrected.category == "growth_risk"
+        assert corrected.content == "Risk assessment content"
+        assert corrected.confidence == ConfidenceLevel.HIGH
+        assert corrected.observation_date == OBS_DATE
+        assert corrected.evidence_ids == [EVIDENCE_UUID_1]
+
+    def test_multiple_forward_looking_facts_all_reclassified(self) -> None:
+        findings = [
+            _make_finding(finding_type=FindingType.FACT, category="growth_opportunity"),
+            _make_finding(finding_type=FindingType.FACT, category="tam_estimate"),
+            _make_finding(finding_type=FindingType.FACT, category="growth_challenge"),
+        ]
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings(findings, issues)
+        assert all(f.finding_type == FindingType.AI_INFERENCE for f in result)
+        assert len(issues) == 3
+        assert all(i.check_id == "MV-04" for i in issues)
+
+
+# ===========================================================================
+# 15. MV-09 — Management-claim language reclassification
+# ===========================================================================
+
+
+class TestMV09ManagementClaimReclassification:
+    """MV-09: Findings containing management-claim language must not be
+    classified as FACT or CALCULATION. Reclassify to MANAGEMENT_CLAIM."""
+
+    def test_management_guided_in_fact_reclassified(self) -> None:
+        finding = _make_finding(
+            content="Management guided for 20% revenue growth in FY25",
+            finding_type=FindingType.FACT,
+            category="revenue_growth",
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        assert result[0].finding_type == FindingType.MANAGEMENT_CLAIM
+        assert len(issues) == 1
+        assert issues[0].check_id == "MV-09"
+
+    def test_management_expects_in_calculation_reclassified(self) -> None:
+        finding = _make_finding(
+            content="Management expects EBITDA margin to expand 200bps",
+            finding_type=FindingType.CALCULATION,
+            category="revenue_growth",
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        assert result[0].finding_type == FindingType.MANAGEMENT_CLAIM
+        assert len(issues) == 1
+        assert issues[0].check_id == "MV-09"
+
+    def test_according_to_management_reclassified(self) -> None:
+        finding = _make_finding(
+            content="According to management, capex will be Rs 500cr",
+            finding_type=FindingType.FACT,
+            category="revenue_growth",
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        assert result[0].finding_type == FindingType.MANAGEMENT_CLAIM
+
+    def test_all_management_indicators_detected(self) -> None:
+        indicators = [
+            "management guided",
+            "management expects",
+            "management stated",
+            "management announced",
+            "management plans",
+            "according to management",
+            "management indicated",
+            "management projected",
+            "management commentary",
+            "guidance of",
+            "guided for",
+            "management believes",
+        ]
+        for indicator in indicators:
+            finding = _make_finding(
+                content=f"The company: {indicator} a 15% growth target",
+                finding_type=FindingType.FACT,
+                category="revenue_growth",
+            )
+            issues: list[GrowthValidationIssue] = []
+            result = _validate_findings([finding], issues)
+            assert result[0].finding_type == FindingType.MANAGEMENT_CLAIM, f"Indicator '{indicator}' not detected"
+
+    def test_no_management_language_fact_unchanged(self) -> None:
+        finding = _make_finding(
+            content="Revenue grew 15% YoY to Rs 1000cr in FY24",
+            finding_type=FindingType.FACT,
+            category="revenue_growth",
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        assert result[0].finding_type == FindingType.FACT
+        assert len(issues) == 0
+
+    def test_management_language_in_ai_inference_unchanged(self) -> None:
+        finding = _make_finding(
+            content="Management guided for 20% growth, which seems aggressive",
+            finding_type=FindingType.AI_INFERENCE,
+            category="revenue_growth",
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        assert result[0].finding_type == FindingType.AI_INFERENCE
+        assert len(issues) == 0
+
+    def test_management_language_in_management_claim_unchanged(self) -> None:
+        finding = _make_finding(
+            content="Management guided for 20% growth",
+            finding_type=FindingType.MANAGEMENT_CLAIM,
+            category="revenue_growth",
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        assert result[0].finding_type == FindingType.MANAGEMENT_CLAIM
+        assert len(issues) == 0
+
+    def test_case_insensitive_detection(self) -> None:
+        finding = _make_finding(
+            content="MANAGEMENT GUIDED for 20% revenue growth",
+            finding_type=FindingType.FACT,
+            category="revenue_growth",
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        assert result[0].finding_type == FindingType.MANAGEMENT_CLAIM
+
+    def test_mv09_preserves_all_fields(self) -> None:
+        finding = FindingItem(
+            agent_name="test_agent",
+            finding_type=FindingType.FACT,
+            category="revenue_growth",
+            content="Management guided for expansion",
+            confidence=ConfidenceLevel.LOW,
+            observation_date=OBS_DATE,
+            source_publication_date=OBS_DATE,
+            evidence_ids=[EVIDENCE_UUID_1, EVIDENCE_UUID_2],
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        corrected = result[0]
+        assert corrected.finding_type == FindingType.MANAGEMENT_CLAIM
+        assert corrected.agent_name == "test_agent"
+        assert corrected.category == "revenue_growth"
+        assert corrected.content == "Management guided for expansion"
+        assert corrected.confidence == ConfidenceLevel.LOW
+        assert corrected.evidence_ids == [EVIDENCE_UUID_1, EVIDENCE_UUID_2]
+
+
+# ===========================================================================
+# 16. MV-04 + MV-09 interaction
+# ===========================================================================
+
+
+class TestMV04MV09Interaction:
+    """When a forward-looking finding with FACT type also contains
+    management-claim language, MV-04 fires first (FACT → AI_INFERENCE),
+    then MV-09 should NOT fire because AI_INFERENCE is not FACT/CALCULATION."""
+
+    def test_mv04_fires_first_prevents_mv09(self) -> None:
+        finding = _make_finding(
+            content="Management guided for growth in new markets",
+            finding_type=FindingType.FACT,
+            category="growth_trajectory",
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        assert result[0].finding_type == FindingType.AI_INFERENCE
+        assert len(issues) == 1
+        assert issues[0].check_id == "MV-04"
+
+    def test_non_forward_looking_management_claim_gets_mv09(self) -> None:
+        finding = _make_finding(
+            content="Management expects revenue to grow 20%",
+            finding_type=FindingType.FACT,
+            category="revenue_growth",
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        assert result[0].finding_type == FindingType.MANAGEMENT_CLAIM
+        assert len(issues) == 1
+        assert issues[0].check_id == "MV-09"
+
+    def test_mixed_findings_independent_rules(self) -> None:
+        findings = [
+            _make_finding(
+                content="TAM is large",
+                finding_type=FindingType.FACT,
+                category="tam_estimate",
+            ),
+            _make_finding(
+                content="Management guided for 30% capex increase",
+                finding_type=FindingType.CALCULATION,
+                category="revenue_growth",
+            ),
+            _make_finding(
+                content="Revenue was Rs 500cr in FY24",
+                finding_type=FindingType.FACT,
+                category="revenue_growth",
+            ),
+        ]
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings(findings, issues)
+        assert result[0].finding_type == FindingType.AI_INFERENCE  # MV-04
+        assert result[1].finding_type == FindingType.MANAGEMENT_CLAIM  # MV-09
+        assert result[2].finding_type == FindingType.FACT  # unchanged
+        assert len(issues) == 2
+
+
+# ===========================================================================
+# 17. _validate_findings edge cases
+# ===========================================================================
+
+
+class TestValidateFindingsEdgeCases:
+    def test_empty_findings_returns_empty(self) -> None:
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([], issues)
+        assert result == []
+        assert len(issues) == 0
+
+    def test_findings_without_issues_pass_through(self) -> None:
+        findings = [
+            _make_finding(finding_type=FindingType.AI_INFERENCE, category="growth_opportunity"),
+            _make_finding(finding_type=FindingType.ASSUMPTION, category="tam_estimate"),
+            _make_finding(finding_type=FindingType.MANAGEMENT_CLAIM, category="revenue_growth"),
+        ]
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings(findings, issues)
+        assert len(result) == 3
+        assert result[0].finding_type == FindingType.AI_INFERENCE
+        assert result[1].finding_type == FindingType.ASSUMPTION
+        assert result[2].finding_type == FindingType.MANAGEMENT_CLAIM
+        assert len(issues) == 0
+
+    def test_issues_list_accumulates_across_findings(self) -> None:
+        findings = [
+            _make_finding(finding_type=FindingType.FACT, category="growth_opportunity"),
+            _make_finding(finding_type=FindingType.FACT, category="tam_estimate"),
+        ]
+        issues: list[GrowthValidationIssue] = []
+        _validate_findings(findings, issues)
+        assert len(issues) == 2
+
+    def test_pre_existing_issues_preserved(self) -> None:
+        issues: list[GrowthValidationIssue] = [
+            GrowthValidationIssue(
+                check_id="MV-01",
+                severity="ERROR",
+                opportunity_name="Test",
+                message="Pre-existing issue",
+            ),
+        ]
+        finding = _make_finding(finding_type=FindingType.FACT, category="growth_opportunity")
+        _validate_findings([finding], issues)
+        assert len(issues) == 2
+        assert issues[0].check_id == "MV-01"
+        assert issues[1].check_id == "MV-04"
+
+    def test_uncertainty_type_passes_through(self) -> None:
+        finding = _make_finding(
+            content="Uncertain outlook for growth",
+            finding_type=FindingType.UNCERTAINTY,
+            category="growth_risk",
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        assert result[0].finding_type == FindingType.UNCERTAINTY
+        assert len(issues) == 0
+
+
+# ===========================================================================
+# 18. _validate_growth integration with findings parameter
+# ===========================================================================
+
+
+class TestValidateGrowthWithFindings:
+    def test_validate_growth_accepts_findings_parameter(self) -> None:
+        evidence = [_make_evidence()]
+        opp = _make_opportunity_draft(evidence_indices=[0])
+        findings = [
+            _make_finding(finding_type=FindingType.FACT, category="growth_opportunity"),
+        ]
+        validated, _, _, result, corrected_findings = _validate_growth(
+            [opp],
+            [],
+            [],
+            evidence,
+            [EVIDENCE_UUID_1],
+            findings=findings,
+        )
+        assert len(validated) == 1
+        assert len(corrected_findings) == 1
+        assert corrected_findings[0].finding_type == FindingType.AI_INFERENCE
+
+    def test_validate_growth_no_findings_returns_empty(self) -> None:
+        evidence = [_make_evidence()]
+        opp = _make_opportunity_draft(evidence_indices=[0])
+        validated, _, _, result, corrected_findings = _validate_growth(
+            [opp],
+            [],
+            [],
+            evidence,
+            [EVIDENCE_UUID_1],
+        )
+        assert corrected_findings == []
+
+    def test_validate_growth_finding_issues_in_result(self) -> None:
+        evidence = [_make_evidence()]
+        opp = _make_opportunity_draft(evidence_indices=[0])
+        findings = [
+            _make_finding(finding_type=FindingType.FACT, category="tam_estimate"),
+        ]
+        _, _, _, result, _ = _validate_growth(
+            [opp],
+            [],
+            [],
+            evidence,
+            [EVIDENCE_UUID_1],
+            findings=findings,
+        )
+        mv04_issues = [i for i in result.issues if i.check_id == "MV-04"]
+        assert len(mv04_issues) == 1
+
+
+# ===========================================================================
+# 19. _FORWARD_LOOKING_CATEGORIES constant
+# ===========================================================================
+
+
+class TestForwardLookingCategories:
+    def test_forward_looking_categories_are_subset_of_growth_finding_categories(self) -> None:
+        assert _FORWARD_LOOKING_CATEGORIES <= GROWTH_FINDING_CATEGORIES
+
+    def test_forward_looking_categories_non_empty(self) -> None:
+        assert len(_FORWARD_LOOKING_CATEGORIES) >= 4
+
+    def test_expected_categories_present(self) -> None:
+        expected = {"growth_opportunity", "tam_estimate", "growth_trajectory", "growth_challenge"}
+        assert expected <= _FORWARD_LOOKING_CATEGORIES

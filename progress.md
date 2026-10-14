@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-14 (Phase 12.4 — CLOSED after independent re-audit)
+**Last Updated:** 2026-10-14 (Phase 12.5 — Validation Tests COMPLETE)
 
 ---
 
@@ -1262,7 +1262,51 @@ Audit verdict: **APPROVED WITH REQUIRED REMEDIATION** (F-01 HIGH blocking, F-02 
 - TD-36 (120s timeout not enforced by any agent) — architecture specifies per-agent timeout but no agent implements `asyncio.timeout`
 - TD-37 (missing provider usage metadata can bypass token budget) — if `LLMResponse.usage` is absent, budget is not decremented
 
-**Phase 12.5 has not started.**
+### Phase 12.5: Future Growth & Optionality Agent Validation Tests — COMPLETE
+
+- [x] **Production code**: Implemented MV-04 and MV-09 validation rules in `_validate_findings()` function
+  - `_FORWARD_LOOKING_CATEGORIES` constant: 6 forward-looking categories
+  - `_validate_findings()`: iterates findings, applies MV-04 then MV-09 sequentially
+  - MV-04: Forward-looking FACT → AI_INFERENCE reclassification
+  - MV-09: Management-claim language in FACT/CALCULATION → MANAGEMENT_CLAIM reclassification
+  - Extended `_validate_growth()` to accept optional `findings` parameter (5-tuple return)
+- [x] **TestMV04ForwardLookingFactReclassification** (7 tests):
+  - Forward-looking FACT reclassified across all 6 categories
+  - Non-forward-looking FACT passes through unchanged
+  - Already-correct types (AI_INFERENCE, ASSUMPTION) unchanged
+  - Issue message records category
+  - All fields preserved after reclassification
+  - Multiple forward-looking FACTs all reclassified
+- [x] **TestMV09ManagementClaimReclassification** (9 tests):
+  - All 12 management indicators detected
+  - FACT and CALCULATION both reclassified
+  - Case-insensitive detection
+  - No management language → FACT unchanged
+  - AI_INFERENCE and MANAGEMENT_CLAIM types unaffected by MV-09
+  - All fields preserved after reclassification
+- [x] **TestMV04MV09Interaction** (3 tests):
+  - MV-04 fires first, prevents MV-09 (AI_INFERENCE not FACT/CALCULATION)
+  - Non-forward-looking management claim gets MV-09 only
+  - Mixed findings apply independent rules correctly
+- [x] **TestValidateFindingsEdgeCases** (5 tests):
+  - Empty findings returns empty
+  - Findings without issues pass through
+  - Issues accumulate across findings
+  - Pre-existing issues preserved
+  - UNCERTAINTY type passes through
+- [x] **TestValidateGrowthWithFindings** (3 tests):
+  - `_validate_growth` accepts findings parameter
+  - No findings returns empty list
+  - Finding issues included in GrowthValidationResult
+- [x] **TestForwardLookingCategories** (3 tests):
+  - Forward-looking categories are subset of GROWTH_FINDING_CATEGORIES
+  - At least 4 categories present
+  - Expected categories verified
+- [x] Quality gates: 96/96 tests passing (30 new), ruff check clean, ruff format clean, mypy strict clean
+- [x] No regressions in existing 66 Phase 12.4 tests
+- [x] Files changed: `backend/app/agents/future_growth/agent.py`, `backend/tests/agents/test_growth_agent.py`
+
+**Phase 12.6 has not started.**
 
 ---
 

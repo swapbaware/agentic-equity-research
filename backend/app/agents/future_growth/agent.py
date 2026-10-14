@@ -70,6 +70,7 @@ from app.agents.future_growth.prompts import (
 )
 from app.agents.future_growth.tools import FutureGrowthTools
 from app.models.enums import (
+    FindingType,
     GrowthCategory,
     GrowthMaturity,
 )
@@ -707,7 +708,7 @@ class FutureGrowthAgent:
         int | None,
         int | None,
     ]:
-        validated_opps, clamped_gq, clamped_fo, val_result = _validate_growth(
+        validated_opps, clamped_gq, clamped_fo, val_result, _ = _validate_growth(
             draft_opportunities,
             gq_scores,
             fo_scores,
@@ -883,11 +884,13 @@ def _validate_growth(
     fo_scores: list[GrowthScoreComponent],
     all_evidence: list[ExtractedEvidence],
     all_evidence_ids: list[uuid.UUID],
+    findings: list[FindingItem] | None = None,
 ) -> tuple[
     list[GrowthOpportunityDraft],
     list[GrowthScoreComponent],
     list[GrowthScoreComponent],
     GrowthValidationResult,
+    list[FindingItem],
 ]:
     issues: list[GrowthValidationIssue] = []
     downgraded_maturities: list[tuple[str, str, str]] = []
@@ -1059,6 +1062,9 @@ def _validate_growth(
 
         validated.append(current)
 
+    # MV-04 / MV-09: Finding type validation
+    corrected_findings = _validate_findings(findings or [], issues)
+
     # MV-08: Scores in [0, 100] — clamp
     clamped_gq = _clamp_scores(gq_scores, issues, "growth_quality")
     clamped_fo = _clamp_scores(fo_scores, issues, "future_optionality")
@@ -1070,7 +1076,7 @@ def _validate_growth(
         downgraded_maturities=downgraded_maturities,
         nullified_tams=nullified_tams,
     )
-    return validated, clamped_gq, clamped_fo, result
+    return validated, clamped_gq, clamped_fo, result, corrected_findings
 
 
 def _has_fact_revenue_evidence(
@@ -1151,6 +1157,94 @@ def _clamp_scores(
         else:
             clamped.append(sc)
     return clamped
+
+
+_FORWARD_LOOKING_CATEGORIES: frozenset[str] = frozenset(
+    {
+        "growth_opportunity",
+        "tam_estimate",
+        "growth_trajectory",
+        "theme_alignment",
+        "growth_risk",
+        "growth_challenge",
+    }
+)
+
+
+def _validate_findings(
+    findings: list[FindingItem],
+    issues: list[GrowthValidationIssue],
+) -> list[FindingItem]:
+    corrected: list[FindingItem] = []
+    for f in findings:
+        current = f
+
+        # MV-04: forward-looking finding must not have FindingType.FACT
+        if current.finding_type == FindingType.FACT and current.category in _FORWARD_LOOKING_CATEGORIES:
+            issues.append(
+                GrowthValidationIssue(
+                    check_id="MV-04",
+                    severity="ERROR",
+                    opportunity_name=None,
+                    message=(
+                        f"Forward-looking finding (category={current.category}) "
+                        f"classified as FACT; reclassifying to AI_INFERENCE"
+                    ),
+                ),
+            )
+            current = FindingItem(
+                agent_name=current.agent_name,
+                finding_type=FindingType.AI_INFERENCE,
+                category=current.category,
+                content=current.content,
+                confidence=current.confidence,
+                observation_date=current.observation_date,
+                source_publication_date=current.source_publication_date,
+                evidence_ids=current.evidence_ids,
+            )
+
+        # MV-09: MANAGEMENT_CLAIM must not be classified as FACT or CALCULATION
+        if current.finding_type in (FindingType.FACT, FindingType.CALCULATION):
+            content_lower = current.content.lower()
+            mgmt_indicators = (
+                "management guided",
+                "management expects",
+                "management stated",
+                "management announced",
+                "management plans",
+                "according to management",
+                "management indicated",
+                "management projected",
+                "management commentary",
+                "guidance of",
+                "guided for",
+                "management believes",
+            )
+            if any(indicator in content_lower for indicator in mgmt_indicators):
+                issues.append(
+                    GrowthValidationIssue(
+                        check_id="MV-09",
+                        severity="ERROR",
+                        opportunity_name=None,
+                        message=(
+                            f"Finding contains management-claim language but classified "
+                            f"as {current.finding_type.value}; reclassifying to MANAGEMENT_CLAIM"
+                        ),
+                    ),
+                )
+                current = FindingItem(
+                    agent_name=current.agent_name,
+                    finding_type=FindingType.MANAGEMENT_CLAIM,
+                    category=current.category,
+                    content=current.content,
+                    confidence=current.confidence,
+                    observation_date=current.observation_date,
+                    source_publication_date=current.source_publication_date,
+                    evidence_ids=current.evidence_ids,
+                )
+
+        corrected.append(current)
+    return corrected
 
 
 def _compute_dimension_score(
