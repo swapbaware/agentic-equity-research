@@ -612,7 +612,7 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - Phase 12.1: Contracts and Constants — **COMPLETE**
 - Phase 12.2: Tools Implementation — **COMPLETE + AUDIT APPROVED** (86 tests, ruff clean, mypy clean; F-01/F-02 fixed: CompanyScore persistence, architecture doc corrected; independent audit APPROVED 2026-10-13, 3 LOW observations carried as TD-17/18/19)
 - Phase 12.3: Prompts — **COMPLETE + F-01/F-02 REMEDIATED** (136 tests, ruff clean, mypy strict clean; F-01: JSON double-brace defect fixed in 3 prompt builders; F-02: 4 JSON validity regression tests added; F-03 non-blocking XML sanitization deferred as TD-20; awaiting independent re-audit)
-- Phase 12.4: Agent Implementation — NOT STARTED
+- Phase 12.4: Agent Orchestration — **COMPLETE** (66 tests, ruff clean, mypy strict clean, 3360 backend tests passing; 7-step workflow, dual scoring, MV-01–MV-10 validation, token budget enforcement, partial completion; awaiting independent audit)
 - Phase 12.5: Validation Tests — NOT STARTED
 - Phase 12.6: Integration Tests — NOT STARTED
 

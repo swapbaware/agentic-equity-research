@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-14 (Phase 12.3 — Prompts COMPLETE, F-01/F-02 remediation applied, awaiting independent re-audit)
+**Last Updated:** 2026-10-14 (Phase 12.4 — Agent Orchestration COMPLETE, awaiting independent audit)
 
 ---
 
@@ -473,7 +473,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Current Phase
 
-**Current Phase:** Phase 12 — Future Growth & Optionality Agent — IN PROGRESS (12.0 Architecture & Planning COMPLETE, 12.1 Contracts and Constants COMPLETE, 12.2 Tools Implementation COMPLETE + AUDIT APPROVED, 12.3 Prompts COMPLETE — F-01/F-02 remediation applied — awaiting independent re-audit, 12.4-12.6 NOT STARTED)
+**Current Phase:** Phase 12 — Future Growth & Optionality Agent — IN PROGRESS (12.0 Architecture & Planning COMPLETE, 12.1 Contracts and Constants COMPLETE, 12.2 Tools Implementation COMPLETE + AUDIT APPROVED, 12.3 Prompts COMPLETE — F-01/F-02 remediation applied, 12.4 Agent Orchestration COMPLETE — awaiting independent audit, 12.5-12.6 NOT STARTED)
 
 ### Phase 9.1: ResearchRun Schema Migration — COMPLETE
 
@@ -1197,6 +1197,47 @@ Audit verdict: **APPROVED WITH REQUIRED REMEDIATION** (F-01 HIGH blocking, F-02 
 - [ ] **F-03 (non-blocking, NOT FIXED):** XML delimiter sanitization in `_wrap_document` is cross-agent technical debt (TD-20). Not addressed per remediation spec — explicitly non-blocking.
 - [x] Verification: 136/136 Phase 12.3, 117/117 Phase 12.1, 86/86 Phase 12.2, 1791 agent suite, 3360 full backend, ruff lint clean, ruff format clean, mypy strict clean
 - [x] Phase 12.4 NOT STARTED (blocked on independent re-audit)
+
+### Phase 12.4: Future Growth & Optionality Agent Orchestration — COMPLETE (awaiting independent audit)
+
+- [x] `backend/app/agents/future_growth/agent.py` — Full agent orchestration implementation:
+  - `FutureGrowthAgent` class with constructor dependency injection (session, run_service, search, news, corporate_filings, llm)
+  - `execute()` method implementing 7-step sequential workflow: context_load → source_discovery → document_retrieval → evidence_extraction (LLM) → growth_analysis (LLM) → growth_validation (deterministic) → growth_challenge (LLM)
+  - `_run_step_deterministic()` and `_run_step_llm()` step runner helpers with lifecycle management
+  - 3 LLM response parsers: `_parse_evidence_extraction_response`, `_parse_growth_analysis_response`, `_parse_growth_challenge_response`
+  - Deterministic validation `_validate_growth` implementing MV-01 through MV-10 (evidence backing, maturity downgrades, TAM validation, category/maturity enum validation, score clamping, negative TAM nullification)
+  - Helper functions: `_has_fact_revenue_evidence`, `_has_revenue_evidence`, `_replace_maturity`, `_clamp_scores`, `_compute_dimension_score`
+  - Dual scoring: Growth Quality (ScoreDimension.GROWTH_QUALITY) and Future Optionality (ScoreDimension.FUTURE_OPTIONALITY), 0-100
+  - Token budget enforcement: 20,000 total, 16,000 warning threshold, 120s timeout, max 2 LLM attempts
+  - Partial completion semantics: steps_completed >= 5 → PARTIAL, else FAILED
+  - Error handling: StepFailedError, LLMParsingError, TokenBudgetExhaustedError, ProviderError
+  - FindingType classification: FACT, CALCULATION, MANAGEMENT_CLAIM, ANALYST_OPINION, AI_INFERENCE, ASSUMPTION, UNCERTAINTY
+  - ResearchRun lifecycle: initiate_run → create_steps → enqueue → start → steps → complete/partial/fail
+- [x] `backend/tests/agents/test_growth_agent.py` — 66 tests in 13 test classes:
+  - Agent construction / DI (4 tests)
+  - Constants verification (11 tests)
+  - LLM response parsing (6 tests)
+  - Validation MV-01 through MV-10 (12 tests)
+  - Helper functions (8 tests)
+  - Deterministic step runner (2 tests)
+  - LLM step runner with retry (4 tests)
+  - Full happy-path execution (1 test)
+  - Error handling / partial completion (3 tests)
+  - Token budget (3 tests)
+  - Validation result model (2 tests)
+  - Finding type validation (1 test)
+  - Dual scoring (2 tests)
+  - Multiple validation issues (2 tests)
+  - Cascading maturity downgrade (1 test)
+- [x] Quality gates: 66/66 Phase 12.4 tests passing
+- [x] Regression: 3360 full backend tests passing, zero regressions
+- [x] ruff lint clean (backend/)
+- [x] ruff format clean (agent.py, test_growth_agent.py)
+- [x] mypy strict clean (backend/app/agents/future_growth/)
+- [x] No Phase 12.1 contract modifications
+- [x] No Phase 12.2 tool modifications
+- [x] No Phase 12.3 prompt modifications
+- [x] Phase 12.5/12.6 NOT STARTED
 
 ---
 
