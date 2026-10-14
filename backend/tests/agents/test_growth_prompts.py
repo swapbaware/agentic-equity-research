@@ -15,6 +15,8 @@ Acceptance criteria verified:
 
 from __future__ import annotations
 
+import json
+import re
 from datetime import date
 
 import pytest
@@ -866,3 +868,147 @@ class TestDateFabricationProhibition:
         result = growth_challenge_prompt("TCS", "opps", "ev")
         lower = result.lower()
         assert "do not invent" in lower or "do not fabricate" in lower
+
+
+# ===========================================================================
+# F-02 Regression — JSON example blocks must be syntactically valid
+# ===========================================================================
+
+_JSON_BLOCK_RE = re.compile(r"```json\s*\n(.*?)\n```", re.DOTALL)
+
+_QUOTED_PLACEHOLDER_RE = re.compile(r'"<[^>\"{}]+>"')
+_BARE_PLACEHOLDER_RE = re.compile(r"<[^>\"{}]+>")
+
+
+def _extract_and_parse_json_blocks(rendered: str) -> list[dict[str, object]]:
+    """Extract fenced JSON blocks, replace angle-bracket placeholders, parse."""
+    blocks = _JSON_BLOCK_RE.findall(rendered)
+    assert blocks, "No ```json``` block found in rendered prompt"
+    parsed: list[dict[str, object]] = []
+    for raw in blocks:
+        sanitised = _QUOTED_PLACEHOLDER_RE.sub('"PLACEHOLDER"', raw)
+        sanitised = _BARE_PLACEHOLDER_RE.sub('"PLACEHOLDER"', sanitised)
+        obj = json.loads(sanitised)
+        assert isinstance(obj, dict)
+        parsed.append(obj)
+    return parsed
+
+
+class TestJsonExampleValidity:
+    """F-02 regression: JSON examples in rendered prompts must parse correctly.
+
+    These tests defend against the quadruple-brace defect (F-01) by
+    extracting JSON code blocks from each rendered prompt, replacing
+    angle-bracket placeholder values with valid strings, and asserting
+    that ``json.loads`` succeeds with the expected top-level keys.
+    """
+
+    def test_extraction_prompt_json_is_valid(self) -> None:
+        rendered = growth_evidence_extraction_prompt(
+            _COMPANY,
+            _INDUSTRY,
+            _SAMPLE_DOC,
+            _SOURCE_ID,
+            _DOC_TITLE,
+            _OBS_DATE,
+        )
+        parsed_blocks = _extract_and_parse_json_blocks(rendered)
+        assert len(parsed_blocks) == 1
+        obj = parsed_blocks[0]
+        assert "evidences" in obj
+        assert isinstance(obj["evidences"], list)
+        assert len(obj["evidences"]) > 0
+        item = obj["evidences"][0]
+        for key in ("evidence_type", "claim", "context", "page_or_section", "confidence"):
+            assert key in item, f"Missing key {key!r} in evidence item"
+
+    def test_analysis_prompt_json_is_valid(self) -> None:
+        rendered = growth_analysis_prompt(
+            _COMPANY,
+            _INDUSTRY,
+            _SAMPLE_EVIDENCE,
+            None,
+            None,
+            _OBS_DATE,
+        )
+        parsed_blocks = _extract_and_parse_json_blocks(rendered)
+        assert len(parsed_blocks) == 1
+        obj = parsed_blocks[0]
+        for key in (
+            "opportunities",
+            "growth_quality_scores",
+            "future_optionality_scores",
+            "growth_vs_optionality_separation",
+            "themes_identified",
+            "findings",
+        ):
+            assert key in obj, f"Missing key {key!r} in analysis JSON"
+        assert isinstance(obj["opportunities"], list)
+        assert len(obj["opportunities"]) > 0
+        opp = obj["opportunities"][0]
+        for field in (
+            "opportunity_name",
+            "category",
+            "maturity",
+            "addressable_market",
+            "tam_methodology",
+            "tam_low",
+            "tam_high",
+            "timeline_years",
+            "confidence",
+            "evidence_indices",
+            "risks",
+            "rationale",
+        ):
+            assert field in opp, f"Missing field {field!r} in opportunity"
+
+    def test_challenge_prompt_json_is_valid(self) -> None:
+        rendered = growth_challenge_prompt(_COMPANY, _SAMPLE_OPPORTUNITIES, _SAMPLE_EVIDENCE)
+        parsed_blocks = _extract_and_parse_json_blocks(rendered)
+        assert len(parsed_blocks) == 1
+        obj = parsed_blocks[0]
+        for key in ("challenges", "overall_optimism_assessment", "findings"):
+            assert key in obj, f"Missing key {key!r} in challenge JSON"
+        assert isinstance(obj["challenges"], list)
+        assert len(obj["challenges"]) > 0
+        challenge = obj["challenges"][0]
+        for field in (
+            "opportunity_name",
+            "challenge",
+            "tam_challenge",
+            "competitive_risk",
+            "execution_risk",
+            "revised_confidence",
+            "evidence_indices",
+        ):
+            assert field in challenge, f"Missing field {field!r} in challenge item"
+
+    def test_double_brace_defect_absent(self) -> None:
+        """Directly verify no ``{{`` or ``}}`` appear inside JSON blocks."""
+        rendered_prompts: dict[str, str] = {
+            "extraction": growth_evidence_extraction_prompt(
+                _COMPANY,
+                _INDUSTRY,
+                _SAMPLE_DOC,
+                _SOURCE_ID,
+                _DOC_TITLE,
+                _OBS_DATE,
+            ),
+            "analysis": growth_analysis_prompt(
+                _COMPANY,
+                _INDUSTRY,
+                _SAMPLE_EVIDENCE,
+                None,
+                None,
+                _OBS_DATE,
+            ),
+            "challenge": growth_challenge_prompt(
+                _COMPANY,
+                _SAMPLE_OPPORTUNITIES,
+                _SAMPLE_EVIDENCE,
+            ),
+        }
+        for name, rendered in rendered_prompts.items():
+            for block in _JSON_BLOCK_RE.findall(rendered):
+                assert "{{" not in block, f"Double opening brace in JSON block of {name} prompt"
+                assert "}}" not in block, f"Double closing brace in JSON block of {name} prompt"

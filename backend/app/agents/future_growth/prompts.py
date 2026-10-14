@@ -160,17 +160,17 @@ of evidence objects.  Each object must have: evidence_type, claim,
 context (nullable), page_or_section (nullable), confidence.
 
 ```json
-{{{{
+{{
   "evidences": [
-    {{{{
+    {{
       "evidence_type": "<FACT|FINANCIAL_DATA|MANAGEMENT_STATEMENT|ANALYST_OPINION|REGULATORY_FILING>",
       "claim": "<the extracted text or close paraphrase>",
       "context": "<section/page where found, or null>",
       "page_or_section": "<section identifier or null>",
       "confidence": "<HIGH|MEDIUM|LOW>"
-    }}}}
+    }}
   ]
-}}}}
+}}
 ```
 
 ## Document
@@ -389,9 +389,9 @@ be classified by type and category.
 Return a JSON object matching the ``GrowthAnalysisOutput`` schema:
 
 ```json
-{{{{
+{{
   "opportunities": [
-    {{{{
+    {{
       "opportunity_name": "<descriptive name>",
       "category": "<NEW_PRODUCT|NEW_MARKET|ACQUISITION|PARTNERSHIP|GOVERNMENT_INCENTIVE|TECHNOLOGY|EXPANSION>",
       "maturity": "<PROVEN|COMMERCIALIZING|EARLY_STAGE|EXPERIMENTAL|SPECULATIVE>",
@@ -404,37 +404,37 @@ Return a JSON object matching the ``GrowthAnalysisOutput`` schema:
       "evidence_indices": [0, 1],
       "risks": ["risk description 1", "risk description 2"],
       "rationale": "<why this opportunity exists and its assessment>"
-    }}}}
+    }}
   ],
   "growth_quality_scores": [
-    {{{{
+    {{
       "component_name": "<sub-score name>",
       "score": 0,
       "rationale": "<why this score>",
       "evidence_indices": [0]
-    }}}}
+    }}
   ],
   "future_optionality_scores": [
-    {{{{
+    {{
       "component_name": "<sub-score name>",
       "score": 0,
       "rationale": "<why this score>",
       "evidence_indices": [0]
-    }}}}
+    }}
   ],
   "growth_vs_optionality_separation": "<how you distinguished the two dimensions>",
   "themes_identified": ["artificial_intelligence", "manufacturing_pli"],
   "findings": [
-    {{{{
+    {{
       "finding_type": "<FACT|CALCULATION|MANAGEMENT_CLAIM|ANALYST_OPINION|AI_INFERENCE|ASSUMPTION|UNCERTAINTY>",
       "category": "<from GROWTH_FINDING_CATEGORIES>",
       "content": "<the finding>",
       "confidence": "<HIGH|MEDIUM|LOW>",
       "source_publication_date": "<YYYY-MM-DD or null>",
       "evidence_indices": [0, 1]
-    }}}}
+    }}
   ]
-}}}}
+}}
 ```
 """
 
@@ -526,9 +526,9 @@ should be removed entirely.
 Return a JSON object matching the ``GrowthChallengeOutput`` schema:
 
 ```json
-{{{{
+{{
   "challenges": [
-    {{{{
+    {{
       "opportunity_name": "<must match an opportunity name above>",
       "challenge": "<primary challenge or risk>",
       "tam_challenge": "<TAM-specific challenge or null>",
@@ -536,19 +536,19 @@ Return a JSON object matching the ``GrowthChallengeOutput`` schema:
       "execution_risk": "<execution concern or null>",
       "revised_confidence": "<suggested confidence revision or null>",
       "evidence_indices": [0, 1]
-    }}}}
+    }}
   ],
   "overall_optimism_assessment": "<is the overall growth outlook over-optimistic, balanced, or conservative?>",
   "findings": [
-    {{{{
+    {{
       "finding_type": "<AI_INFERENCE|MANAGEMENT_CLAIM|UNCERTAINTY>",
       "category": "<growth_challenge|growth_risk|research_gap|contradiction>",
       "content": "<detailed description>",
       "confidence": "<HIGH|MEDIUM|LOW>",
       "source_publication_date": "<YYYY-MM-DD or null>",
       "evidence_indices": [0, 1]
-    }}}}
+    }}
   ]
-}}}}
+}}
 ```
 """
