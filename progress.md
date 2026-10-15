@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-15 (Phase 12.6 — Integration Tests & TD-38/TD-39 Fixes COMPLETE)
+**Last Updated:** 2026-10-15 (Phase 13.0 — Macro Economics Agent Architecture & Planning COMPLETE)
 
 ---
 
@@ -473,7 +473,9 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Current Phase
 
-**Current Phase:** Phase 12 — Future Growth & Optionality Agent — IN PROGRESS (12.0 Architecture & Planning COMPLETE, 12.1 Contracts and Constants COMPLETE, 12.2 Tools Implementation COMPLETE + AUDIT APPROVED, 12.3 Prompts COMPLETE — F-01/F-02 remediation applied, 12.4 Agent Orchestration COMPLETE — awaiting independent audit, 12.5 Validation Tests COMPLETE, 12.6 Integration Tests & TD-38/TD-39 COMPLETE)
+**Current Phase:** Phase 13 — Macro Economics Agent — IN PROGRESS (13.0 Architecture & Planning COMPLETE)
+
+**Previous Phase:** Phase 12 — Future Growth & Optionality Agent — COMPLETE (12.0-12.6 all complete, 138 growth tests, 3498 backend tests, TD-38/TD-39 resolved)
 
 ### Phase 9.1: ResearchRun Schema Migration — COMPLETE
 
@@ -1356,6 +1358,23 @@ Audit verdict: **APPROVED WITH REQUIRED REMEDIATION** (F-01 HIGH blocking, F-02 
 - [x] Mypy strict: clean (0 issues)
 - [x] Files changed: `backend/app/agents/future_growth/agent.py`, `backend/tests/agents/test_growth_agent.py`, `backend/tests/agents/test_growth_integration.py` (new)
 
+### Phase 13.0: Architecture & Planning — COMPLETE
+
+- [x] Repository discovery: MacroDataProvider Protocol (3 methods), MockMacroDataProvider (3 indicators), MacroIndicator ORM model, provider factory (`macro_data` → `mock` only)
+- [x] Phase 12 test count reconciliation: 3498/3498 passing (TD-6 health test passes in current container with PostgreSQL running)
+- [x] Architecture document: `docs/architecture/phase-13-macro-economics-agent.md` (34 sections)
+- [x] 47 acceptance criteria (AC-01 through AC-47)
+- [x] 10 macro validation rules (MV-01 through MV-10)
+- [x] 15 finding categories in MACRO_FINDING_CATEGORIES
+- [x] 8 macro dimensions: Monetary Policy, Inflation, Growth, Fiscal Policy, External Sector, Commodities, Credit & Banking, Global
+- [x] 8 tools: load_macro_context, discover_macro_sources, retrieve_document, create_research_document, persist_evidence, persist_findings, persist_macro_indicators (NEW), compute_indicator_trends (NEW)
+- [x] Key contracts defined: MacroResearchRequest, MacroConfig, MacroEconomicsResult, MacroRegimeAssessment, MacroTransmissionChannel, SectorMacroSensitivity, MacroAnalysisOutput, MacroChallengeOutput, MacroIndicatorSnapshot, IndicatorTrend, MacroValidationResult
+- [x] 5 open questions (OQ-1 through OQ-5) with proposed resolutions
+- [x] 3 anticipated technical debt items (TD-40, TD-41, TD-42)
+- [x] Implementation subphases defined: 13.1 Contracts, 13.2 Tools, 13.3 Prompts, 13.4 Agent Orchestration, 13.5 Validation Tests, 13.6 Integration Tests
+- [x] Design decisions: no composite macro score (dimensional assessments only), no new database tables (reuses MacroIndicator ORM + research finding/evidence tables), regime levels clamped to [1,5], provider-sourced macro data with Decimal fidelity
+- [x] Updated progress.md, implementation-plan.md
+
 ---
 
 ## Completed Features
@@ -1386,6 +1405,7 @@ Audit verdict: **APPROVED WITH REQUIRED REMEDIATION** (F-01 HIGH blocking, F-02 
 - Industry Research Agent LLM Reasoning (Phase 9.3b.2): LLM stubs replaced with real implementations — evidence extraction (per-document LLM calls with budget checks), industry analysis (finding generation with evidence linking via indices), gap/contradiction detection, finding validation enhanced to 4 criteria (category, content, FACT-evidence, temporal), prompt injection defense, structured output parsing; 76 tests
 - Competitive Moat Agent (Phase 10): contracts (10.1), tools (10.2), prompts (10.3), orchestration (10.4), validation tests (10.5), integration tests (10.6) — 7-step sequential workflow, 16 moat types, 9 deterministic validation checks, token budget enforcement, partial completion semantics, adversarial durability challenge; 379 tests
 - Management & Governance Agent (Phase 11, COMPLETE): contracts (11.1), tools (11.2), prompts (11.3), orchestration (11.4), validation tests (11.5 — audit approved), integration tests (11.6 — audit approved) — 7-step sequential workflow, 24 validation rules (MSV/FV/RF/SV), shareholding analysis, management statement tracking, governance red flags, token budget enforcement; 402 tests (95 validation + 76 agent + 111 prompts + 72 tools + 48 integration)
+- Future Growth & Optionality Agent (Phase 12, COMPLETE): contracts (12.1), tools (12.2 — audit approved), prompts (12.3 — F-01/F-02 remediated), orchestration (12.4 — audit closed), validation tests (12.5 — audit remediated), integration tests + TD-38/TD-39 fixes (12.6) — 7-step sequential workflow, growth quality/optionality scoring, management claim detection with contextual regex, validate-before-persist pattern; 138 tests (109 unit + 29 integration)
 
 ---
 
@@ -1486,6 +1506,7 @@ Audit verdict: **APPROVED WITH REQUIRED REMEDIATION** (F-01 HIGH blocking, F-02 
 
 ## Next Actions
 
-1. **Phase 12: Future Growth & Optionality Agent**
+1. **Phase 13.1: Macro Economics Agent — Contracts & Constants** (next subphase)
+2. **Phase 13.2-13.6**: Tools, Prompts, Agent Orchestration, Validation Tests, Integration Tests
 3. **SEBI XBRL integration** for authoritative financial data
 4. **Evaluate Celery vs Temporal** (ADR-002) for background tasks

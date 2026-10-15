@@ -603,7 +603,7 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - Source attribution
 - Output schema validation
 
-**Status:** IN PROGRESS — Prompts COMPLETE, F-01/F-02 remediation applied, awaiting independent re-audit (Phase 12.3)
+**Status:** COMPLETE
 
 **Architecture Document:** `docs/architecture/phase-12-future-growth-optionality-agent.md`
 
@@ -620,30 +620,50 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 
 ## Phase 13 — Macro Economics Agent
 
-**Goal:** Analyzes macroeconomic factors relevant to the company and sector.
+**Goal:** Analyzes macroeconomic factors relevant to the company and sector across 8 dimensions (Monetary Policy, Inflation, Growth, Fiscal Policy, External Sector, Commodities, Credit & Banking, Global).
 
-**Dependencies:** Phase 7 (research run infrastructure), Phase 4 (MacroData provider).
+**Dependencies:** Phase 7 (research run infrastructure), Phase 4 (MacroData provider), existing MacroDataProvider Protocol + MockMacroDataProvider + MacroIndicator ORM.
 
 **Deliverables:**
-- Macro Economics Agent implementation
-- India-specific macro indicators (GDP, inflation, interest rates, INR)
-- Sector-specific macro sensitivity analysis
-- Regulatory environment assessment
-- Source attribution on all macro data
+- Macro Economics Agent implementation (7-step sequential workflow)
+- India-specific macro indicators (GDP, inflation, interest rates, INR, commodity prices)
+- 8-dimension regime assessment with levels clamped to [1,5]
+- Macro transmission channels linking macro factors to sector/company impact
+- Sector macro sensitivity analysis
+- Scenario analysis (bear/base/bull macro environment)
+- Source attribution on all macro data with evidence linking
+- No composite macro score — dimensional assessments only
 
-**Acceptance Criteria:**
-- Macro data sourced from providers, not fabricated
+**Acceptance Criteria:** 47 acceptance criteria (AC-01 through AC-47) documented in architecture doc.
+- Macro data sourced from providers, not fabricated (MV-01, MV-06)
 - India-specific focus (INR, RBI policy, SEBI regulations)
-- Sensitivity analysis links macro changes to company impact
+- Sensitivity analysis links macro changes to company impact via transmission channels
 - Source tier recorded (Tier 1 for RBI/SEBI data)
+- Forward-looking FACT → AI_INFERENCE (MV-02)
+- Management claims as FACT → MANAGEMENT_CLAIM (MV-03)
+- Regime levels clamped [1,5] (MV-10)
+- 10 validation rules (MV-01 through MV-10)
 
 **Tests:**
 - Output schema validation
 - Macro data source attribution
 - Provider error handling
 - India-specific data correctness
+- 10 validation rule tests
+- Integration tests with mocked providers
 
-**Status:** NOT STARTED
+**Status:** IN PROGRESS — Phase 13.0 Architecture & Planning COMPLETE
+
+**Architecture Document:** `docs/architecture/phase-13-macro-economics-agent.md`
+
+**Implementation Subphases:**
+- Phase 13.0: Architecture & Planning — **COMPLETE** (34-section architecture document, 47 ACs, 10 validation rules, 15 finding categories, 8 macro dimensions, 5 open questions, 3 anticipated TDs)
+- Phase 13.1: Contracts & Constants — NOT STARTED
+- Phase 13.2: Tools Implementation — NOT STARTED
+- Phase 13.3: Prompts — NOT STARTED
+- Phase 13.4: Agent Orchestration — NOT STARTED
+- Phase 13.5: Validation Tests — NOT STARTED
+- Phase 13.6: Integration Tests — NOT STARTED
 
 ---
 
