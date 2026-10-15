@@ -12,6 +12,7 @@ Defines Pydantic v2 frozen models for:
 - Competitive Moat Agent contracts (Phase 10)
 - Management & Governance Agent contracts (Phase 11)
 - Future Growth & Optionality Agent contracts (Phase 12)
+- Macro Economics Agent contracts (Phase 13)
 """
 
 from __future__ import annotations
@@ -1947,6 +1948,401 @@ GROWTH_RESEARCH_STEPS: tuple[StepDefinition, ...] = (
     StepDefinition(
         step_order=7,
         step_name="growth_challenge",
+        step_type=STEP_TYPE_LLM_REASONING,
+        timeout_seconds=120,
+        uses_llm=True,
+    ),
+)
+
+
+# ===========================================================================
+# Macro Economics Agent — constants and contracts (Phase 13)
+# ===========================================================================
+
+MACRO_AGENT_TOKEN_BUDGET: int = 20_000
+MACRO_AGENT_TOKEN_WARNING: int = 16_000
+MACRO_AGENT_NAME: str = "macro_economics_agent"
+MACRO_AGENT_RUN_TYPE: str = "macro_economics"
+
+MACRO_FINDING_CATEGORIES: frozenset[str] = frozenset(
+    {
+        # Dimensional assessments
+        "monetary_policy_assessment",
+        "inflation_assessment",
+        "growth_assessment",
+        "fiscal_policy_assessment",
+        "external_sector_assessment",
+        "commodity_exposure",
+        "credit_banking_assessment",
+        "global_macro_assessment",
+        # Transmission and impact
+        "macro_transmission_channel",
+        "sector_sensitivity",
+        # Forward-looking
+        "macro_risk",
+        "macro_catalyst",
+        "macro_scenario",
+        # Data quality
+        "data_gap",
+        "data_contradiction",
+    }
+)
+
+MACRO_DIMENSIONS: tuple[str, ...] = (
+    "monetary_policy",
+    "inflation",
+    "growth",
+    "fiscal_policy",
+    "external_sector",
+    "commodities",
+    "credit_banking",
+    "global",
+)
+
+REGIME_LABELS: dict[int, str] = {
+    1: "VERY_RESTRICTIVE",
+    2: "RESTRICTIVE",
+    3: "NEUTRAL",
+    4: "SUPPORTIVE",
+    5: "VERY_SUPPORTIVE",
+}
+
+
+# ---------------------------------------------------------------------------
+# Macro Economics Agent — request / config / result contracts
+# ---------------------------------------------------------------------------
+
+
+class MacroConfig(BaseModel):
+    """Agent-level configuration for a Macro Economics Agent run."""
+
+    model_config = ConfigDict(frozen=True)
+
+    token_budget: int = Field(default=MACRO_AGENT_TOKEN_BUDGET, gt=0)
+    token_warning_threshold: int = Field(default=MACRO_AGENT_TOKEN_WARNING, gt=0)
+    max_llm_attempts: int = Field(default=MAX_LLM_ATTEMPTS, ge=1, le=3)
+    source_limit: int = Field(default=30, ge=1, le=100)
+    max_documents: int = Field(default=10, ge=1, le=30)
+    concurrent_retrievals: int = Field(default=5, ge=1, le=20)
+    extraction_model: str | None = None
+    analysis_model: str | None = None
+    challenge_model: str | None = None
+
+
+class MacroResearchRequest(BaseModel):
+    """Input contract for initiating a Macro Economics Agent run."""
+
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    observation_date: date
+    initiated_by: str = Field(min_length=1, max_length=200)
+    configuration: MacroConfig | None = None
+
+
+class MacroEconomicsResult(BaseModel):
+    """Output contract returned by MacroEconomicsAgent.execute()."""
+
+    model_config = ConfigDict(frozen=True)
+
+    status: str = Field(min_length=1, max_length=20)
+    run_id: uuid.UUID
+    findings_count: int = Field(default=0, ge=0)
+    evidence_count: int = Field(default=0, ge=0)
+    indicators_persisted: int = Field(default=0, ge=0)
+    regime_assessments_count: int = Field(default=0, ge=0)
+    transmission_channels_count: int = Field(default=0, ge=0)
+    macro_data_provider_available: bool = True
+    validation_result: MacroValidationResult | None = None
+    steps_completed: int = Field(default=0, ge=0)
+    steps_total: int = Field(default=7, ge=1)
+    token_usage: TokenBudget | None = None
+    errors: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Step 1: Macro Context Load
+# ---------------------------------------------------------------------------
+
+
+class MacroIndicatorSnapshot(BaseModel):
+    """A point-in-time snapshot of a single macro indicator value."""
+
+    model_config = ConfigDict(frozen=True)
+
+    indicator_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    value: Decimal
+    unit: str = Field(min_length=1)
+    as_of_date: date
+    source: str = Field(min_length=1)
+
+
+class LoadMacroContextInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_id: uuid.UUID
+    research_run_id: uuid.UUID
+    observation_date: date
+
+
+class LoadMacroContextOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_name: str
+    sectors: list[str] = Field(default_factory=list)
+    exchange: str = ""
+    prior_findings: list[FindingSummary] = Field(default_factory=list)
+    available_indicators: list[str] = Field(default_factory=list)
+    indicator_snapshots: list[MacroIndicatorSnapshot] = Field(default_factory=list)
+    unavailable_dimensions: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Step 2: Macro Source Discovery
+# ---------------------------------------------------------------------------
+
+
+class DiscoverMacroSourcesInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    company_name: str = Field(min_length=1)
+    sectors: list[str] = Field(default_factory=list)
+    dimensions_to_search: list[str] = Field(default_factory=list)
+    observation_date: date
+
+
+class DiscoverMacroSourcesOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    sources: list[SourceCandidate] = Field(default_factory=list)
+    dimensions_covered: list[str] = Field(default_factory=list)
+    dimensions_still_missing: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Step 4: Evidence Extraction — LLM output schema
+# ---------------------------------------------------------------------------
+
+
+class MacroEvidenceExtractionOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    evidences: list[ExtractedEvidence] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Step 5: Macro Analysis — LLM output schemas
+# ---------------------------------------------------------------------------
+
+
+class MacroRegimeAssessment(BaseModel):
+    """Dimensional regime classification for one macro dimension."""
+
+    model_config = ConfigDict(frozen=True)
+
+    dimension: str = Field(min_length=1)
+    regime_level: int = Field(ge=1, le=5)
+    regime_label: str = Field(min_length=1)
+    confidence: ConfidenceLevel
+    rationale: str = Field(min_length=1)
+    supporting_indicators: list[str] = Field(default_factory=list)
+    evidence_indices: list[int] = Field(default_factory=list)
+
+
+class MacroTransmissionChannel(BaseModel):
+    """Describes how a macro condition affects a sector or company."""
+
+    model_config = ConfigDict(frozen=True)
+
+    macro_dimension: str = Field(min_length=1)
+    indicator_name: str = Field(min_length=1)
+    direction: str = Field(min_length=1)
+    affected_sector: str = Field(min_length=1)
+    impact_direction: str = Field(min_length=1)
+    impact_magnitude: str = Field(min_length=1)
+    mechanism: str = Field(min_length=1)
+    confidence: ConfidenceLevel
+
+
+class SectorMacroSensitivity(BaseModel):
+    """Sector-level macro sensitivity profile."""
+
+    model_config = ConfigDict(frozen=True)
+
+    sector: str = Field(min_length=1)
+    dimension_sensitivities: dict[str, str] = Field(default_factory=dict)
+    key_transmission_channels: list[str] = Field(default_factory=list)
+    overall_macro_exposure: str = Field(min_length=1)
+    rationale: str = Field(min_length=1)
+
+
+class MacroAnalysisOutput(BaseModel):
+    """LLM structured output from macro analysis (Step 5)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    regime_assessments: list[MacroRegimeAssessment] = Field(default_factory=list)
+    transmission_channels: list[MacroTransmissionChannel] = Field(default_factory=list)
+    sector_sensitivity: SectorMacroSensitivity | None = None
+    findings: list[GeneratedFinding] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Step 6: Macro Validation
+# ---------------------------------------------------------------------------
+
+
+class MacroValidationIssue(BaseModel):
+    """A single validation issue found during macro validation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    check_id: str = Field(min_length=1, max_length=10)
+    severity: str = Field(min_length=1)
+    message: str = Field(min_length=1)
+
+
+class MacroValidationResult(BaseModel):
+    """Result of macro validation (Step 6)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    passed: bool
+    issues: list[MacroValidationIssue] = Field(default_factory=list)
+    findings_corrected: int = Field(default=0, ge=0)
+    findings_rejected: int = Field(default=0, ge=0)
+    regimes_clamped: int = Field(default=0, ge=0)
+
+
+# ---------------------------------------------------------------------------
+# Step 7: Macro Challenge — LLM output schemas
+# ---------------------------------------------------------------------------
+
+
+class MacroChallengeItem(BaseModel):
+    """A single challenge raised against a macro assessment."""
+
+    model_config = ConfigDict(frozen=True)
+
+    dimension: str = Field(min_length=1)
+    challenge: str = Field(min_length=1)
+    alternative_interpretation: str | None = None
+    risk: str | None = None
+    catalyst: str | None = None
+    evidence_indices: list[int] = Field(default_factory=list)
+
+
+class MacroChallengeOutput(BaseModel):
+    """LLM structured output from macro challenge (Step 7)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    challenges: list[MacroChallengeItem] = Field(default_factory=list)
+    findings: list[GeneratedFinding] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Macro Economics Agent — deterministic calculation contracts
+# ---------------------------------------------------------------------------
+
+
+class IndicatorTrend(BaseModel):
+    """Deterministic trend calculation for a time-series indicator."""
+
+    model_config = ConfigDict(frozen=True)
+
+    indicator_id: str = Field(min_length=1)
+    current_value: Decimal
+    current_date: date
+    prior_value: Decimal | None = None
+    prior_date: date | None = None
+    absolute_change: Decimal | None = None
+    percentage_change: Decimal | None = None
+    direction: str = Field(min_length=1)
+    data_points_available: int = Field(ge=0)
+
+
+# ---------------------------------------------------------------------------
+# Macro Economics Agent — tool I/O contracts
+# ---------------------------------------------------------------------------
+
+
+class PersistMacroIndicatorsInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    research_run_id: uuid.UUID
+    snapshots: list[MacroIndicatorSnapshot] = Field(min_length=1)
+    country: str = Field(default="IN", min_length=1, max_length=10)
+
+
+class PersistMacroIndicatorsOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    indicator_ids: list[uuid.UUID]
+    persisted_count: int = Field(ge=0)
+
+
+class ComputeIndicatorTrendsInput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    indicator_id: str = Field(min_length=1)
+    data_points: list[tuple[date, Decimal]] = Field(min_length=1)
+    observation_date: date
+
+
+class ComputeIndicatorTrendsOutput(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    trend: IndicatorTrend
+
+
+# ---------------------------------------------------------------------------
+# Macro Economics Agent — step definitions
+# ---------------------------------------------------------------------------
+
+MACRO_RESEARCH_STEPS: tuple[StepDefinition, ...] = (
+    StepDefinition(
+        step_order=1,
+        step_name="context_load",
+        step_type=STEP_TYPE_DETERMINISTIC,
+        timeout_seconds=10,
+    ),
+    StepDefinition(
+        step_order=2,
+        step_name="macro_source_discovery",
+        step_type=STEP_TYPE_PROVIDER_CALL,
+        timeout_seconds=30,
+    ),
+    StepDefinition(
+        step_order=3,
+        step_name="document_retrieval",
+        step_type=STEP_TYPE_PROVIDER_CALL,
+        timeout_seconds=60,
+    ),
+    StepDefinition(
+        step_order=4,
+        step_name="evidence_extraction",
+        step_type=STEP_TYPE_LLM_REASONING,
+        timeout_seconds=120,
+        uses_llm=True,
+    ),
+    StepDefinition(
+        step_order=5,
+        step_name="macro_analysis",
+        step_type=STEP_TYPE_LLM_REASONING,
+        timeout_seconds=120,
+        uses_llm=True,
+    ),
+    StepDefinition(
+        step_order=6,
+        step_name="macro_validation",
+        step_type=STEP_TYPE_DETERMINISTIC,
+        timeout_seconds=10,
+    ),
+    StepDefinition(
+        step_order=7,
+        step_name="macro_challenge",
         step_type=STEP_TYPE_LLM_REASONING,
         timeout_seconds=120,
         uses_llm=True,

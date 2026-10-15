@@ -652,13 +652,13 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - 10 validation rule tests
 - Integration tests with mocked providers
 
-**Status:** IN PROGRESS — Phase 13.0 Architecture & Planning COMPLETE
+**Status:** IN PROGRESS — Phase 13.1 Contracts & Constants COMPLETE
 
 **Architecture Document:** `docs/architecture/phase-13-macro-economics-agent.md`
 
 **Implementation Subphases:**
 - Phase 13.0: Architecture & Planning — **COMPLETE** (34-section architecture document, 47 ACs, 10 validation rules, 15 finding categories, 8 macro dimensions, 5 open questions, 3 anticipated TDs)
-- Phase 13.1: Contracts & Constants — NOT STARTED
+- Phase 13.1: Contracts & Constants — **COMPLETE** (22 frozen Pydantic contracts, 8 constants, 7 step definitions, 157 tests, ruff clean, mypy strict clean)
 - Phase 13.2: Tools Implementation — NOT STARTED
 - Phase 13.3: Prompts — NOT STARTED
 - Phase 13.4: Agent Orchestration — NOT STARTED

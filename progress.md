@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-15 (Phase 13.0 — Macro Economics Agent Architecture & Planning COMPLETE)
+**Last Updated:** 2026-10-15 (Phase 13.1 — Macro Economics Agent Contracts & Constants COMPLETE)
 
 ---
 
@@ -473,7 +473,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Current Phase
 
-**Current Phase:** Phase 13 — Macro Economics Agent — IN PROGRESS (13.0 Architecture & Planning COMPLETE)
+**Current Phase:** Phase 13 — Macro Economics Agent — IN PROGRESS (13.1 Contracts & Constants COMPLETE)
 
 **Previous Phase:** Phase 12 — Future Growth & Optionality Agent — COMPLETE (12.0-12.6 all complete, 138 growth tests, 3498 backend tests, TD-38/TD-39 resolved)
 
@@ -1375,6 +1375,16 @@ Audit verdict: **APPROVED WITH REQUIRED REMEDIATION** (F-01 HIGH blocking, F-02 
 - [x] Design decisions: no composite macro score (dimensional assessments only), no new database tables (reuses MacroIndicator ORM + research finding/evidence tables), regime levels clamped to [1,5], provider-sourced macro data with Decimal fidelity
 - [x] Updated progress.md, implementation-plan.md
 
+### Phase 13.1: Contracts & Constants — COMPLETE
+
+- [x] 8 constants: MACRO_AGENT_TOKEN_BUDGET (20K), MACRO_AGENT_TOKEN_WARNING (16K), MACRO_AGENT_NAME, MACRO_AGENT_RUN_TYPE, MACRO_FINDING_CATEGORIES (frozenset, 15 categories), MACRO_DIMENSIONS (tuple, 8 dimensions), REGIME_LABELS (dict, 5 levels), MACRO_RESEARCH_STEPS (tuple, 7 StepDefinitions)
+- [x] 22 Pydantic v2 frozen contracts: MacroConfig, MacroResearchRequest, MacroEconomicsResult, MacroIndicatorSnapshot, LoadMacroContextInput, LoadMacroContextOutput, DiscoverMacroSourcesInput, DiscoverMacroSourcesOutput, MacroEvidenceExtractionOutput, MacroRegimeAssessment, MacroTransmissionChannel, SectorMacroSensitivity, MacroAnalysisOutput, MacroValidationIssue, MacroValidationResult, MacroChallengeItem, MacroChallengeOutput, IndicatorTrend, PersistMacroIndicatorsInput, PersistMacroIndicatorsOutput, ComputeIndicatorTrendsInput, ComputeIndicatorTrendsOutput
+- [x] All contracts frozen (AC-01), Decimal fidelity (AC-08), 15 finding categories (AC-09), token budget constants (AC-10)
+- [x] 157 tests passing (test_macro_contracts.py), 0 failures
+- [x] Ruff lint clean, ruff format clean, mypy strict clean
+- [x] Full backend regression: 3655 passed, 7 skipped, 0 failed
+- [x] Updated progress.md, implementation-plan.md
+
 ---
 
 ## Completed Features
@@ -1506,7 +1516,7 @@ Audit verdict: **APPROVED WITH REQUIRED REMEDIATION** (F-01 HIGH blocking, F-02 
 
 ## Next Actions
 
-1. **Phase 13.1: Macro Economics Agent — Contracts & Constants** (next subphase)
-2. **Phase 13.2-13.6**: Tools, Prompts, Agent Orchestration, Validation Tests, Integration Tests
+1. **Phase 13.2: Macro Economics Agent — Tools** (next subphase)
+2. **Phase 13.3-13.6**: Prompts, Agent Orchestration, Validation Tests, Integration Tests
 3. **SEBI XBRL integration** for authoritative financial data
 4. **Evaluate Celery vs Temporal** (ADR-002) for background tasks
