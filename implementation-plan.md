@@ -614,7 +614,7 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 - Phase 12.3: Prompts — **COMPLETE + F-01/F-02 REMEDIATED** (136 tests, ruff clean, mypy strict clean; F-01: JSON double-brace defect fixed in 3 prompt builders; F-02: 4 JSON validity regression tests added; F-03 non-blocking XML sanitization deferred as TD-20; awaiting independent re-audit)
 - Phase 12.4: Agent Orchestration — **COMPLETE + AUDIT CLOSED** (66 tests, ruff clean, mypy strict clean; all findings resolved: F-SCOREFINDINGS, F-CASCADE-TEST, F-MACRO, F-MACRO-NOTE corrected; F-PUSH process violations documented)
 - Phase 12.5: Validation Tests — **COMPLETE + AUDIT REMEDIATED** (30 new tests, 96 total; MV-04 + MV-09 production implementation + comprehensive test coverage; ruff clean, mypy strict clean; F-TESTCAT-01: invalid `revenue_growth` category replaced with `management_growth_claim`; F-PERSIST-01: recorded as TD-38; F-FP-01: recorded as TD-39)
-- Phase 12.6: Integration Tests — NOT STARTED
+- Phase 12.6: Integration Tests & TD-38/TD-39 Fixes — **COMPLETE** (29 integration tests, TD-38 resolved: validate-before-persist in Steps 5/7, TD-39 resolved: contextual regex patterns for "guidance of"/"guided for"; 138 total growth tests, 3498 backend tests, ruff clean, mypy strict clean)
 
 ---
 

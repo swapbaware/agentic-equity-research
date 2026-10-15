@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-14 (Phase 12.5 — Validation Tests COMPLETE)
+**Last Updated:** 2026-10-15 (Phase 12.6 — Integration Tests & TD-38/TD-39 Fixes COMPLETE)
 
 ---
 
@@ -473,7 +473,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Current Phase
 
-**Current Phase:** Phase 12 — Future Growth & Optionality Agent — IN PROGRESS (12.0 Architecture & Planning COMPLETE, 12.1 Contracts and Constants COMPLETE, 12.2 Tools Implementation COMPLETE + AUDIT APPROVED, 12.3 Prompts COMPLETE — F-01/F-02 remediation applied, 12.4 Agent Orchestration COMPLETE — awaiting independent audit, 12.5-12.6 NOT STARTED)
+**Current Phase:** Phase 12 — Future Growth & Optionality Agent — IN PROGRESS (12.0 Architecture & Planning COMPLETE, 12.1 Contracts and Constants COMPLETE, 12.2 Tools Implementation COMPLETE + AUDIT APPROVED, 12.3 Prompts COMPLETE — F-01/F-02 remediation applied, 12.4 Agent Orchestration COMPLETE — awaiting independent audit, 12.5 Validation Tests COMPLETE, 12.6 Integration Tests & TD-38/TD-39 COMPLETE)
 
 ### Phase 9.1: ResearchRun Schema Migration — COMPLETE
 
@@ -1261,8 +1261,8 @@ Audit verdict: **APPROVED WITH REQUIRED REMEDIATION** (F-01 HIGH blocking, F-02 
 - TD-20 (XML delimiter sanitization in `_wrap_document`) — cross-agent technical debt
 - TD-36 (120s timeout not enforced by any agent) — architecture specifies per-agent timeout but no agent implements `asyncio.timeout`
 - TD-37 (missing provider usage metadata can bypass token budget) — if `LLMResponse.usage` is absent, budget is not decremented
-- TD-38 (corrected findings not wired into persistence path) — `_step_growth_validation` discards corrected findings; validation runs after initial persistence
-- TD-39 (MV-09 false positives on `"guidance of"` / `"guided for"`) — substring matching can fire on non-management contexts
+- ~~TD-38~~ RESOLVED — `_validate_findings()` now applied before persistence in Steps 5 and 7; corrected findings reach the database
+- ~~TD-39~~ RESOLVED — `"guidance of"` and `"guided for"` replaced with contextual regex patterns requiring "management" within 40 characters
 
 ### Phase 12.5: Future Growth & Optionality Agent Validation Tests — COMPLETE
 
@@ -1314,7 +1314,47 @@ Audit verdict: **APPROVED WITH REQUIRED REMEDIATION** (F-01 HIGH blocking, F-02 
 - [x] F-FP-01 (DOCUMENT): Recorded as TD-39. MV-09 indicators `"guidance of"` and `"guided for"` can produce false positives on non-management content.
 - [x] All 96 tests passing after remediation. No regressions.
 
-**Phase 12.6 has not started.**
+### Phase 12.6: Integration Tests & TD-38/TD-39 Production Fixes — COMPLETE
+
+**Production Fixes:**
+- [x] **TD-38 RESOLVED**: `_validate_findings()` applied before `persist_findings` in Step 5 (growth_analysis) and Step 7 (growth_challenge). Corrected finding types now flow through to persistence.
+- [x] **TD-39 RESOLVED**: MV-09 management-claim indicators refactored into two tiers:
+  - 10 unambiguous `_MGMT_SUBSTRING_INDICATORS` (management-prefixed phrases)
+  - 2 contextual `_MGMT_CONTEXTUAL_PATTERNS` (regex requiring "management" within 40 chars before "guidance of" / "guided for")
+  - New `_has_management_claim_language()` helper function
+- [x] **Ruff SIM102 fix**: Combined nested `if` statements in MV-09 check
+
+**Unit Test Updates (test_growth_agent.py):**
+- [x] Updated `test_all_management_indicators_detected` (10 indicators, was 12)
+- [x] Added `test_contextual_guidance_of_with_management` and `test_contextual_guided_for_with_management`
+- [x] Added `TestMV09FalsePositiveRegression` (12 tests):
+  - False negatives: central bank guidance, analyst guided, SEBI guidance, RBI guided
+  - True positives: management guidance of, management guided for
+  - Case insensitive management guidance
+  - Direct `_has_management_claim_language` function tests
+- [x] Total unit tests: 109/109 passing
+
+**Integration Tests (test_growth_integration.py — NEW FILE):**
+- [x] **TestEndToEndSuccess** (3 tests): AC-31 — full pipeline, metadata, step ordering
+- [x] **TestScorePersistence** (3 tests): AC-33, AC-34 — growth quality and optionality scores
+- [x] **TestTD38FindingCorrectionPersistence** (10 tests): MV-04/MV-09 correction before persistence, precedence, challenge findings, mixed findings, metadata preservation, no duplicates, result agreement
+- [x] **TestOpportunityPersistence** (1 test): AC-31, AC-32 — opportunities with evidence IDs
+- [x] **TestTokenBudgetExhaustion** (1 test): AC-35 — budget exhaustion → partial
+- [x] **TestProviderFailure** (2 tests): AC-36 — early failure → FAILED, late failure → PARTIAL
+- [x] **TestQualityGateManagementClaim** (1 test): AC-37 — management claim never persisted as FACT
+- [x] **TestQualityGateForwardLooking** (1 test): AC-38 — forward-looking FACT never persisted as FACT
+- [x] **TestEmptyAndPartialOutputs** (2 tests): empty findings, invalid finding isolation
+- [x] **TestTD39HardenedDetectionIntegration** (2 tests): false positive prevention, true positive detection
+- [x] **TestRegressionGuards** (3 tests): frozen result, validation result, evidence count
+- [x] Total integration tests: 29/29 passing
+
+**Quality Gates:**
+- [x] 138/138 growth tests passing (109 unit + 29 integration)
+- [x] 3498/3498 full backend tests passing, 0 failures, 7 skipped
+- [x] Ruff check: clean (0 errors)
+- [x] Ruff format: clean (0 reformats needed)
+- [x] Mypy strict: clean (0 issues)
+- [x] Files changed: `backend/app/agents/future_growth/agent.py`, `backend/tests/agents/test_growth_agent.py`, `backend/tests/agents/test_growth_integration.py` (new)
 
 ---
 

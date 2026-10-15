@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 import uuid
 from collections.abc import Awaitable, Callable
@@ -659,7 +660,7 @@ class FutureGrowthAgent:
 
         output = _parse_growth_analysis_response(response)
 
-        finding_items = [
+        raw_findings = [
             FindingItem(
                 agent_name=GROWTH_AGENT_NAME,
                 finding_type=gf.finding_type,
@@ -671,6 +672,9 @@ class FutureGrowthAgent:
             )
             for gf in output.findings
         ]
+        validation_issues: list[GrowthValidationIssue] = []
+        finding_items = _validate_findings(raw_findings, validation_issues)
+
         finding_ids: list[uuid.UUID] = []
         if finding_items:
             persist_result = await self._tools.persist_findings(
@@ -795,7 +799,7 @@ class FutureGrowthAgent:
 
         output = _parse_growth_challenge_response(response)
 
-        finding_items = [
+        raw_findings = [
             FindingItem(
                 agent_name=GROWTH_AGENT_NAME,
                 finding_type=gf.finding_type,
@@ -807,6 +811,9 @@ class FutureGrowthAgent:
             )
             for gf in output.findings
         ]
+        challenge_issues: list[GrowthValidationIssue] = []
+        finding_items = _validate_findings(raw_findings, challenge_issues)
+
         finding_ids: list[uuid.UUID] = []
         if finding_items:
             persist_result = await self._tools.persist_findings(
@@ -1170,6 +1177,31 @@ _FORWARD_LOOKING_CATEGORIES: frozenset[str] = frozenset(
     }
 )
 
+_MGMT_SUBSTRING_INDICATORS: tuple[str, ...] = (
+    "management guided",
+    "management expects",
+    "management stated",
+    "management announced",
+    "management plans",
+    "according to management",
+    "management indicated",
+    "management projected",
+    "management commentary",
+    "management believes",
+)
+
+_MGMT_CONTEXTUAL_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"management[\s\S]{0,40}guidance\s+of", re.IGNORECASE),
+    re.compile(r"management[\s\S]{0,40}guided\s+for", re.IGNORECASE),
+)
+
+
+def _has_management_claim_language(content: str) -> bool:
+    content_lower = content.lower()
+    if any(indicator in content_lower for indicator in _MGMT_SUBSTRING_INDICATORS):
+        return True
+    return any(pat.search(content) for pat in _MGMT_CONTEXTUAL_PATTERNS)
+
 
 def _validate_findings(
     findings: list[FindingItem],
@@ -1204,44 +1236,30 @@ def _validate_findings(
             )
 
         # MV-09: MANAGEMENT_CLAIM must not be classified as FACT or CALCULATION
-        if current.finding_type in (FindingType.FACT, FindingType.CALCULATION):
-            content_lower = current.content.lower()
-            mgmt_indicators = (
-                "management guided",
-                "management expects",
-                "management stated",
-                "management announced",
-                "management plans",
-                "according to management",
-                "management indicated",
-                "management projected",
-                "management commentary",
-                "guidance of",
-                "guided for",
-                "management believes",
-            )
-            if any(indicator in content_lower for indicator in mgmt_indicators):
-                issues.append(
-                    GrowthValidationIssue(
-                        check_id="MV-09",
-                        severity="ERROR",
-                        opportunity_name=None,
-                        message=(
-                            f"Finding contains management-claim language but classified "
-                            f"as {current.finding_type.value}; reclassifying to MANAGEMENT_CLAIM"
-                        ),
+        if current.finding_type in (FindingType.FACT, FindingType.CALCULATION) and _has_management_claim_language(
+            current.content
+        ):
+            issues.append(
+                GrowthValidationIssue(
+                    check_id="MV-09",
+                    severity="ERROR",
+                    opportunity_name=None,
+                    message=(
+                        f"Finding contains management-claim language but classified "
+                        f"as {current.finding_type.value}; reclassifying to MANAGEMENT_CLAIM"
                     ),
-                )
-                current = FindingItem(
-                    agent_name=current.agent_name,
-                    finding_type=FindingType.MANAGEMENT_CLAIM,
-                    category=current.category,
-                    content=current.content,
-                    confidence=current.confidence,
-                    observation_date=current.observation_date,
-                    source_publication_date=current.source_publication_date,
-                    evidence_ids=current.evidence_ids,
-                )
+                ),
+            )
+            current = FindingItem(
+                agent_name=current.agent_name,
+                finding_type=FindingType.MANAGEMENT_CLAIM,
+                category=current.category,
+                content=current.content,
+                confidence=current.confidence,
+                observation_date=current.observation_date,
+                source_publication_date=current.source_publication_date,
+                evidence_ids=current.evidence_ids,
+            )
 
         corrected.append(current)
     return corrected

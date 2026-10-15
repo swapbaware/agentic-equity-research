@@ -68,6 +68,7 @@ from app.agents.future_growth.agent import (
     _clamp_scores,
     _compute_dimension_score,
     _has_fact_revenue_evidence,
+    _has_management_claim_language,
     _has_revenue_evidence,
     _parse_evidence_extraction_response,
     _parse_growth_analysis_response,
@@ -1646,8 +1647,6 @@ class TestMV09ManagementClaimReclassification:
             "management indicated",
             "management projected",
             "management commentary",
-            "guidance of",
-            "guided for",
             "management believes",
         ]
         for indicator in indicators:
@@ -1659,6 +1658,26 @@ class TestMV09ManagementClaimReclassification:
             issues: list[GrowthValidationIssue] = []
             result = _validate_findings([finding], issues)
             assert result[0].finding_type == FindingType.MANAGEMENT_CLAIM, f"Indicator '{indicator}' not detected"
+
+    def test_contextual_guidance_of_with_management(self) -> None:
+        finding = _make_finding(
+            content="Management provided guidance of 20% revenue growth for FY26",
+            finding_type=FindingType.FACT,
+            category="management_growth_claim",
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        assert result[0].finding_type == FindingType.MANAGEMENT_CLAIM
+
+    def test_contextual_guided_for_with_management(self) -> None:
+        finding = _make_finding(
+            content="Management guided for a 15% increase in EBITDA margins",
+            finding_type=FindingType.FACT,
+            category="management_growth_claim",
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        assert result[0].finding_type == FindingType.MANAGEMENT_CLAIM
 
     def test_no_management_language_fact_unchanged(self) -> None:
         finding = _make_finding(
@@ -1916,3 +1935,103 @@ class TestForwardLookingCategories:
     def test_expected_categories_present(self) -> None:
         expected = {"growth_opportunity", "tam_estimate", "growth_trajectory", "growth_challenge"}
         assert expected <= _FORWARD_LOOKING_CATEGORIES
+
+
+# ===========================================================================
+# 20. TD-39 — MV-09 false-positive regression tests
+# ===========================================================================
+
+
+class TestMV09FalsePositiveRegression:
+    """Verify TD-39 hardening: 'guidance of' and 'guided for' no longer
+    produce false positives without management context."""
+
+    def test_central_bank_guidance_not_reclassified(self) -> None:
+        finding = _make_finding(
+            content="Under the guidance of the central bank, interest rates were kept stable",
+            finding_type=FindingType.FACT,
+            category="management_growth_claim",
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        assert result[0].finding_type == FindingType.FACT
+        assert len(issues) == 0
+
+    def test_analyst_guided_for_not_reclassified(self) -> None:
+        finding = _make_finding(
+            content="The analyst guided for a P/E of 25x based on peer comparison",
+            finding_type=FindingType.FACT,
+            category="management_growth_claim",
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        assert result[0].finding_type == FindingType.FACT
+        assert len(issues) == 0
+
+    def test_regulatory_guidance_not_reclassified(self) -> None:
+        finding = _make_finding(
+            content="SEBI issued guidance of stricter disclosure norms",
+            finding_type=FindingType.FACT,
+            category="management_growth_claim",
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        assert result[0].finding_type == FindingType.FACT
+        assert len(issues) == 0
+
+    def test_rbi_guided_for_not_reclassified(self) -> None:
+        finding = _make_finding(
+            content="RBI guided for a cautious approach to lending growth",
+            finding_type=FindingType.FACT,
+            category="management_growth_claim",
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        assert result[0].finding_type == FindingType.FACT
+        assert len(issues) == 0
+
+    def test_management_guidance_of_reclassified(self) -> None:
+        finding = _make_finding(
+            content="The management gave guidance of 18-20% growth for next fiscal year",
+            finding_type=FindingType.FACT,
+            category="management_growth_claim",
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        assert result[0].finding_type == FindingType.MANAGEMENT_CLAIM
+
+    def test_management_guided_for_reclassified(self) -> None:
+        finding = _make_finding(
+            content="Management guided for margin expansion of 200bps in H2",
+            finding_type=FindingType.FACT,
+            category="management_growth_claim",
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        assert result[0].finding_type == FindingType.MANAGEMENT_CLAIM
+
+    def test_management_guidance_case_insensitive(self) -> None:
+        finding = _make_finding(
+            content="MANAGEMENT provided GUIDANCE OF 25% revenue growth",
+            finding_type=FindingType.CALCULATION,
+            category="management_growth_claim",
+        )
+        issues: list[GrowthValidationIssue] = []
+        result = _validate_findings([finding], issues)
+        assert result[0].finding_type == FindingType.MANAGEMENT_CLAIM
+
+    def test_has_management_claim_language_direct_positive(self) -> None:
+        assert _has_management_claim_language("Management expects 20% growth")
+        assert _has_management_claim_language("according to management, revenue will grow")
+
+    def test_has_management_claim_language_direct_negative(self) -> None:
+        assert not _has_management_claim_language("Revenue grew 20% in FY24")
+        assert not _has_management_claim_language("Under the guidance of RBI")
+
+    def test_has_management_claim_language_contextual_positive(self) -> None:
+        assert _has_management_claim_language("Management provided guidance of 20% growth")
+        assert _has_management_claim_language("The management team guided for 15% CAGR")
+
+    def test_has_management_claim_language_contextual_negative(self) -> None:
+        assert not _has_management_claim_language("The analyst guided for a P/E of 25x")
+        assert not _has_management_claim_language("Under the guidance of central bank norms")
