@@ -1261,6 +1261,8 @@ Audit verdict: **APPROVED WITH REQUIRED REMEDIATION** (F-01 HIGH blocking, F-02 
 - TD-20 (XML delimiter sanitization in `_wrap_document`) — cross-agent technical debt
 - TD-36 (120s timeout not enforced by any agent) — architecture specifies per-agent timeout but no agent implements `asyncio.timeout`
 - TD-37 (missing provider usage metadata can bypass token budget) — if `LLMResponse.usage` is absent, budget is not decremented
+- TD-38 (corrected findings not wired into persistence path) — `_step_growth_validation` discards corrected findings; validation runs after initial persistence
+- TD-39 (MV-09 false positives on `"guidance of"` / `"guided for"`) — substring matching can fire on non-management contexts
 
 ### Phase 12.5: Future Growth & Optionality Agent Validation Tests — COMPLETE
 
@@ -1305,6 +1307,12 @@ Audit verdict: **APPROVED WITH REQUIRED REMEDIATION** (F-01 HIGH blocking, F-02 
 - [x] Quality gates: 96/96 tests passing (30 new), ruff check clean, ruff format clean, mypy strict clean
 - [x] No regressions in existing 66 Phase 12.4 tests
 - [x] Files changed: `backend/app/agents/future_growth/agent.py`, `backend/tests/agents/test_growth_agent.py`
+
+**Phase 12.5 Audit Remediation — COMPLETE:**
+- [x] F-TESTCAT-01 (REQUIRED): Replaced all `category="revenue_growth"` with `category="management_growth_claim"` in MV-09 test fixtures. `revenue_growth` was not a valid member of `GROWTH_FINDING_CATEGORIES`; `management_growth_claim` is valid and semantically correct for management-language test content. Also fixed stale assertion `assert corrected.category == "revenue_growth"` → `"management_growth_claim"`.
+- [x] F-PERSIST-01 (DOCUMENT): Recorded as TD-38. `_step_growth_validation` at line 711 does not pass findings to `_validate_growth()` and discards corrected findings with `_`. Findings persist at Steps 5 and 7 before Step 6 (validation) runs.
+- [x] F-FP-01 (DOCUMENT): Recorded as TD-39. MV-09 indicators `"guidance of"` and `"guided for"` can produce false positives on non-management content.
+- [x] All 96 tests passing after remediation. No regressions.
 
 **Phase 12.6 has not started.**
 
@@ -1431,6 +1439,8 @@ Audit verdict: **APPROVED WITH REQUIRED REMEDIATION** (F-01 HIGH blocking, F-02 
 | TD-19 | `test_second_dimension_not_persisted_when_first_fails` verifies method-call sequencing, not actual DB transaction rollback. Appropriate for unit tests with mocked sessions. | Phase 12.2 audit O-3 | True transactional verification belongs in Phase 12.6 integration tests (AC-33, AC-34) |
 | TD-36 | Architecture Section 27 specifies 120-second per-agent execution timeout. No agent (CompetitiveMoatAgent, ManagementGovernanceAgent, FutureGrowthAgent) implements `asyncio.timeout` or `asyncio.wait_for`. Cross-agent gap. | Phase 12.4 audit | Address as cross-cutting concern when timeout enforcement is needed |
 | TD-37 | If a provider's `LLMResponse.usage` field is missing or returns `None`, the token budget is not decremented. Budget enforcement relies on providers correctly reporting usage metadata. | Phase 12.4 audit | Add defensive nil-check on `response.usage` before recording; affects all LLM-using agents |
+| TD-38 | `_step_growth_validation` (agent.py line 711) calls `_validate_growth()` without passing findings and discards corrected findings with `_ = ...`. Findings are persisted at Steps 5 (line 676) and 7 (line 812) BEFORE Step 6 (validation) runs. Corrected findings from `_validate_findings()` are computed but never wired into the persistence path. | Phase 12.5 audit (F-PERSIST-01) | Phase 12.6 must wire the corrected findings into the workflow: pass findings to `_validate_growth()`, capture the returned corrected list, and either re-persist or persist after validation |
+| TD-39 | MV-09 management-claim indicators `"guidance of"` and `"guided for"` use simple substring matching that can produce false positives on non-management content (e.g., "Under the guidance of the central bank", "The analyst guided for a P/E of 25x"). Other indicators like `"expects to"` and `"aims to"` may have similar edge cases. | Phase 12.5 audit (F-FP-01) | Phase 12.6 hardening should add contextual checks (word-boundary matching, speaker attribution, phrase-boundary analysis) or promote to regex patterns with negative lookbehind/lookahead |
 
 ---
 

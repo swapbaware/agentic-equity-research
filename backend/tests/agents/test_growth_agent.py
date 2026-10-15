@@ -1605,7 +1605,7 @@ class TestMV09ManagementClaimReclassification:
         finding = _make_finding(
             content="Management guided for 20% revenue growth in FY25",
             finding_type=FindingType.FACT,
-            category="revenue_growth",
+            category="management_growth_claim",
         )
         issues: list[GrowthValidationIssue] = []
         result = _validate_findings([finding], issues)
@@ -1617,7 +1617,7 @@ class TestMV09ManagementClaimReclassification:
         finding = _make_finding(
             content="Management expects EBITDA margin to expand 200bps",
             finding_type=FindingType.CALCULATION,
-            category="revenue_growth",
+            category="management_growth_claim",
         )
         issues: list[GrowthValidationIssue] = []
         result = _validate_findings([finding], issues)
@@ -1629,7 +1629,7 @@ class TestMV09ManagementClaimReclassification:
         finding = _make_finding(
             content="According to management, capex will be Rs 500cr",
             finding_type=FindingType.FACT,
-            category="revenue_growth",
+            category="management_growth_claim",
         )
         issues: list[GrowthValidationIssue] = []
         result = _validate_findings([finding], issues)
@@ -1654,7 +1654,7 @@ class TestMV09ManagementClaimReclassification:
             finding = _make_finding(
                 content=f"The company: {indicator} a 15% growth target",
                 finding_type=FindingType.FACT,
-                category="revenue_growth",
+                category="management_growth_claim",
             )
             issues: list[GrowthValidationIssue] = []
             result = _validate_findings([finding], issues)
@@ -1664,7 +1664,7 @@ class TestMV09ManagementClaimReclassification:
         finding = _make_finding(
             content="Revenue grew 15% YoY to Rs 1000cr in FY24",
             finding_type=FindingType.FACT,
-            category="revenue_growth",
+            category="management_growth_claim",
         )
         issues: list[GrowthValidationIssue] = []
         result = _validate_findings([finding], issues)
@@ -1675,7 +1675,7 @@ class TestMV09ManagementClaimReclassification:
         finding = _make_finding(
             content="Management guided for 20% growth, which seems aggressive",
             finding_type=FindingType.AI_INFERENCE,
-            category="revenue_growth",
+            category="management_growth_claim",
         )
         issues: list[GrowthValidationIssue] = []
         result = _validate_findings([finding], issues)
@@ -1686,7 +1686,7 @@ class TestMV09ManagementClaimReclassification:
         finding = _make_finding(
             content="Management guided for 20% growth",
             finding_type=FindingType.MANAGEMENT_CLAIM,
-            category="revenue_growth",
+            category="management_growth_claim",
         )
         issues: list[GrowthValidationIssue] = []
         result = _validate_findings([finding], issues)
@@ -1697,7 +1697,7 @@ class TestMV09ManagementClaimReclassification:
         finding = _make_finding(
             content="MANAGEMENT GUIDED for 20% revenue growth",
             finding_type=FindingType.FACT,
-            category="revenue_growth",
+            category="management_growth_claim",
         )
         issues: list[GrowthValidationIssue] = []
         result = _validate_findings([finding], issues)
@@ -1707,7 +1707,7 @@ class TestMV09ManagementClaimReclassification:
         finding = FindingItem(
             agent_name="test_agent",
             finding_type=FindingType.FACT,
-            category="revenue_growth",
+            category="management_growth_claim",
             content="Management guided for expansion",
             confidence=ConfidenceLevel.LOW,
             observation_date=OBS_DATE,
@@ -1719,7 +1719,7 @@ class TestMV09ManagementClaimReclassification:
         corrected = result[0]
         assert corrected.finding_type == FindingType.MANAGEMENT_CLAIM
         assert corrected.agent_name == "test_agent"
-        assert corrected.category == "revenue_growth"
+        assert corrected.category == "management_growth_claim"
         assert corrected.content == "Management guided for expansion"
         assert corrected.confidence == ConfidenceLevel.LOW
         assert corrected.evidence_ids == [EVIDENCE_UUID_1, EVIDENCE_UUID_2]
@@ -1751,7 +1751,7 @@ class TestMV04MV09Interaction:
         finding = _make_finding(
             content="Management expects revenue to grow 20%",
             finding_type=FindingType.FACT,
-            category="revenue_growth",
+            category="management_growth_claim",
         )
         issues: list[GrowthValidationIssue] = []
         result = _validate_findings([finding], issues)
@@ -1769,12 +1769,12 @@ class TestMV04MV09Interaction:
             _make_finding(
                 content="Management guided for 30% capex increase",
                 finding_type=FindingType.CALCULATION,
-                category="revenue_growth",
+                category="management_growth_claim",
             ),
             _make_finding(
                 content="Revenue was Rs 500cr in FY24",
                 finding_type=FindingType.FACT,
-                category="revenue_growth",
+                category="management_growth_claim",
             ),
         ]
         issues: list[GrowthValidationIssue] = []
@@ -1801,7 +1801,7 @@ class TestValidateFindingsEdgeCases:
         findings = [
             _make_finding(finding_type=FindingType.AI_INFERENCE, category="growth_opportunity"),
             _make_finding(finding_type=FindingType.ASSUMPTION, category="tam_estimate"),
-            _make_finding(finding_type=FindingType.MANAGEMENT_CLAIM, category="revenue_growth"),
+            _make_finding(finding_type=FindingType.MANAGEMENT_CLAIM, category="management_growth_claim"),
         ]
         issues: list[GrowthValidationIssue] = []
         result = _validate_findings(findings, issues)
