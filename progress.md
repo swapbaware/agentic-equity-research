@@ -1406,6 +1406,16 @@ Audit verdict: **APPROVED WITH REQUIRED REMEDIATION** (F-01 HIGH blocking, F-02 
 - [x] Ruff lint clean, mypy strict clean (new files only; pre-existing mypy issue in test_macro_contracts.py line 1458 unrelated)
 - [x] Updated progress.md, implementation-plan.md
 
+#### Phase 13.2 Audit Remediation (F-01, F-02, F-03)
+
+- [x] **F-03 (MEDIUM, required):** Aligned `_DIMENSION_SEARCH_TEMPLATES` keys to match `MACRO_DIMENSIONS` exactly. Removed obsolete keys (`currency`, `gdp_growth`, `trade_policy`, `regulatory`). Added new keys (`growth`, `external_sector`, `credit_banking`, `global`) with domain-specific search templates preserving useful concepts from removed entries. 9 new tests verify exact key alignment, non-empty templates, format placeholders, domain concept retention, fallback behavior, and full 8-dimension coverage.
+- [x] **F-01 (LOW):** Applied `ruff format` to `tools.py`. Both `ruff format --check` and `ruff check` pass.
+- [x] **F-02 (LOW):** Removed unused `_STABLE_THRESHOLD_LEVEL_PCT` constant. Architecture §20 thresholds are numerically equal (0.50 pp = 0.5%); a single `_STABLE_THRESHOLD_RATE` suffices.
+- [x] 70 tests passing (test_macro_tools.py: 61 original + 9 new), 0 failures
+- [x] 2156 total agent tests pass, 0 failures
+- [x] 3724 full backend tests pass, 7 skipped, 1 failed (pre-existing infrastructure test_ready_returns_200)
+- [x] Ruff lint clean, ruff format clean, mypy strict clean (all changed files)
+
 ---
 
 ## Completed Features

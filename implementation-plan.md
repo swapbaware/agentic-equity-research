@@ -659,7 +659,7 @@ Evidence repository (async CRUD), evidence service layer, evidence API endpoints
 **Implementation Subphases:**
 - Phase 13.0: Architecture & Planning — **COMPLETE** (34-section architecture document, 47 ACs, 10 validation rules, 15 finding categories, 8 macro dimensions, 5 open questions, 3 anticipated TDs)
 - Phase 13.1: Contracts & Constants — **COMPLETE** (22 frozen Pydantic contracts, 8 constants, 7 step definitions, 157 tests, ruff clean, mypy strict clean)
-- Phase 13.2: Tools & Provider Integration — **COMPLETE** (F-01 resolved, 8 tools in MacroEconomicsTools class, 2 new macro-specific tools, 61 tests, ruff clean, mypy strict clean)
+- Phase 13.2: Tools & Provider Integration — **COMPLETE** (8 tools in MacroEconomicsTools class, 2 new macro-specific tools, 70 tests, ruff clean, mypy strict clean; audit findings F-01/F-02/F-03 remediated)
 - Phase 13.3: Prompts — NOT STARTED
 - Phase 13.4: Agent Orchestration — NOT STARTED
 - Phase 13.5: Validation Tests — NOT STARTED

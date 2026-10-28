@@ -29,6 +29,7 @@ import pytest
 
 from app.agents.contracts import (
     MACRO_AGENT_NAME,
+    MACRO_DIMENSIONS,
     ComputeIndicatorTrendsInput,
     DiscoverMacroSourcesInput,
     EvidenceItem,
@@ -44,6 +45,7 @@ from app.agents.contracts import (
 )
 from app.agents.macro_economics.exceptions import CompanyNotFoundForMacroError
 from app.agents.macro_economics.tools import (
+    _DIMENSION_SEARCH_TEMPLATES,
     MacroEconomicsTools,
     _classify_macro_source,
     _tier_from_url,
@@ -1360,6 +1362,94 @@ class TestComputeIndicatorTrends:
         )
         result = MacroEconomicsTools.compute_indicator_trends(inp)
         assert result.trend.direction == "INCREASING"
+
+
+# ===========================================================================
+# F-03 regression: _DIMENSION_SEARCH_TEMPLATES alignment with MACRO_DIMENSIONS
+# ===========================================================================
+
+
+class TestDimensionSearchTemplateAlignment:
+    def test_template_keys_match_macro_dimensions_exactly(self) -> None:
+        """Template keys must equal the set of MACRO_DIMENSIONS — no extras, no missing."""
+        assert set(_DIMENSION_SEARCH_TEMPLATES.keys()) == set(MACRO_DIMENSIONS)
+
+    def test_every_dimension_has_nonempty_templates(self) -> None:
+        for dim in MACRO_DIMENSIONS:
+            templates = _DIMENSION_SEARCH_TEMPLATES[dim]
+            assert len(templates) >= 1, f"Dimension {dim!r} has no templates"
+            for t in templates:
+                assert len(t.strip()) > 0, f"Dimension {dim!r} has blank template"
+
+    def test_templates_contain_format_placeholders(self) -> None:
+        """Every template uses at least one of {company} or {sector}."""
+        for dim, templates in _DIMENSION_SEARCH_TEMPLATES.items():
+            for t in templates:
+                assert "{company}" in t or "{sector}" in t, f"Template {t!r} in {dim!r} lacks {{company}} or {{sector}}"
+
+    def test_growth_dimension_has_gdp_concepts(self) -> None:
+        joined = " ".join(_DIMENSION_SEARCH_TEMPLATES["growth"]).lower()
+        assert "gdp" in joined or "growth" in joined
+
+    def test_external_sector_has_currency_or_trade_concepts(self) -> None:
+        joined = " ".join(_DIMENSION_SEARCH_TEMPLATES["external_sector"]).lower()
+        has_currency = any(w in joined for w in ("rupee", "exchange rate", "inr", "currency"))
+        has_trade = any(w in joined for w in ("trade", "import", "export", "tariff"))
+        assert has_currency or has_trade
+
+    def test_credit_banking_has_credit_concepts(self) -> None:
+        joined = " ".join(_DIMENSION_SEARCH_TEMPLATES["credit_banking"]).lower()
+        assert "credit" in joined or "banking" in joined or "lending" in joined
+
+    def test_global_has_global_concepts(self) -> None:
+        joined = " ".join(_DIMENSION_SEARCH_TEMPLATES["global"]).lower()
+        assert "global" in joined or "fed" in joined or "china" in joined
+
+    @pytest.mark.asyncio
+    async def test_unknown_dimension_uses_fallback(self) -> None:
+        """Dimensions not in templates use the generic fallback."""
+        search = AsyncMock()
+        search.search = AsyncMock(
+            return_value=[
+                SearchResult(title="R", url="https://example.com/1", snippet="..."),
+            ]
+        )
+        news = AsyncMock()
+        news.search_news = AsyncMock(return_value=[])
+
+        tools = _make_tools(search=search, news=news)
+
+        inp = DiscoverMacroSourcesInput(
+            company_name="HDFC Bank",
+            sectors=["Banking"],
+            dimensions_to_search=["invented_dimension"],
+            observation_date=OBSERVATION_DATE,
+        )
+        result = await tools.discover_macro_sources(inp)
+        assert "invented_dimension" in result.dimensions_covered
+
+    @pytest.mark.asyncio
+    async def test_all_eight_dimensions_covered(self) -> None:
+        """When search returns results, all 8 MACRO_DIMENSIONS are covered."""
+        search = AsyncMock()
+        search.search = AsyncMock(
+            return_value=[
+                SearchResult(title="R", url="https://example.com/x", snippet="..."),
+            ]
+        )
+        news = AsyncMock()
+        news.search_news = AsyncMock(return_value=[])
+
+        tools = _make_tools(search=search, news=news)
+
+        inp = DiscoverMacroSourcesInput(
+            company_name="HDFC Bank",
+            sectors=["Banking"],
+            observation_date=OBSERVATION_DATE,
+        )
+        result = await tools.discover_macro_sources(inp)
+        assert set(result.dimensions_covered) == set(MACRO_DIMENSIONS)
+        assert result.dimensions_still_missing == []
 
 
 # ===========================================================================

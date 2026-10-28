@@ -75,7 +75,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _STABLE_THRESHOLD_RATE = Decimal("0.50")
-_STABLE_THRESHOLD_LEVEL_PCT = Decimal("0.5")
 _PCT_SCALE = Decimal("100")
 _PCT_QUANTIZE = Decimal("0.0001")
 
@@ -88,29 +87,29 @@ _DIMENSION_SEARCH_TEMPLATES: dict[str, list[str]] = {
         "{company} inflation CPI WPI impact",
         "India inflation {sector} input cost",
     ],
+    "growth": [
+        "{company} GDP economic growth India",
+        "India GDP growth {sector} outlook",
+    ],
     "fiscal_policy": [
         "{company} government budget fiscal policy",
         "India fiscal policy tax {sector}",
     ],
-    "currency": [
+    "external_sector": [
         "{company} rupee exchange rate INR USD impact",
-        "India currency {sector} import export",
-    ],
-    "gdp_growth": [
-        "{company} GDP economic growth India",
-        "India GDP growth {sector} outlook",
-    ],
-    "trade_policy": [
-        "{company} trade policy tariff import duty",
-        "India trade policy {sector}",
-    ],
-    "regulatory": [
-        "{company} SEBI RBI regulation compliance",
-        "India regulatory {sector} policy",
+        "India trade policy tariff import export {sector}",
     ],
     "commodities": [
         "{company} commodity price crude oil metals",
         "India commodity {sector} raw material cost",
+    ],
+    "credit_banking": [
+        "{company} bank credit growth lending rate",
+        "India credit banking NBFC {sector} liquidity",
+    ],
+    "global": [
+        "{company} global macro Fed US China impact",
+        "India global economy oil price {sector}",
     ],
 }
 
@@ -160,9 +159,7 @@ class MacroEconomicsTools:
         sectors: list[str] = []
         if company.sector is not None:
             sectors.append(company.sector.name)
-        if company.industry is not None and (
-            company.sector is None or company.industry.name != company.sector.name
-        ):
+        if company.industry is not None and (company.sector is None or company.industry.name != company.sector.name):
             sectors.append(company.industry.name)
 
         exchange = ""
@@ -177,11 +174,7 @@ class MacroEconomicsTools:
             inp.company_id,
             limit=5,
         )
-        completed_runs = [
-            r
-            for r in prior_runs
-            if r.status in (ResearchRunStatus.COMPLETED, ResearchRunStatus.PARTIAL)
-        ]
+        completed_runs = [r for r in prior_runs if r.status in (ResearchRunStatus.COMPLETED, ResearchRunStatus.PARTIAL)]
         for run in completed_runs[:3]:
             findings = await self._run_service.get_findings(run.id)
             for f in findings:
@@ -213,9 +206,7 @@ class MacroEconomicsTools:
                     indicator.indicator_id,
                     end=inp.observation_date,
                 )
-                valid_points = [
-                    dp for dp in series.data_points if dp.date <= inp.observation_date
-                ]
+                valid_points = [dp for dp in series.data_points if dp.date <= inp.observation_date]
                 if valid_points:
                     latest = max(valid_points, key=lambda dp: dp.date)
                     indicator_snapshots.append(
@@ -339,9 +330,7 @@ class MacroEconomicsTools:
 
         unique.sort(key=lambda c: c.publication_date or date.min, reverse=True)
 
-        dimensions_still_missing = [
-            d for d in dimensions if d not in dimensions_covered
-        ]
+        dimensions_still_missing = [d for d in dimensions if d not in dimensions_covered]
 
         return DiscoverMacroSourcesOutput(
             sources=unique,
@@ -528,9 +517,7 @@ class MacroEconomicsTools:
         4. Insufficient data: < 2 data points → direction is INSUFFICIENT_DATA.
         """
         # Sort data points by date ascending, filter to <= observation_date
-        valid_points = [
-            (d, v) for d, v in inp.data_points if d <= inp.observation_date
-        ]
+        valid_points = [(d, v) for d, v in inp.data_points if d <= inp.observation_date]
         valid_points.sort(key=lambda p: p[0])
 
         if not valid_points:
@@ -563,13 +550,15 @@ class MacroEconomicsTools:
         # Percentage change = (current - prior) / |prior| × 100
         if prior_value == Decimal("0"):
             percentage_change = None
-            direction = "STABLE" if absolute_change == Decimal("0") else (
-                "INCREASING" if absolute_change > Decimal("0") else "DECREASING"
+            direction = (
+                "STABLE"
+                if absolute_change == Decimal("0")
+                else ("INCREASING" if absolute_change > Decimal("0") else "DECREASING")
             )
         else:
-            percentage_change = (
-                (absolute_change / abs(prior_value)) * _PCT_SCALE
-            ).quantize(_PCT_QUANTIZE, rounding=ROUND_HALF_UP)
+            percentage_change = ((absolute_change / abs(prior_value)) * _PCT_SCALE).quantize(
+                _PCT_QUANTIZE, rounding=ROUND_HALF_UP
+            )
 
             # Direction classification using the rate threshold (§20)
             if abs(percentage_change) <= _STABLE_THRESHOLD_RATE:
