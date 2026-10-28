@@ -1,6 +1,6 @@
 # Progress Tracker
 
-**Last Updated:** 2026-10-15 (Phase 13.1 — Macro Economics Agent Contracts & Constants COMPLETE)
+**Last Updated:** 2026-10-28 (Phase 13.2 — Macro Economics Agent Tools & Provider Integration COMPLETE)
 
 ---
 
@@ -473,7 +473,7 @@ Quality gates: 1690 passed, 7 skipped, 0 failed. ruff clean. mypy clean.
 
 ## Current Phase
 
-**Current Phase:** Phase 13 — Macro Economics Agent — IN PROGRESS (13.1 Contracts & Constants COMPLETE)
+**Current Phase:** Phase 13 — Macro Economics Agent — IN PROGRESS (13.2 Tools & Provider Integration COMPLETE)
 
 **Previous Phase:** Phase 12 — Future Growth & Optionality Agent — COMPLETE (12.0-12.6 all complete, 138 growth tests, 3498 backend tests, TD-38/TD-39 resolved)
 
@@ -1383,6 +1383,27 @@ Audit verdict: **APPROVED WITH REQUIRED REMEDIATION** (F-01 HIGH blocking, F-02 
 - [x] 157 tests passing (test_macro_contracts.py), 0 failures
 - [x] Ruff lint clean, ruff format clean, mypy strict clean
 - [x] Full backend regression: 3655 passed, 7 skipped, 0 failed
+- [x] Updated progress.md, implementation-plan.md
+
+### Phase 13.2: Tools & Provider Integration — COMPLETE
+
+- [x] **F-01 audit finding resolved**: `LoadMacroContextOutput.available_indicators` changed from `list[str]` to `list[MacroIndicatorInfo]` (provider boundary type from `app.providers.types`). Import added to contracts.py, Phase 13.1 tests updated. Regression tests confirm plain strings are now rejected.
+- [x] Created `backend/app/agents/macro_economics/` package (`__init__.py`, `exceptions.py`, `tools.py`)
+- [x] `CompanyNotFoundForMacroError` exception (follows prior agent pattern)
+- [x] `MacroEconomicsTools` class with constructor DI: (session, run_service, macro_data, search, news)
+- [x] **Tool 1: load_macro_context** — DB company query + MacroDataProvider indicator snapshots + prior findings from Phases 8-12. Provider failure degrades gracefully (search-only mode). Observation date filtering on snapshots.
+- [x] **Tool 2: discover_macro_sources** — Dimension-specific search queries (8 dimensions × 2 templates). SearchProvider + NewsProvider. Dedup by URL. Temporal filtering. Dimensions covered/missing tracking.
+- [x] **Tool 3: retrieve_document** — SearchProvider-based document retrieval with SHA-256 content hashing.
+- [x] **Tool 4: create_research_document** — Internal helper: ResearchDocument ORM persistence.
+- [x] **Tool 5: persist_evidence** — Evidence ORM persistence with `extracted_by=MACRO_AGENT_NAME`.
+- [x] **Tool 6: persist_findings** — Finding persistence with MACRO_FINDING_CATEGORIES validation. Invalid categories rejected with index tracking.
+- [x] **Tool 7: persist_macro_indicators (NEW)** — MacroIndicator ORM persistence. Duplicate detection by (indicator_name, as_of_date, country). Decimal fidelity preserved. Country defaults to "IN".
+- [x] **Tool 8: compute_indicator_trends (NEW)** — Pure deterministic Decimal trend calculation. 4-decimal-place ROUND_HALF_UP for percentage_change. Direction thresholds: ±0.50 → STABLE. INSUFFICIENT_DATA for < 2 data points. Zero prior_value → percentage_change=None.
+- [x] Helper functions: `_classify_macro_source` (6 classification rules), `_tier_from_url` (RBI/SEBI/MOSPI=T1, IBEF/NASSCOM/FICCI/CII=T2, others=T3)
+- [x] 61 tests passing (test_macro_tools.py), 0 failures
+- [x] 157 Phase 13.1 contract tests still pass (no regressions)
+- [x] 2147 total agent tests pass, 0 failures
+- [x] Ruff lint clean, mypy strict clean (new files only; pre-existing mypy issue in test_macro_contracts.py line 1458 unrelated)
 - [x] Updated progress.md, implementation-plan.md
 
 ---

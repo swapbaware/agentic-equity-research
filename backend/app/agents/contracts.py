@@ -37,6 +37,7 @@ from app.models.enums import (
     MoatType,
     SourceTier,
 )
+from app.providers.types import MacroIndicatorInfo
 
 # ---------------------------------------------------------------------------
 # Company identifier type
@@ -2093,7 +2094,7 @@ class LoadMacroContextOutput(BaseModel):
     sectors: list[str] = Field(default_factory=list)
     exchange: str = ""
     prior_findings: list[FindingSummary] = Field(default_factory=list)
-    available_indicators: list[str] = Field(default_factory=list)
+    available_indicators: list[MacroIndicatorInfo] = Field(default_factory=list)
     indicator_snapshots: list[MacroIndicatorSnapshot] = Field(default_factory=list)
     unavailable_dimensions: list[str] = Field(default_factory=list)
 

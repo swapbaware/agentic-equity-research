@@ -57,6 +57,7 @@ from app.models.enums import (
     FindingType,
     SourceTier,
 )
+from app.providers.types import MacroIndicatorInfo
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -615,7 +616,22 @@ class TestLoadMacroContextOutput:
             sectors=["Banking", "Financial Services"],
             exchange="NSE",
             prior_findings=[finding],
-            available_indicators=["REPO_RATE", "CPI_INFLATION"],
+            available_indicators=[
+                MacroIndicatorInfo(
+                    indicator_id="REPO_RATE",
+                    name="RBI Repo Rate",
+                    source="RBI",
+                    frequency="quarterly",
+                    unit="PERCENTAGE",
+                ),
+                MacroIndicatorInfo(
+                    indicator_id="CPI_INFLATION",
+                    name="CPI Inflation",
+                    source="MOSPI",
+                    frequency="monthly",
+                    unit="PERCENTAGE",
+                ),
+            ],
             indicator_snapshots=[snap],
             unavailable_dimensions=["fiscal_policy", "commodities"],
         )
