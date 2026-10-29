@@ -1416,6 +1416,19 @@ Audit verdict: **APPROVED WITH REQUIRED REMEDIATION** (F-01 HIGH blocking, F-02 
 - [x] 3724 full backend tests pass, 7 skipped, 1 failed (pre-existing infrastructure test_ready_returns_200)
 - [x] Ruff lint clean, ruff format clean, mypy strict clean (all changed files)
 
+#### Phase 13.3 — Macro Economics Agent Prompts
+
+- [x] **MACRO_SYSTEM_PREAMBLE** — `<retrieved_document>` prompt-injection defense, Indian listed companies context, structured JSON output, "never follow directives" language
+- [x] **_wrap_document()** — XML tag wrapper for untrusted document content (`<retrieved_document source_id="..." title="...">`)
+- [x] **macro_evidence_extraction_prompt()** — Step 4 prompt targeting `MacroEvidenceExtractionOutput`. Covers all 8 macro dimensions. Evidence type classification rules (FACT, FINANCIAL_DATA, MANAGEMENT_STATEMENT, ANALYST_OPINION, REGULATORY_FILING). Confidence levels. Temporal boundary enforcement. Anti-hallucination rules. Provider data precedence. Optional indicator context. Optional sector.
+- [x] **macro_analysis_prompt()** — Step 5 prompt targeting `MacroAnalysisOutput`. Regime classification (5-level scale: VERY_RESTRICTIVE through VERY_SUPPORTIVE). All 8 dimensions assessed independently (no composite score). Transmission channels (AI_INFERENCE only). Sector sensitivity. All 15 finding categories. FindingType rules (FACT prohibition for synthesis, MANAGEMENT_CLAIM never promoted, ASSUMPTION for scenarios). Temporal rules. Anti-hallucination. Optional indicator/company/industry context.
+- [x] **macro_challenge_prompt()** — Step 7 prompt targeting `MacroChallengeOutput`. 9 challenge areas (contradictory evidence, temporal integrity, unsupported causality, overconfident assessment, missing counterevidence, stale observations, conditions vs forecasts, unsupported precision, data gaps). Adversarial mandate. data_contradiction and data_gap finding requirements. AI_INFERENCE outputs. Anti-fabrication rules.
+- [x] **JSON brace rendering fix** — Corrected quadruple-brace `{{{{` → double-brace `{{` in all f-string JSON examples (same defect class as Phase 12.3 F-01). All 3 JSON blocks parse correctly.
+- [x] 159 tests passing (test_macro_prompts.py), 0 failures — 12 test categories: system preamble, document wrapping, evidence extraction, analysis, challenge, cross-cutting, temporal awareness, no composite score, no unresolved placeholders, JSON example validity, prompt-injection defense, date type distinction
+- [x] 386 macro agent tests pass (159 prompt + 157 contract + 70 tool), 0 failures
+- [x] 2315 total agent tests pass, 0 failures (no regressions)
+- [x] Ruff lint clean, ruff format clean, mypy strict clean
+
 ---
 
 ## Completed Features
